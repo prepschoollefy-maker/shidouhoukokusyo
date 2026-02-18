@@ -40,15 +40,14 @@ export async function POST(request: NextRequest) {
 
     if (error || !student) continue
 
-    // Handle parent emails (comma-separated in one field)
-    const emailStr = row['保護者メール'] || row['parent_email'] || ''
-    if (emailStr) {
-      const emails = emailStr.split(/[;；]/).map((e: string) => e.trim()).filter(Boolean)
-      if (emails.length) {
-        await admin.from('parent_emails').insert(
-          emails.map((email: string) => ({ student_id: student.id, email }))
-        )
-      }
+    // Handle parent emails (父メール, 母メール columns)
+    const fatherEmail = (row['父メール'] || row['father_email'] || '').trim()
+    const motherEmail = (row['母メール'] || row['mother_email'] || '').trim()
+    const parentEmailRows = []
+    if (fatherEmail) parentEmailRows.push({ student_id: student.id, email: fatherEmail, label: '父' })
+    if (motherEmail) parentEmailRows.push({ student_id: student.id, email: motherEmail, label: '母' })
+    if (parentEmailRows.length) {
+      await admin.from('parent_emails').insert(parentEmailRows)
     }
 
     // Handle subjects (comma-separated)
