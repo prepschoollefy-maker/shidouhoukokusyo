@@ -76,7 +76,7 @@ export default function TeachersPage() {
           <CsvImportDialog
             title="講師CSVインポート"
             description="CSV形式で講師を一括登録します。ヘッダー行が必要です。"
-            sampleCsv="名前,メール,パスワード\n田中先生,tanaka@example.com,password123\n鈴木先生,suzuki@example.com,password456"
+            sampleCsv={"名前,メール,パスワード\n田中先生,tanaka@example.com,password123\n鈴木先生,suzuki@example.com,password456"}
             apiEndpoint="/api/teachers/import"
             onSuccess={fetchTeachers}
           />

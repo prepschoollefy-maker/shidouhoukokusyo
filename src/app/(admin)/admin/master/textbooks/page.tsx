@@ -56,7 +56,7 @@ export default function TextbooksMasterPage() {
         <CsvImportDialog
           title="テキストCSVインポート"
           description="CSV形式でテキストを一括登録します。ヘッダー行が必要です。"
-          sampleCsv="テキスト名\n新中問 数学1\n新中問 英語1\nシステム英単語"
+          sampleCsv={"テキスト名\n新中問 数学1\n新中問 英語1\nシステム英単語"}
           apiEndpoint="/api/master/textbooks/import"
           onSuccess={fetchData}
         />
