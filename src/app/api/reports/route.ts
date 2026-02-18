@@ -29,10 +29,8 @@ export async function GET(request: NextRequest) {
     query = query.eq('student_id', studentId)
   }
 
-  const role = user.app_metadata?.role
-  if (role !== 'admin') {
-    query = query.eq('teacher_id', user.id)
-  }
+  // RLSが講師のアクセス制御を行う（自分のレポート + 担当生徒のレポート）
+  // 管理者はRLSでフルアクセス
 
   const { data, count, error } = await query
 

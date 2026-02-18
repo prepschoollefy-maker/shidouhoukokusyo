@@ -291,11 +291,8 @@ CREATE POLICY "admin_manage" ON public.subjects
 -- students
 CREATE POLICY "admin_full_access" ON public.students
   FOR ALL USING (public.get_user_role() = 'admin');
-CREATE POLICY "teacher_read_assigned" ON public.students
-  FOR SELECT USING (
-    public.get_user_role() = 'teacher'
-    AND id IN (SELECT public.get_teacher_student_ids())
-  );
+CREATE POLICY "teacher_read_all" ON public.students
+  FOR SELECT USING (public.get_user_role() = 'teacher');
 
 -- parent_emails (admin only)
 CREATE POLICY "admin_full_access" ON public.parent_emails
@@ -304,16 +301,14 @@ CREATE POLICY "admin_full_access" ON public.parent_emails
 -- student_subjects
 CREATE POLICY "admin_full_access" ON public.student_subjects
   FOR ALL USING (public.get_user_role() = 'admin');
-CREATE POLICY "teacher_read_assigned" ON public.student_subjects
-  FOR SELECT USING (
-    student_id IN (SELECT public.get_teacher_student_ids())
-  );
+CREATE POLICY "teacher_read_all" ON public.student_subjects
+  FOR SELECT USING (public.get_user_role() = 'teacher');
 
 -- teacher_student_assignments
 CREATE POLICY "admin_full_access" ON public.teacher_student_assignments
   FOR ALL USING (public.get_user_role() = 'admin');
-CREATE POLICY "teacher_read_own" ON public.teacher_student_assignments
-  FOR SELECT USING (teacher_id = auth.uid());
+CREATE POLICY "teacher_read_all" ON public.teacher_student_assignments
+  FOR SELECT USING (public.get_user_role() = 'teacher');
 
 -- attitude_options
 CREATE POLICY "authenticated_read" ON public.attitude_options
@@ -330,16 +325,16 @@ CREATE POLICY "admin_manage" ON public.textbook_suggestions
 -- lesson_reports
 CREATE POLICY "admin_full_access" ON public.lesson_reports
   FOR ALL USING (public.get_user_role() = 'admin');
-CREATE POLICY "teacher_read_own_students" ON public.lesson_reports
+CREATE POLICY "teacher_read_own_and_assigned" ON public.lesson_reports
   FOR SELECT USING (
     public.get_user_role() = 'teacher'
-    AND student_id IN (SELECT public.get_teacher_student_ids())
+    AND (
+      teacher_id = auth.uid()
+      OR student_id IN (SELECT public.get_teacher_student_ids())
+    )
   );
 CREATE POLICY "teacher_insert_own" ON public.lesson_reports
-  FOR INSERT WITH CHECK (
-    teacher_id = auth.uid()
-    AND student_id IN (SELECT public.get_teacher_student_ids())
-  );
+  FOR INSERT WITH CHECK (teacher_id = auth.uid());
 CREATE POLICY "teacher_update_own_recent" ON public.lesson_reports
   FOR UPDATE USING (
     teacher_id = auth.uid()
@@ -355,7 +350,8 @@ CREATE POLICY "teacher_read" ON public.report_textbooks
   FOR SELECT USING (
     report_id IN (
       SELECT id FROM public.lesson_reports
-      WHERE student_id IN (SELECT public.get_teacher_student_ids())
+      WHERE teacher_id = auth.uid()
+        OR student_id IN (SELECT public.get_teacher_student_ids())
     )
   );
 CREATE POLICY "teacher_insert" ON public.report_textbooks
@@ -379,7 +375,8 @@ CREATE POLICY "teacher_read" ON public.report_attitudes
   FOR SELECT USING (
     report_id IN (
       SELECT id FROM public.lesson_reports
-      WHERE student_id IN (SELECT public.get_teacher_student_ids())
+      WHERE teacher_id = auth.uid()
+        OR student_id IN (SELECT public.get_teacher_student_ids())
     )
   );
 CREATE POLICY "teacher_insert" ON public.report_attitudes
