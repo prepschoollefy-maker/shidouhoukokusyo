@@ -123,6 +123,18 @@ export default function StudentsPage() {
     } catch { toast.error('削除に失敗しました') }
   }
 
+  const handleBulkDelete = async () => {
+    if (!confirm(`全${students.length}件の生徒データを削除します。この操作は取り消せません。本当に削除しますか？`)) return
+    try {
+      const res = await fetch('/api/students/bulk-delete', { method: 'DELETE' })
+      if (!res.ok) throw new Error('一括削除に失敗しました')
+      toast.success('全生徒データを削除しました')
+      fetchData()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '削除に失敗しました')
+    }
+  }
+
   if (loading) return <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">読み込み中...</p></div>
 
   return (
@@ -130,6 +142,11 @@ export default function StudentsPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">生徒管理</h2>
         <div className="flex gap-2">
+          {students.length > 0 && (
+            <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleBulkDelete}>
+              <Trash2 className="h-4 w-4 mr-1" />一括削除
+            </Button>
+          )}
           <CsvImportDialog
             title="生徒CSVインポート"
             description="CSV形式で生徒を一括登録します。ヘッダー行が必要です。"
