@@ -13,7 +13,6 @@ export default function SettingsPage() {
     school_name: '',
     email_signature: '',
     default_summary_frequency: 4,
-    auto_send_wait_hours: 24,
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -57,15 +56,9 @@ export default function SettingsPage() {
             <Label>メール署名</Label>
             <Textarea value={settings.email_signature || ''} onChange={(e) => setSettings({...settings, email_signature: e.target.value})} className="min-h-[100px]" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>レポートまとめ生成頻度（何回分のレポートでまとめを生成するか）</Label>
-              <Input type="number" value={settings.default_summary_frequency} onChange={(e) => setSettings({...settings, default_summary_frequency: parseInt(e.target.value) || 4})} min="1" />
-            </div>
-            <div className="space-y-2">
-              <Label>自動送信待機時間（時間）</Label>
-              <Input type="number" value={settings.auto_send_wait_hours} onChange={(e) => setSettings({...settings, auto_send_wait_hours: parseInt(e.target.value) || 24})} min="1" />
-            </div>
+          <div className="space-y-2">
+            <Label>レポートまとめ生成頻度（何回分のレポートでまとめを生成するか）</Label>
+            <Input type="number" value={settings.default_summary_frequency} onChange={(e) => setSettings({...settings, default_summary_frequency: parseInt(e.target.value) || 4})} min="1" />
           </div>
           <Button onClick={handleSave} disabled={saving}>{saving ? '保存中...' : '設定を保存'}</Button>
         </CardContent>
