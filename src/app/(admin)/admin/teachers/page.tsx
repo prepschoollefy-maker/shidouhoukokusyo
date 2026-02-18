@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 
@@ -66,6 +66,22 @@ export default function TeachersPage() {
     } catch { toast.error('削除に失敗しました') }
   }
 
+  const handleExport = () => {
+    const header = '名前,メール'
+    const rows = teachers.map(t => {
+      return [t.display_name, t.email]
+        .map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
+    })
+    const csv = '\uFEFF' + [header, ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '講師一覧.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const handleBulkDelete = async () => {
     if (!confirm(`全${teachers.length}件の講師データを削除します。この操作は取り消せません。本当に削除しますか？`)) return
     try {
@@ -86,9 +102,14 @@ export default function TeachersPage() {
         <h2 className="text-2xl font-bold">講師管理</h2>
         <div className="flex gap-2">
           {teachers.length > 0 && (
-            <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleBulkDelete}>
-              <Trash2 className="h-4 w-4 mr-1" />一括削除
-            </Button>
+            <>
+              <Button variant="outline" onClick={handleExport}>
+                <Download className="h-4 w-4 mr-1" />CSVエクスポート
+              </Button>
+              <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleBulkDelete}>
+                <Trash2 className="h-4 w-4 mr-1" />一括削除
+              </Button>
+            </>
           )}
           <CsvImportDialog
             title="講師CSVインポート"

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 
@@ -117,6 +117,28 @@ export default function StudentsPage() {
     } catch { toast.error('削除に失敗しました') }
   }
 
+  const handleExport = () => {
+    const header = '名前,学年,週当たり通塾回数,メール1,メール2'
+    const rows = students.map(s => {
+      const emails = s.parent_emails || []
+      return [
+        s.name,
+        s.grade || '',
+        s.weekly_lesson_count ?? '',
+        emails[0]?.email || '',
+        emails[1]?.email || '',
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
+    })
+    const csv = '\uFEFF' + [header, ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '生徒一覧.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const handleBulkDelete = async () => {
     if (!confirm(`全${students.length}件の生徒データを削除します。この操作は取り消せません。本当に削除しますか？`)) return
     try {
@@ -137,9 +159,14 @@ export default function StudentsPage() {
         <h2 className="text-2xl font-bold">生徒管理</h2>
         <div className="flex gap-2">
           {students.length > 0 && (
-            <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleBulkDelete}>
-              <Trash2 className="h-4 w-4 mr-1" />一括削除
-            </Button>
+            <>
+              <Button variant="outline" onClick={handleExport}>
+                <Download className="h-4 w-4 mr-1" />CSVエクスポート
+              </Button>
+              <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleBulkDelete}>
+                <Trash2 className="h-4 w-4 mr-1" />一括削除
+              </Button>
+            </>
           )}
           <CsvImportDialog
             title="生徒CSVインポート"
