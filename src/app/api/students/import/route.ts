@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     if (!name) continue
 
     const grade = row['学年'] || row['grade'] || null
-    const summaryFrequency = parseInt(row['まとめ頻度'] || row['summary_frequency'] || '4') || 4
+    const summaryFrequency = parseInt(row['通塾頻度'] || row['summary_frequency'] || '4') || 4
     const sendMode = row['送信モード'] || row['send_mode'] || 'manual'
     const weeklyCount = parseInt(row['週コマ数'] || row['weekly_lesson_count'] || '0') || null
 
@@ -40,12 +40,12 @@ export async function POST(request: NextRequest) {
 
     if (error || !student) continue
 
-    // Handle parent emails (父メール, 母メール columns)
-    const fatherEmail = (row['父メール'] || row['father_email'] || '').trim()
-    const motherEmail = (row['母メール'] || row['mother_email'] || '').trim()
+    // Handle parent emails (メール1, メール2 columns)
+    const email1 = (row['メール1'] || row['email1'] || '').trim()
+    const email2 = (row['メール2'] || row['email2'] || '').trim()
     const parentEmailRows = []
-    if (fatherEmail) parentEmailRows.push({ student_id: student.id, email: fatherEmail, label: '父' })
-    if (motherEmail) parentEmailRows.push({ student_id: student.id, email: motherEmail, label: '母' })
+    if (email1) parentEmailRows.push({ student_id: student.id, email: email1, label: 'メール1' })
+    if (email2) parentEmailRows.push({ student_id: student.id, email: email2, label: 'メール2' })
     if (parentEmailRows.length) {
       await admin.from('parent_emails').insert(parentEmailRows)
     }
