@@ -22,17 +22,13 @@ export async function POST(request: NextRequest) {
     if (!name) continue
 
     const grade = row['学年'] || row['grade'] || null
-    const summaryFrequency = parseInt(row['通塾頻度'] || row['summary_frequency'] || '4') || 4
-    const sendMode = row['送信モード'] || row['send_mode'] || 'manual'
-    const weeklyCount = parseInt(row['週コマ数'] || row['weekly_lesson_count'] || '0') || null
+    const weeklyCount = parseInt(row['週当たり通塾回数'] || row['weekly_lesson_count'] || '0') || null
 
     const { data: student, error } = await admin
       .from('students')
       .insert({
         name,
         grade,
-        summary_frequency: summaryFrequency,
-        send_mode: sendMode === '自動' || sendMode === 'auto_send' ? 'auto_send' : 'manual',
         weekly_lesson_count: weeklyCount,
       })
       .select()

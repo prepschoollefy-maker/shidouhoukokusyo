@@ -59,7 +59,7 @@ export default function SettingsPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>デフォルトまとめ頻度（授業数）</Label>
+              <Label>レポートまとめ生成頻度（何回分のレポートでまとめを生成するか）</Label>
               <Input type="number" value={settings.default_summary_frequency} onChange={(e) => setSettings({...settings, default_summary_frequency: parseInt(e.target.value) || 4})} min="1" />
             </div>
             <div className="space-y-2">

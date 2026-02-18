@@ -91,31 +91,30 @@ export async function POST(request: NextRequest) {
     await supabase.from('report_attitudes').insert(attitudeRows)
   }
 
-  // Check summary threshold
-  const { data: student } = await supabase
-    .from('students')
-    .select('summary_frequency, send_mode')
-    .eq('id', student_id)
+  // Check summary threshold using school-wide setting
+  const { data: settings } = await supabase
+    .from('school_settings')
+    .select('default_summary_frequency')
+    .limit(1)
     .single()
 
-  if (student) {
-    // Count unsummarized reports for this student
-    const { count: unsummarizedCount } = await supabase
-      .from('lesson_reports')
-      .select('id', { count: 'exact', head: true })
-      .eq('student_id', student_id)
-      .not('id', 'in', `(SELECT report_id FROM summary_reports)`)
+  const threshold = settings?.default_summary_frequency || 4
 
-    // Note: threshold check - we'll trigger summary generation via the summaries API
-    if (unsummarizedCount && unsummarizedCount >= student.summary_frequency) {
-      // Trigger summary generation asynchronously
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-      fetch(`${appUrl}/api/summaries/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ student_id }),
-      }).catch(() => {}) // fire-and-forget
-    }
+  // Count unsummarized reports for this student
+  const { count: unsummarizedCount } = await supabase
+    .from('lesson_reports')
+    .select('id', { count: 'exact', head: true })
+    .eq('student_id', student_id)
+    .not('id', 'in', `(SELECT report_id FROM summary_reports)`)
+
+  if (unsummarizedCount && unsummarizedCount >= threshold) {
+    // Trigger summary generation asynchronously
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    fetch(`${appUrl}/api/summaries/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id }),
+    }).catch(() => {}) // fire-and-forget
   }
 
   return NextResponse.json({ data: report }, { status: 201 })

@@ -46,8 +46,6 @@ export default function StudentsPage() {
   // Form state
   const [name, setName] = useState('')
   const [grade, setGrade] = useState('')
-  const [summaryFreq, setSummaryFreq] = useState('4')
-  const [sendMode, setSendMode] = useState('manual')
   const [weeklyCount, setWeeklyCount] = useState('')
   const [emails, setEmails] = useState<{ email: string; label: string }[]>([{ email: '', label: '' }])
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([])
@@ -69,7 +67,7 @@ export default function StudentsPage() {
   useEffect(() => { fetchData() }, [])
 
   const resetForm = () => {
-    setName(''); setGrade(''); setSummaryFreq('4'); setSendMode('manual')
+    setName(''); setGrade('')
     setWeeklyCount(''); setEmails([{ email: '', label: '' }])
     setSelectedSubjects([]); setSelectedTeachers([]); setEditing(null)
   }
@@ -78,8 +76,6 @@ export default function StudentsPage() {
     setEditing(s)
     setName(s.name)
     setGrade(s.grade || '')
-    setSummaryFreq(String(s.summary_frequency))
-    setSendMode(s.send_mode)
     setWeeklyCount(s.weekly_lesson_count ? String(s.weekly_lesson_count) : '')
     setEmails(s.parent_emails.length ? s.parent_emails.map(e => ({ email: e.email, label: e.label || '' })) : [{ email: '', label: '' }])
     setSelectedSubjects(s.student_subjects.map(ss => ss.subject.id))
@@ -92,8 +88,6 @@ export default function StudentsPage() {
     const payload = {
       name,
       grade: grade || null,
-      summary_frequency: parseInt(summaryFreq) || 4,
-      send_mode: sendMode,
       weekly_lesson_count: weeklyCount ? parseInt(weeklyCount) : null,
       parent_emails: emails.filter(e => e.email).map(e => ({ email: e.email, label: e.label || null })),
       subject_ids: selectedSubjects,
@@ -150,7 +144,7 @@ export default function StudentsPage() {
           <CsvImportDialog
             title="生徒CSVインポート"
             description="CSV形式で生徒を一括登録します。ヘッダー行が必要です。"
-            sampleCsv={"名前,学年,通塾頻度,メール1,メール2\n山田太郎,中2,4,father@example.com,mother@example.com\n佐藤花子,高1,8,,mother@example.com"}
+            sampleCsv={"名前,学年,週当たり通塾回数,メール1,メール2\n山田太郎,中2,3,father@example.com,mother@example.com\n佐藤花子,高1,2,,mother@example.com"}
             apiEndpoint="/api/students/import"
             onSuccess={fetchData}
           />
@@ -176,24 +170,8 @@ export default function StudentsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>通塾頻度</Label>
-                  <Input type="number" value={summaryFreq} onChange={(e) => setSummaryFreq(e.target.value)} min="1" />
-                </div>
-                <div className="space-y-2">
-                  <Label>送信モード</Label>
-                  <Select value={sendMode} onValueChange={setSendMode}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="manual">手動承認</SelectItem>
-                      <SelectItem value="auto_send">自動送信</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
               <div className="space-y-2">
-                <Label>週コマ数</Label>
+                <Label>週当たり通塾回数</Label>
                 <Input type="number" value={weeklyCount} onChange={(e) => setWeeklyCount(e.target.value)} placeholder="例：3" min="0" />
               </div>
               <div className="space-y-2">
@@ -250,7 +228,7 @@ export default function StudentsPage() {
                 <TableHead>学年</TableHead>
                 <TableHead>科目</TableHead>
                 <TableHead>担当</TableHead>
-                <TableHead>頻度</TableHead>
+                <TableHead>週回数</TableHead>
                 <TableHead className="w-20"></TableHead>
               </TableRow>
             </TableHeader>
@@ -273,7 +251,7 @@ export default function StudentsPage() {
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell>{s.summary_frequency}回</TableCell>
+                  <TableCell>{s.weekly_lesson_count ? `${s.weekly_lesson_count}回` : '-'}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
