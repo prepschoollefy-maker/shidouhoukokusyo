@@ -133,7 +133,7 @@ export default function StudentsPage() {
           <CsvImportDialog
             title="生徒CSVインポート"
             description="CSV形式で生徒を一括登録します。ヘッダー行が必要です。"
-            sampleCsv={"名前,学年,父メール,母メール\n山田太郎,中2,father@example.com,mother@example.com\n佐藤花子,高1,,mother@example.com"}
+            sampleCsv={"名前,学年,まとめ頻度,父メール,母メール\n山田太郎,中2,4,father@example.com,mother@example.com\n佐藤花子,高1,8,,mother@example.com"}
             apiEndpoint="/api/students/import"
             onSuccess={fetchData}
           />
