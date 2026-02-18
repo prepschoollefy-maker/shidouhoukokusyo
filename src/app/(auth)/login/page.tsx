@@ -73,8 +73,11 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'ログイン中...' : 'ログイン'}
             </Button>
-            <div className="text-center">
-              <a href="/reset-password" className="text-sm text-blue-600 hover:underline">
+            <div className="text-center space-y-1">
+              <a href="/register" className="text-sm text-blue-600 hover:underline block">
+                講師アカウント登録
+              </a>
+              <a href="/reset-password" className="text-sm text-blue-600 hover:underline block">
                 パスワードを忘れた方
               </a>
             </div>
