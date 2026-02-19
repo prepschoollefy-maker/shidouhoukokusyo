@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Eye, EyeOff } from 'lucide-react'
 
-export default function LoginPage() {
+export default function AdminLoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -35,13 +35,14 @@ export default function LoginPage() {
     }
 
     const role = data.user?.app_metadata?.role || 'teacher'
-    if (role === 'admin') {
+    if (role !== 'admin') {
       await supabase.auth.signOut()
-      setError('管理者アカウントはこちらからログインできません')
+      setError('講師アカウントはこちらからログインできません')
       setLoading(false)
       return
     }
-    router.push('/reports')
+
+    router.push('/admin/dashboard')
     router.refresh()
   }
 
@@ -50,7 +51,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">レフィー</CardTitle>
-          <p className="text-sm text-muted-foreground">講師ログイン</p>
+          <p className="text-sm text-muted-foreground">管理者ログイン</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
@@ -91,11 +92,8 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'ログイン中...' : 'ログイン'}
             </Button>
-            <div className="text-center space-y-1">
-              <a href="/register" className="text-sm text-blue-600 hover:underline block">
-                講師アカウント登録
-              </a>
-              <a href="/reset-password" className="text-sm text-blue-600 hover:underline block">
+            <div className="text-center">
+              <a href="/reset-password" className="text-sm text-blue-600 hover:underline">
                 パスワードを忘れた方
               </a>
             </div>

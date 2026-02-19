@@ -34,16 +34,24 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   // Public routes that don't require auth
-  const publicRoutes = ['/login', '/register', '/reset-password', '/auth/callback', '/auth/confirm', '/view', '/api/summaries/view', '/print']
+  const publicRoutes = ['/login', '/admin/login', '/register', '/reset-password', '/auth/callback', '/auth/confirm', '/view', '/api/summaries/view', '/print']
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
 
   if (!user && !isPublicRoute) {
+    // Redirect unauthenticated users to the appropriate login page
     const url = request.nextUrl.clone()
-    url.pathname = '/login'
+    url.pathname = pathname.startsWith('/admin') ? '/admin/login' : '/login'
     return NextResponse.redirect(url)
   }
 
+  // Redirect already-logged-in users away from login pages
   if (user && pathname === '/login') {
+    const role = user.app_metadata?.role || 'teacher'
+    const url = request.nextUrl.clone()
+    url.pathname = role === 'admin' ? '/admin/dashboard' : '/reports'
+    return NextResponse.redirect(url)
+  }
+  if (user && pathname === '/admin/login') {
     const role = user.app_metadata?.role || 'teacher'
     const url = request.nextUrl.clone()
     url.pathname = role === 'admin' ? '/admin/dashboard' : '/reports'
