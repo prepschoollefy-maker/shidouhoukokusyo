@@ -13,10 +13,12 @@ export async function sendEmail({
   to,
   subject,
   text,
+  html,
 }: {
   to: string | string[]
   subject: string
   text: string
+  html?: string
 }) {
   const resend = getResendClient()
   const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@example.com'
@@ -26,6 +28,7 @@ export async function sendEmail({
     to: Array.isArray(to) ? to : [to],
     subject,
     text,
+    ...(html ? { html } : {}),
   })
 
   if (error) {

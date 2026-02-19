@@ -8,7 +8,9 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Trash2, Download } from 'lucide-react'
+import { Plus, Trash2, Download, Eye, EyeOff, ExternalLink, Copy, Search } from 'lucide-react'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 
@@ -16,13 +18,19 @@ interface Teacher {
   id: string
   display_name: string
   email: string
+  initial_password: string | null
   assignments: { student: { name: string }; subject: { name: string } | null }[]
 }
 
 export default function TeachersPage() {
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set())
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
@@ -38,6 +46,8 @@ export default function TeachersPage() {
 
   const handleCreate = async () => {
     if (!email || !displayName) { toast.error('必須項目を入力してください'); return }
+    if (saving) return
+    setSaving(true)
     try {
       const res = await fetch('/api/teachers', {
         method: 'POST',
@@ -54,11 +64,12 @@ export default function TeachersPage() {
       fetchTeachers()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'エラーが発生しました')
+    } finally {
+      setSaving(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('この講師を削除しますか？')) return
     try {
       await fetch(`/api/teachers/${id}`, { method: 'DELETE' })
       toast.success('削除しました')
@@ -83,7 +94,6 @@ export default function TeachersPage() {
   }
 
   const handleBulkDelete = async () => {
-    if (!confirm(`全${teachers.length}件の講師データを削除します。この操作は取り消せません。本当に削除しますか？`)) return
     try {
       const res = await fetch('/api/teachers/bulk-delete', { method: 'DELETE' })
       if (!res.ok) throw new Error('一括削除に失敗しました')
@@ -94,19 +104,26 @@ export default function TeachersPage() {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">読み込み中...</p></div>
+  if (loading) return <LoadingSpinner />
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">講師管理</h2>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => {
+            const url = `${window.location.origin}/register`
+            navigator.clipboard.writeText(url)
+            toast.success('登録ページのURLをコピーしました')
+          }}>
+            <Copy className="h-4 w-4 mr-1" />登録ページURL
+          </Button>
           {teachers.length > 0 && (
             <>
               <Button variant="outline" onClick={handleExport}>
                 <Download className="h-4 w-4 mr-1" />CSVエクスポート
               </Button>
-              <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleBulkDelete}>
+              <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={() => setBulkDeleteOpen(true)}>
                 <Trash2 className="h-4 w-4 mr-1" />一括削除
               </Button>
             </>
@@ -140,29 +157,65 @@ export default function TeachersPage() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>キャンセル</Button>
-              <Button onClick={handleCreate}>登録</Button>
+              <Button onClick={handleCreate} disabled={saving}>{saving ? '登録中...' : '登録'}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
         </div>
       </div>
 
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="講師名・メールで検索..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>氏名</TableHead>
                 <TableHead>メール</TableHead>
+                <TableHead>初期パスワード</TableHead>
                 <TableHead>担当生徒</TableHead>
                 <TableHead className="w-16"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {teachers.map((t) => (
+              {teachers.filter(t => !searchQuery || t.display_name.includes(searchQuery) || t.email.includes(searchQuery)).map((t) => (
                 <TableRow key={t.id}>
                   <TableCell className="font-medium">{t.display_name}</TableCell>
                   <TableCell>{t.email}</TableCell>
+                  <TableCell>
+                    {t.initial_password ? (
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono text-sm">
+                          {visiblePasswords.has(t.id) ? t.initial_password : '••••••••'}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          aria-label={visiblePasswords.has(t.id) ? 'パスワードを隠す' : 'パスワードを表示'}
+                          onClick={() => setVisiblePasswords(prev => {
+                            const next = new Set(prev)
+                            if (next.has(t.id)) next.delete(t.id)
+                            else next.add(t.id)
+                            return next
+                          })}
+                        >
+                          {visiblePasswords.has(t.id) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">-</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {[...new Map(t.assignments.map(a => [a.student?.name, a.student?.name])).values()].map((name, i) => (
@@ -171,7 +224,7 @@ export default function TeachersPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(t.id)}>
+                    <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(t.id)}>
                       <Trash2 className="h-4 w-4 text-red-500" />
                     </Button>
                   </TableCell>
@@ -181,6 +234,22 @@ export default function TeachersPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="講師を削除"
+        description="この講師を削除しますか？"
+        onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget); setDeleteTarget(null) }}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title="全講師データを一括削除"
+        description={`全${teachers.length}件の講師データを削除します。この操作は取り消せません。`}
+        onConfirm={() => { handleBulkDelete(); setBulkDeleteOpen(false) }}
+        confirmLabel="一括削除する"
+      />
     </div>
   )
 }

@@ -1,9 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { ArrowLeft, Pencil, Trash2 } from 'lucide-react'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
@@ -12,10 +18,13 @@ interface ReportDetail {
   lesson_date: string
   unit_covered: string
   homework_check: string
+  strengths: string | null
+  weaknesses: string | null
   free_comment: string | null
   homework_assigned: string
   next_lesson_plan: string | null
   internal_notes: string | null
+  ai_summary: string | null
   student: { name: string; grade: string | null }
   subject: { name: string }
   teacher: { display_name: string }
@@ -31,8 +40,10 @@ const homeworkLabels: Record<string, string> = {
 
 export default function ReportDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const [report, setReport] = useState<ReportDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -44,8 +55,19 @@ export default function ReportDetailPage() {
     fetchReport()
   }, [params.id])
 
+  const handleDelete = async () => {
+    try {
+      const res = await fetch(`/api/reports/${params.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('削除に失敗しました')
+      toast.success('レポートを削除しました')
+      router.push('/reports')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '削除に失敗しました')
+    }
+  }
+
   if (loading) {
-    return <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">読み込み中...</p></div>
+    return <LoadingSpinner />
   }
 
   if (!report) {
@@ -57,7 +79,24 @@ export default function ReportDetailPage() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-bold">レポート詳細</h2>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => window.history.back()}>
+            <ArrowLeft className="h-4 w-4 mr-1" />戻る
+          </Button>
+          <h2 className="text-xl font-bold">レポート詳細</h2>
+        </div>
+        <div className="flex gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/reports/${params.id}/edit`}>
+              <Pencil className="h-4 w-4 mr-1" />編集
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" className="text-red-500 border-red-200 hover:bg-red-50" onClick={() => setDeleteOpen(true)}>
+            <Trash2 className="h-4 w-4 mr-1" />削除
+          </Button>
+        </div>
+      </div>
 
       <Card>
         <CardHeader>
@@ -119,10 +158,24 @@ export default function ReportDetailPage() {
             </div>
           )}
 
+          {report.strengths && (
+            <div>
+              <h4 className="text-sm font-medium text-muted-foreground">理解できていたこと・得意なこと</h4>
+              <p className="mt-1 text-sm whitespace-pre-wrap">{report.strengths}</p>
+            </div>
+          )}
+
+          {report.weaknesses && (
+            <div>
+              <h4 className="text-sm font-medium text-muted-foreground">理解不十分・苦手なこと</h4>
+              <p className="mt-1 text-sm whitespace-pre-wrap">{report.weaknesses}</p>
+            </div>
+          )}
+
           {report.free_comment && (
             <div>
               <h4 className="text-sm font-medium text-muted-foreground">様子の自由コメント</h4>
-              <p className="mt-1 text-sm">{report.free_comment}</p>
+              <p className="mt-1 text-sm whitespace-pre-wrap">{report.free_comment}</p>
             </div>
           )}
 
@@ -144,8 +197,23 @@ export default function ReportDetailPage() {
               <p className="mt-1 text-sm bg-yellow-50 p-2 rounded">{report.internal_notes}</p>
             </div>
           )}
+
+          {report.ai_summary && (
+            <div>
+              <h4 className="text-sm font-medium text-muted-foreground">AI授業レポート</h4>
+              <p className="mt-1 text-sm whitespace-pre-wrap bg-blue-50 p-3 rounded">{report.ai_summary}</p>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="レポートを削除"
+        description="このレポートを削除しますか？この操作は取り消せません。"
+        onConfirm={() => { handleDelete(); setDeleteOpen(false) }}
+      />
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { FileText, AlertTriangle, Users } from 'lucide-react'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 interface DashboardData {
   unchecked_summaries: number
@@ -24,7 +25,7 @@ export default function DashboardPage() {
   }, [])
 
   if (loading) {
-    return <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">読み込み中...</p></div>
+    return <LoadingSpinner />
   }
 
   return (

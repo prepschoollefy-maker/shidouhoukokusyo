@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { generateLessonSummary } from '@/lib/claude/summary'
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
@@ -8,6 +10,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const studentId = searchParams.get('student_id')
+  const search = searchParams.get('search')
   const page = parseInt(searchParams.get('page') || '1')
   const limit = parseInt(searchParams.get('limit') || '20')
   const offset = (page - 1) * limit
@@ -29,6 +32,10 @@ export async function GET(request: NextRequest) {
     query = query.eq('student_id', studentId)
   }
 
+  if (search) {
+    query = query.ilike('student.name', `%${search}%`)
+  }
+
   // RLSが講師のアクセス制御を行う（自分のレポート + 担当生徒のレポート）
   // 管理者はRLSでフルアクセス
 
@@ -46,7 +53,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const {
     student_id, lesson_date, subject_id, unit_covered,
-    homework_check, free_comment, homework_assigned,
+    homework_check, strengths, weaknesses, free_comment, homework_assigned,
     next_lesson_plan, internal_notes, textbooks, positive_attitudes, negative_attitudes
   } = body
 
@@ -60,6 +67,8 @@ export async function POST(request: NextRequest) {
       subject_id,
       unit_covered,
       homework_check,
+      strengths: strengths || null,
+      weaknesses: weaknesses || null,
       free_comment: free_comment || null,
       homework_assigned,
       next_lesson_plan: next_lesson_plan || null,
@@ -91,31 +100,39 @@ export async function POST(request: NextRequest) {
     await supabase.from('report_attitudes').insert(attitudeRows)
   }
 
-  // Check summary threshold using school-wide setting
-  const { data: settings } = await supabase
-    .from('school_settings')
-    .select('default_summary_frequency')
-    .limit(1)
-    .single()
+  // Generate per-lesson AI summary asynchronously
+  const admin = createAdminClient()
+  ;(async () => {
+    try {
+      const { data: fullReport } = await admin
+        .from('lesson_reports')
+        .select(`
+          *,
+          student:students!inner(id, name, grade),
+          subject:subjects!inner(id, name),
+          teacher:profiles!inner(id, display_name),
+          report_textbooks(id, textbook_name, pages, sort_order),
+          report_attitudes(id, attitude_option_id, attitude_option:attitude_options(id, label, category))
+        `)
+        .eq('id', report.id)
+        .single()
 
-  const threshold = settings?.default_summary_frequency || 4
+      if (!fullReport) return
 
-  // Count unsummarized reports for this student
-  const { count: unsummarizedCount } = await supabase
-    .from('lesson_reports')
-    .select('id', { count: 'exact', head: true })
-    .eq('student_id', student_id)
-    .not('id', 'in', `(SELECT report_id FROM summary_reports)`)
+      const summary = await generateLessonSummary(
+        fullReport,
+        fullReport.student.name,
+        fullReport.student.grade
+      )
 
-  if (unsummarizedCount && unsummarizedCount >= threshold) {
-    // Trigger summary generation asynchronously
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    fetch(`${appUrl}/api/summaries/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ student_id }),
-    }).catch(() => {}) // fire-and-forget
-  }
+      await admin
+        .from('lesson_reports')
+        .update({ ai_summary: summary })
+        .eq('id', report.id)
+    } catch (e) {
+      console.error('Per-lesson AI summary generation failed:', e)
+    }
+  })()
 
   return NextResponse.json({ data: report }, { status: 201 })
 }

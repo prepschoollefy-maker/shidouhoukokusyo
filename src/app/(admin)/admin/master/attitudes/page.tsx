@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Trash2 } from 'lucide-react'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
 
 interface Attitude { id: string; label: string; category: string; sort_order: number }
@@ -17,6 +19,7 @@ export default function AttitudesMasterPage() {
   const [newLabel, setNewLabel] = useState('')
   const [newCategory, setNewCategory] = useState('positive')
   const [loading, setLoading] = useState(true)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   const fetchData = async () => {
     const res = await fetch('/api/master/attitudes')
@@ -44,7 +47,6 @@ export default function AttitudesMasterPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('削除しますか？')) return
     try {
       await fetch(`/api/master/attitudes/${id}`, { method: 'DELETE' })
       toast.success('削除しました')
@@ -52,7 +54,7 @@ export default function AttitudesMasterPage() {
     } catch { toast.error('削除に失敗しました') }
   }
 
-  if (loading) return <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">読み込み中...</p></div>
+  if (loading) return <LoadingSpinner />
 
   const positive = attitudes.filter(a => a.category === 'positive')
   const negative = attitudes.filter(a => a.category === 'negative')
@@ -80,7 +82,7 @@ export default function AttitudesMasterPage() {
               {positive.map(a => (
                 <div key={a.id} className="flex items-center justify-between py-1 px-2 bg-green-50 rounded">
                   <span className="text-sm">{a.label}</span>
-                  <Button variant="ghost" size="icon" onClick={() => handleDelete(a.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                  <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(a.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
                 </div>
               ))}
             </div>
@@ -92,13 +94,21 @@ export default function AttitudesMasterPage() {
               {negative.map(a => (
                 <div key={a.id} className="flex items-center justify-between py-1 px-2 bg-orange-50 rounded">
                   <span className="text-sm">{a.label}</span>
-                  <Button variant="ghost" size="icon" onClick={() => handleDelete(a.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                  <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(a.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
                 </div>
               ))}
             </div>
           </div>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="項目を削除"
+        description="この項目を削除しますか？"
+        onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget); setDeleteTarget(null) }}
+      />
     </div>
   )
 }

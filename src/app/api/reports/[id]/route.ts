@@ -39,7 +39,7 @@ export async function PUT(
   const body = await request.json()
   const {
     student_id, lesson_date, subject_id, unit_covered,
-    homework_check, free_comment, homework_assigned,
+    homework_check, strengths, weaknesses, free_comment, homework_assigned,
     next_lesson_plan, internal_notes, textbooks, positive_attitudes, negative_attitudes
   } = body
 
@@ -48,6 +48,8 @@ export async function PUT(
     .update({
       student_id, lesson_date, subject_id, unit_covered,
       homework_check,
+      strengths: strengths || null,
+      weaknesses: weaknesses || null,
       free_comment: free_comment || null,
       homework_assigned,
       next_lesson_plan: next_lesson_plan || null,
@@ -83,4 +85,58 @@ export async function PUT(
   }
 
   return NextResponse.json({ data: report })
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Delete related data first
+  await supabase.from('report_textbooks').delete().eq('report_id', id)
+  await supabase.from('report_attitudes').delete().eq('report_id', id)
+
+  const { error } = await supabase
+    .from('lesson_reports')
+    .delete()
+    .eq('id', id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ data: { success: true } })
+}
+
+// PATCH: partial update (e.g., ai_summary only)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.app_metadata?.role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const body = await request.json()
+  const updates: Record<string, unknown> = {}
+  if ('ai_summary' in body) updates.ai_summary = body.ai_summary || null
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
+  }
+
+  const { data, error } = await supabase
+    .from('lesson_reports')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ data })
 }

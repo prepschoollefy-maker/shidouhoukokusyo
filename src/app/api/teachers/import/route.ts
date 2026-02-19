@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     if (!email || !displayName) continue
 
-    const { error } = await admin.auth.admin.createUser({
+    const { data: newUser, error } = await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
@@ -39,6 +39,15 @@ export async function POST(request: NextRequest) {
       errors.push(`${email}: ${error.message}`)
       continue
     }
+
+    // Save initial password to profile for admin reference
+    if (newUser?.user) {
+      await admin
+        .from('profiles')
+        .update({ initial_password: password })
+        .eq('id', newUser.user.id)
+    }
+
     count++
   }
 

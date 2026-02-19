@@ -1,11 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import Link from 'next/link'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { PaginationControl } from '@/components/ui/pagination-control'
+import { FileText, Search } from 'lucide-react'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
@@ -18,30 +22,41 @@ interface Report {
   teacher: { display_name: string }
 }
 
+const PER_PAGE = 20
+
 export default function ReportsPage() {
   const [reports, setReports] = useState<Report[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
   const supabase = createClient()
 
-  useEffect(() => {
-    const fetchReports = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+  const fetchReports = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
 
-      const res = await fetch('/api/reports')
-      const json = await res.json()
-      setReports(json.data || [])
-      setLoading(false)
-    }
-    fetchReports()
-  }, [supabase.auth])
+    const params = new URLSearchParams({ page: String(page), limit: String(PER_PAGE) })
+    if (search) params.set('search', search)
+
+    const res = await fetch(`/api/reports?${params}`)
+    const json = await res.json()
+    setReports(json.data || [])
+    setTotalCount(json.count || 0)
+    setLoading(false)
+  }, [page, search, supabase.auth])
+
+  useEffect(() => { fetchReports() }, [fetchReports])
+
+  const handleSearch = (value: string) => {
+    setSearch(value)
+    setPage(1)
+  }
+
+  const totalPages = Math.ceil(totalCount / PER_PAGE)
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">読み込み中...</p>
-      </div>
-    )
+    return <LoadingSpinner />
   }
 
   return (
@@ -53,37 +68,59 @@ export default function ReportsPage() {
         </Button>
       </div>
 
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="生徒名で検索..."
+          value={search}
+          onChange={(e) => handleSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       {reports.length === 0 ? (
         <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            レポートがありません
+          <CardContent className="py-12 text-center">
+            <FileText className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+            <p className="text-muted-foreground mb-4">
+              {search ? `「${search}」に一致するレポートはありません` : 'まだレポートがありません'}
+            </p>
+            {!search && (
+              <Button asChild>
+                <Link href="/reports/new">最初のレポートを入力する</Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-2">
-          {reports.map((report) => (
-            <Link key={report.id} href={`/reports/${report.id}`}>
-              <Card className="hover:bg-gray-50 transition-colors">
-                <CardContent className="py-3 px-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{report.student.name}</span>
-                        <Badge variant="secondary">{report.subject.name}</Badge>
+        <>
+          <p className="text-sm text-muted-foreground">{totalCount}件</p>
+          <div className="space-y-2">
+            {reports.map((report) => (
+              <Link key={report.id} href={`/reports/${report.id}`}>
+                <Card className="hover:bg-gray-50 transition-colors">
+                  <CardContent className="py-3 px-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{report.student.name}</span>
+                          <Badge variant="secondary">{report.subject.name}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {format(new Date(report.lesson_date), 'M月d日(E)', { locale: ja })}
+                          {' · '}
+                          {report.unit_covered}
+                        </p>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {format(new Date(report.lesson_date), 'M月d日(E)', { locale: ja })}
-                        {' · '}
-                        {report.unit_covered}
-                      </p>
+                      <span className="text-muted-foreground text-sm">›</span>
                     </div>
-                    <span className="text-muted-foreground text-sm">›</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+          <PaginationControl page={page} totalPages={totalPages} onPageChange={setPage} />
+        </>
       )}
     </div>
   )

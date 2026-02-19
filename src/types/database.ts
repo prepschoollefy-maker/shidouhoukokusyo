@@ -22,7 +22,6 @@ export interface Student {
   id: string
   name: string
   grade: string | null
-  summary_frequency: number
   send_mode: SendMode
   weekly_lesson_count: number | null
   created_at: string
@@ -138,7 +137,6 @@ export interface SchoolSettings {
   id: string
   school_name: string
   email_signature: string | null
-  default_summary_frequency: number
   auto_send_wait_hours: number
   created_at: string
   updated_at: string

@@ -39,7 +39,7 @@ export async function PUT(
 
   const body = await request.json()
   const {
-    name, grade, summary_frequency, send_mode, weekly_lesson_count,
+    name, grade, send_mode, weekly_lesson_count,
     parent_emails, subject_ids, teacher_assignments
   } = body
 
@@ -50,7 +50,6 @@ export async function PUT(
     .update({
       name,
       grade: grade || null,
-      summary_frequency: summary_frequency ?? 4,
       send_mode: send_mode || 'manual',
       weekly_lesson_count: weekly_lesson_count || null,
     })

@@ -16,7 +16,18 @@
       "Bash(git init:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(vercel:*)"
+      "Bash(vercel:*)",
+      "Bash(gh auth:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(grep:*)",
+      "Bash(npx supabase db push:*)",
+      "Bash(npx vercel:*)",
+      "Bash(npx shadcn@latest add progress -y)",
+      "Bash(find:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

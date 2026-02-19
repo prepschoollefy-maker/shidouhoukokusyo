@@ -7,12 +7,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState({
     school_name: '',
     email_signature: '',
-    default_summary_frequency: 4,
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -41,7 +41,7 @@ export default function SettingsPage() {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">読み込み中...</p></div>
+  if (loading) return <LoadingSpinner />
 
   return (
     <div className="space-y-4">
@@ -55,10 +55,6 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <Label>メール署名</Label>
             <Textarea value={settings.email_signature || ''} onChange={(e) => setSettings({...settings, email_signature: e.target.value})} className="min-h-[100px]" />
-          </div>
-          <div className="space-y-2">
-            <Label>レポートまとめ生成頻度（何回分のレポートでまとめを生成するか）</Label>
-            <Input type="number" value={settings.default_summary_frequency} onChange={(e) => setSettings({...settings, default_summary_frequency: parseInt(e.target.value) || 4})} min="1" />
           </div>
           <Button onClick={handleSave} disabled={saving}>{saving ? '保存中...' : '設定を保存'}</Button>
         </CardContent>

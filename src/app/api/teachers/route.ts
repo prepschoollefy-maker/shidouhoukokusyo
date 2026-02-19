@@ -50,9 +50,11 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient()
 
+  const actualPassword = password || Math.random().toString(36).slice(-8)
+
   const { data: newUser, error: createError } = await admin.auth.admin.createUser({
     email,
-    password: password || Math.random().toString(36).slice(-8),
+    password: actualPassword,
     email_confirm: true,
     user_metadata: {
       display_name,
@@ -63,6 +65,12 @@ export async function POST(request: NextRequest) {
   if (createError) {
     return NextResponse.json({ error: createError.message }, { status: 500 })
   }
+
+  // Save initial password to profile for admin reference
+  await admin
+    .from('profiles')
+    .update({ initial_password: actualPassword })
+    .eq('id', newUser.user.id)
 
   return NextResponse.json({ data: { id: newUser.user.id, email, display_name } }, { status: 201 })
 }

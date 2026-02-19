@@ -7,7 +7,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { MoreHorizontal, Check, RefreshCw, Pause } from 'lucide-react'
 import { toast } from 'sonner'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
@@ -41,13 +44,17 @@ export default function SummaryDetailPage() {
     setActionLoading(true)
     try {
       if (action === 'regenerate') {
-        const res = await fetch('/api/summaries/generate', {
+        const res = await fetch('/api/summaries/generate-monthly', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ student_id: summary.student_id }),
+          body: JSON.stringify({
+            start_date: summary.period_start,
+            end_date: summary.period_end,
+            student_id: summary.student_id,
+          }),
         })
         if (!res.ok) throw new Error('再生成に失敗しました')
-        toast.success('まとめを再生成しました')
+        toast.success('レポートを再生成しました')
         router.push('/admin/summaries')
         return
       }
@@ -100,7 +107,7 @@ export default function SummaryDetailPage() {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">読み込み中...</p></div>
+    return <LoadingSpinner />
   }
 
   if (!summary) {
@@ -132,7 +139,7 @@ export default function SummaryDetailPage() {
               className="min-h-[400px] font-mono text-sm"
             />
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-2">
               <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
                 <DialogTrigger asChild>
                   <Button className="bg-green-600 hover:bg-green-700">承認して送信</Button>
@@ -153,15 +160,24 @@ export default function SummaryDetailPage() {
                 </DialogContent>
               </Dialog>
 
-              <Button variant="outline" onClick={() => handleAction('approve')} disabled={actionLoading}>
-                承認のみ
-              </Button>
-              <Button variant="outline" onClick={() => handleAction('regenerate')} disabled={actionLoading}>
-                再生成
-              </Button>
-              <Button variant="secondary" onClick={() => handleAction('hold')} disabled={actionLoading}>
-                保留
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" aria-label="その他の操作">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleAction('approve')} disabled={actionLoading}>
+                    <Check className="h-4 w-4 mr-2" />承認のみ
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleAction('regenerate')} disabled={actionLoading}>
+                    <RefreshCw className="h-4 w-4 mr-2" />再生成
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleAction('hold')} disabled={actionLoading}>
+                    <Pause className="h-4 w-4 mr-2" />保留
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </CardContent>
         </Card>
@@ -196,6 +212,8 @@ export default function SummaryDetailPage() {
                           ))}
                         </div>
                       )}
+                      {r.strengths && <p><span className="font-medium">得意:</span> {r.strengths}</p>}
+                      {r.weaknesses && <p><span className="font-medium">苦手:</span> {r.weaknesses}</p>}
                       {r.free_comment && <p className="text-muted-foreground">{r.free_comment}</p>}
                       <p><span className="font-medium">出した宿題:</span> {r.homework_assigned}</p>
                     </div>

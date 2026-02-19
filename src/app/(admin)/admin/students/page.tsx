@@ -9,7 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Download } from 'lucide-react'
+import { Plus, Pencil, Trash2, Download, Search } from 'lucide-react'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 
@@ -17,7 +19,6 @@ interface Student {
   id: string
   name: string
   grade: string | null
-  summary_frequency: number
   send_mode: string
   weekly_lesson_count: number | null
   parent_emails: { id: string; email: string; label: string | null }[]
@@ -40,8 +41,12 @@ export default function StudentsPage() {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Student | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Form state
   const [name, setName] = useState('')
@@ -85,6 +90,8 @@ export default function StudentsPage() {
 
   const handleSave = async () => {
     if (!name) { toast.error('生徒名を入力してください'); return }
+    if (saving) return
+    setSaving(true)
     const payload = {
       name,
       grade: grade || null,
@@ -105,11 +112,12 @@ export default function StudentsPage() {
       fetchData()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'エラーが発生しました')
+    } finally {
+      setSaving(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('この生徒を削除しますか？')) return
     try {
       await fetch(`/api/students/${id}`, { method: 'DELETE' })
       toast.success('削除しました')
@@ -140,7 +148,6 @@ export default function StudentsPage() {
   }
 
   const handleBulkDelete = async () => {
-    if (!confirm(`全${students.length}件の生徒データを削除します。この操作は取り消せません。本当に削除しますか？`)) return
     try {
       const res = await fetch('/api/students/bulk-delete', { method: 'DELETE' })
       if (!res.ok) throw new Error('一括削除に失敗しました')
@@ -151,7 +158,7 @@ export default function StudentsPage() {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">読み込み中...</p></div>
+  if (loading) return <LoadingSpinner />
 
   return (
     <div className="space-y-4">
@@ -163,7 +170,7 @@ export default function StudentsPage() {
               <Button variant="outline" onClick={handleExport}>
                 <Download className="h-4 w-4 mr-1" />CSVエクスポート
               </Button>
-              <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={handleBulkDelete}>
+              <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={() => setBulkDeleteOpen(true)}>
                 <Trash2 className="h-4 w-4 mr-1" />一括削除
               </Button>
             </>
@@ -207,7 +214,7 @@ export default function StudentsPage() {
                   <div key={i} className="flex gap-2">
                     <Input value={e.email} onChange={(ev) => { const ne = [...emails]; ne[i].email = ev.target.value; setEmails(ne) }} placeholder="email@example.com" className="flex-1" />
                     <Input value={e.label} onChange={(ev) => { const ne = [...emails]; ne[i].label = ev.target.value; setEmails(ne) }} placeholder="ラベル" className="w-24" />
-                    {emails.length > 1 && <Button variant="ghost" size="icon" onClick={() => setEmails(emails.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button>}
+                    {emails.length > 1 && <Button variant="ghost" size="icon" aria-label="メール削除" onClick={() => setEmails(emails.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button>}
                   </div>
                 ))}
                 <Button type="button" variant="outline" size="sm" onClick={() => setEmails([...emails, { email: '', label: '' }])}>
@@ -239,15 +246,25 @@ export default function StudentsPage() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm() }}>キャンセル</Button>
-              <Button onClick={handleSave}>{editing ? '更新' : '登録'}</Button>
+              <Button onClick={handleSave} disabled={saving}>{saving ? '保存中...' : editing ? '更新' : '登録'}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
         </div>
       </div>
 
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="生徒名で検索..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -260,7 +277,7 @@ export default function StudentsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {students.map((s) => (
+              {students.filter(s => !searchQuery || s.name.includes(searchQuery) || s.grade?.includes(searchQuery)).map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">{s.name}</TableCell>
                   <TableCell>{s.grade || '-'}</TableCell>
@@ -281,8 +298,8 @@ export default function StudentsPage() {
                   <TableCell>{s.weekly_lesson_count ? `${s.weekly_lesson_count}回` : '-'}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                      <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(s.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -291,6 +308,22 @@ export default function StudentsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="生徒を削除"
+        description="この生徒を削除しますか？関連するレポートやメール履歴も削除される可能性があります。"
+        onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget); setDeleteTarget(null) }}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title="全生徒データを一括削除"
+        description={`全${students.length}件の生徒データを削除します。この操作は取り消せません。`}
+        onConfirm={() => { handleBulkDelete(); setBulkDeleteOpen(false) }}
+        confirmLabel="一括削除する"
+      />
     </div>
   )
 }

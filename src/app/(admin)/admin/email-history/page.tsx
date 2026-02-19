@@ -1,12 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { PaginationControl } from '@/components/ui/pagination-control'
+import { Mail, Search } from 'lucide-react'
 
 interface EmailLogEntry {
   id: string
@@ -19,9 +24,13 @@ interface EmailLogEntry {
   student_id: string
 }
 
+const PER_PAGE = 20
+
 export default function EmailHistoryPage() {
   const [logs, setLogs] = useState<EmailLogEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
   const supabase = createClient()
 
   useEffect(() => {
@@ -30,20 +39,52 @@ export default function EmailHistoryPage() {
         .from('email_logs')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(100)
+        .limit(500)
       setLogs(data || [])
       setLoading(false)
     }
     fetchLogs()
   }, [supabase])
 
-  if (loading) return <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">読み込み中...</p></div>
+  const filtered = useMemo(() => {
+    if (!search) return logs
+    const q = search.toLowerCase()
+    return logs.filter(l =>
+      l.to_email.toLowerCase().includes(q) ||
+      l.subject.toLowerCase().includes(q)
+    )
+  }, [logs, search])
+
+  const totalPages = Math.ceil(filtered.length / PER_PAGE)
+  const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
+
+  const handleSearch = (value: string) => {
+    setSearch(value)
+    setPage(1)
+  }
+
+  if (loading) return <LoadingSpinner />
 
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">メール送信履歴</h2>
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="宛先・件名で検索..."
+          value={search}
+          onChange={(e) => handleSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      {filtered.length > 0 && (
+        <p className="text-sm text-muted-foreground">{filtered.length}件</p>
+      )}
+
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -54,16 +95,33 @@ export default function EmailHistoryPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {logs.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">履歴がありません</TableCell></TableRow>
+              {paginated.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-12">
+                    <Mail className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+                    <p className="text-muted-foreground">
+                      {search ? `「${search}」に一致する履歴はありません` : '送信履歴がありません'}
+                    </p>
+                    {!search && <p className="text-sm text-muted-foreground/70 mt-1">メールが送信されると、ここに記録されます</p>}
+                  </TableCell>
+                </TableRow>
               ) : (
-                logs.map((log) => (
+                paginated.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell className="text-sm">
                       {log.sent_at ? format(new Date(log.sent_at), 'M/d HH:mm', { locale: ja }) : '-'}
                     </TableCell>
                     <TableCell className="text-sm">{log.to_email}</TableCell>
-                    <TableCell className="text-sm max-w-xs truncate">{log.subject}</TableCell>
+                    <TableCell className="text-sm max-w-xs">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="block truncate">{log.subject}</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-sm">
+                          <p>{log.subject}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TableCell>
                     <TableCell>
                       <Badge variant={log.status === 'sent' ? 'default' : 'destructive'} className={log.status === 'sent' ? 'bg-green-100 text-green-800' : ''}>
                         {log.status === 'sent' ? '送信済み' : '失敗'}
@@ -79,6 +137,8 @@ export default function EmailHistoryPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <PaginationControl page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   )
 }

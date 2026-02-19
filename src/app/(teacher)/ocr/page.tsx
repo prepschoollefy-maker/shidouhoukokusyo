@@ -41,6 +41,19 @@ export default function OcrPage() {
       const formData: Record<string, unknown> = {}
       const newHighlights: Record<string, boolean> = {}
 
+      // Pass raw OCR text for student/subject name matching
+      if (data.student_name?.value) {
+        formData._ocr_student_name = data.student_name.value
+      }
+      if (data.subject?.value) {
+        formData._ocr_subject_name = data.subject.value
+      }
+      if (data.positive_attitudes?.value) {
+        formData._ocr_positive_attitudes = data.positive_attitudes.value
+      }
+      if (data.negative_attitudes?.value) {
+        formData._ocr_negative_attitudes = data.negative_attitudes.value
+      }
       if (data.lesson_date?.value) {
         formData.lesson_date = data.lesson_date.value
         if (data.lesson_date.confidence === 'low') newHighlights.lesson_date = true
@@ -52,6 +65,14 @@ export default function OcrPage() {
       if (data.homework_check?.value) {
         formData.homework_check = data.homework_check.value
         if (data.homework_check.confidence === 'low') newHighlights.homework_check = true
+      }
+      if (data.strengths?.value) {
+        formData.strengths = data.strengths.value
+        if (data.strengths.confidence === 'low') newHighlights.strengths = true
+      }
+      if (data.weaknesses?.value) {
+        formData.weaknesses = data.weaknesses.value
+        if (data.weaknesses.confidence === 'low') newHighlights.weaknesses = true
       }
       if (data.free_comment?.value) {
         formData.free_comment = data.free_comment.value

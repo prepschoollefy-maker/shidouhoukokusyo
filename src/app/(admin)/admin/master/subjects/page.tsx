@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Plus, Trash2, Save } from 'lucide-react'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
 
 interface Subject { id: string; name: string; sort_order: number }
@@ -14,6 +16,7 @@ export default function SubjectsMasterPage() {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [newName, setNewName] = useState('')
   const [loading, setLoading] = useState(true)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   const fetchSubjects = async () => {
     const res = await fetch('/api/master/subjects')
@@ -51,7 +54,6 @@ export default function SubjectsMasterPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('削除しますか？')) return
     try {
       await fetch(`/api/master/subjects/${id}`, { method: 'DELETE' })
       toast.success('削除しました')
@@ -59,7 +61,7 @@ export default function SubjectsMasterPage() {
     } catch { toast.error('削除に失敗しました') }
   }
 
-  if (loading) return <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">読み込み中...</p></div>
+  if (loading) return <LoadingSpinner />
 
   return (
     <div className="space-y-4">
@@ -70,6 +72,7 @@ export default function SubjectsMasterPage() {
             <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="新しい科目名" className="flex-1" />
             <Button onClick={handleAdd}><Plus className="h-4 w-4 mr-1" />追加</Button>
           </div>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -88,14 +91,23 @@ export default function SubjectsMasterPage() {
                     <Input type="number" defaultValue={s.sort_order} className="w-20" onBlur={(e) => { const v = parseInt(e.target.value); if (v !== s.sort_order) handleUpdate(s.id, s.name, v) }} />
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                    <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(s.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="科目を削除"
+        description="この科目を削除しますか？"
+        onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget); setDeleteTarget(null) }}
+      />
     </div>
   )
 }

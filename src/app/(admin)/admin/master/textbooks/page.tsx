@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface Textbook { id: string; name: string }
 
@@ -14,6 +16,7 @@ export default function TextbooksMasterPage() {
   const [textbooks, setTextbooks] = useState<Textbook[]>([])
   const [newName, setNewName] = useState('')
   const [loading, setLoading] = useState(true)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   const fetchData = async () => {
     const res = await fetch('/api/master/textbooks')
@@ -39,7 +42,6 @@ export default function TextbooksMasterPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('削除しますか？')) return
     try {
       await fetch(`/api/master/textbooks/${id}`, { method: 'DELETE' })
       toast.success('削除しました')
@@ -47,7 +49,7 @@ export default function TextbooksMasterPage() {
     } catch { toast.error('削除に失敗しました') }
   }
 
-  if (loading) return <div className="flex items-center justify-center py-12"><p className="text-muted-foreground">読み込み中...</p></div>
+  if (loading) return <LoadingSpinner />
 
   return (
     <div className="space-y-4">
@@ -71,13 +73,21 @@ export default function TextbooksMasterPage() {
             {textbooks.map(t => (
               <div key={t.id} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded">
                 <span className="text-sm">{t.name}</span>
-                <Button variant="ghost" size="icon" onClick={() => handleDelete(t.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(t.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
               </div>
             ))}
             {textbooks.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">テキストが登録されていません</p>}
           </div>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="テキストを削除"
+        description="このテキストを削除しますか？"
+        onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget); setDeleteTarget(null) }}
+      />
     </div>
   )
 }

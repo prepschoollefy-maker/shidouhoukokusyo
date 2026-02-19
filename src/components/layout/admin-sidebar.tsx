@@ -13,14 +13,16 @@ import {
   BookOpen,
   LogOut,
   ClipboardList,
+  Printer,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
 const navItems = [
   { href: '/admin/dashboard', label: 'ダッシュボード', icon: LayoutDashboard },
-  { href: '/admin/summaries', label: 'AIまとめ', icon: FileText },
+  { href: '/admin/summaries', label: '定期レポート', icon: FileText },
   { href: '/admin/reports', label: 'レポート一覧', icon: ClipboardList },
+  { href: '/print', label: 'レポート用紙', icon: Printer, external: true },
   { href: '/admin/students', label: '生徒管理', icon: GraduationCap },
   { href: '/admin/teachers', label: '講師管理', icon: Users },
   { href: '/admin/email-history', label: 'メール履歴', icon: Mail },
@@ -55,6 +57,7 @@ export function AdminSidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
                 className={cn(
                   'flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
                   isActive
