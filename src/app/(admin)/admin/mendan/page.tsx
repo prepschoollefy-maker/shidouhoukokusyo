@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Plus, Pencil, Trash2, Search, ChevronDown, ChevronUp, Link2, Copy } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -376,7 +377,7 @@ function StudentRow({
 
   return (
     <>
-      <TableRow className="group">
+      <TableRow className={cn('group', elapsedDays !== null && elapsedDays >= 90 && 'bg-red-50', elapsedDays === null && 'bg-red-50')}>
         <TableCell>
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggle}>
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
