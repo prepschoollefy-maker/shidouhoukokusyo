@@ -42,29 +42,54 @@ function combineDateTime(dateStr: string, timeStr: string): string {
   return new Date(`${dateStr}T${timeStr}:00`).toISOString()
 }
 
+// 「から」の時間以降の選択肢を返す（「まで」用）
+function getEndTimeSlots(dateStr: string, fromTime: string): string[] {
+  const allSlots = getTimeSlots(dateStr)
+  if (!fromTime) return allSlots
+  const fromIndex = allSlots.indexOf(fromTime)
+  if (fromIndex === -1) return allSlots
+  // fromの次の時刻以降を返す（同じ時刻は不可）
+  return allSlots.slice(fromIndex + 1)
+}
+
 function CandidateInput({
   label,
   date,
-  time,
+  fromTime,
+  toTime,
   onDateChange,
-  onTimeChange,
+  onFromTimeChange,
+  onToTimeChange,
 }: {
   label: string
   date: string
-  time: string
+  fromTime: string
+  toTime: string
   onDateChange: (v: string) => void
-  onTimeChange: (v: string) => void
+  onFromTimeChange: (v: string) => void
+  onToTimeChange: (v: string) => void
 }) {
   const timeSlots = getTimeSlots(date)
+  const endSlots = getEndTimeSlots(date, fromTime)
   const dayLabel = getDayLabel(date)
 
   // 日付変更時に時間帯をリセット（選択肢が変わるため）
   const handleDateChange = (newDate: string) => {
     onDateChange(newDate)
-    // 選択中の時間が新しい曜日の選択肢に含まれるか確認
     const newSlots = getTimeSlots(newDate)
-    if (time && !newSlots.includes(time)) {
-      onTimeChange('')
+    if (fromTime && !newSlots.includes(fromTime)) {
+      onFromTimeChange('')
+      onToTimeChange('')
+    }
+  }
+
+  // 開始時刻変更時に終了時刻をリセット
+  const handleFromChange = (newFrom: string) => {
+    onFromTimeChange(newFrom)
+    // 終了が開始以前なら終了をリセット
+    const newEndSlots = getEndTimeSlots(date, newFrom)
+    if (toTime && !newEndSlots.includes(toTime)) {
+      onToTimeChange('')
     }
   }
 
@@ -73,26 +98,37 @@ function CandidateInput({
       <label className="block text-sm font-medium text-gray-700 mb-1">
         {label} <span className="text-red-500">*</span>
       </label>
-      <div className="flex gap-2">
-        <div className="flex-1">
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => handleDateChange(e.target.value)}
-            required
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-        <div className="w-[120px]">
+      <div className="space-y-2">
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => handleDateChange(e.target.value)}
+          required
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+        <div className="flex items-center gap-2">
           <select
-            value={time}
-            onChange={(e) => onTimeChange(e.target.value)}
+            value={fromTime}
+            onChange={(e) => handleFromChange(e.target.value)}
             required
             disabled={!date}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400"
+            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400"
           >
-            <option value="">時間帯</option>
+            <option value="">開始</option>
             {timeSlots.map(slot => (
+              <option key={slot} value={slot}>{slot}</option>
+            ))}
+          </select>
+          <span className="text-sm text-gray-500 shrink-0">〜</span>
+          <select
+            value={toTime}
+            onChange={(e) => onToTimeChange(e.target.value)}
+            required
+            disabled={!fromTime}
+            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400"
+          >
+            <option value="">終了</option>
+            {endSlots.map(slot => (
               <option key={slot} value={slot}>{slot}</option>
             ))}
           </select>
@@ -114,11 +150,14 @@ export default function MendanRequestPage() {
   const [submitting, setSubmitting] = useState(false)
 
   const [date1, setDate1] = useState('')
-  const [time1, setTime1] = useState('')
+  const [from1, setFrom1] = useState('')
+  const [to1, setTo1] = useState('')
   const [date2, setDate2] = useState('')
-  const [time2, setTime2] = useState('')
+  const [from2, setFrom2] = useState('')
+  const [to2, setTo2] = useState('')
   const [date3, setDate3] = useState('')
-  const [time3, setTime3] = useState('')
+  const [from3, setFrom3] = useState('')
+  const [to3, setTo3] = useState('')
   const [message, setMessage] = useState('')
 
   useEffect(() => {
@@ -145,8 +184,8 @@ export default function MendanRequestPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!date1 || !time1 || !date2 || !time2 || !date3 || !time3) {
-      setError('3つの希望日時（日付と時間帯）をすべて入力してください')
+    if (!date1 || !from1 || !to1 || !date2 || !from2 || !to2 || !date3 || !from3 || !to3) {
+      setError('3つの希望日時（日付・開始・終了）をすべて入力してください')
       return
     }
     if (submitting) return
@@ -158,9 +197,12 @@ export default function MendanRequestPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          candidate1: combineDateTime(date1, time1),
-          candidate2: combineDateTime(date2, time2),
-          candidate3: combineDateTime(date3, time3),
+          candidate1: combineDateTime(date1, from1),
+          candidate1_end: combineDateTime(date1, to1),
+          candidate2: combineDateTime(date2, from2),
+          candidate2_end: combineDateTime(date2, to2),
+          candidate3: combineDateTime(date3, from3),
+          candidate3_end: combineDateTime(date3, to3),
           message: message || null,
         }),
       })
@@ -249,21 +291,21 @@ export default function MendanRequestPage() {
               <p>土日: 13:00〜19:00</p>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-5">
               <CandidateInput
                 label="第1希望"
-                date={date1} time={time1}
-                onDateChange={setDate1} onTimeChange={setTime1}
+                date={date1} fromTime={from1} toTime={to1}
+                onDateChange={setDate1} onFromTimeChange={setFrom1} onToTimeChange={setTo1}
               />
               <CandidateInput
                 label="第2希望"
-                date={date2} time={time2}
-                onDateChange={setDate2} onTimeChange={setTime2}
+                date={date2} fromTime={from2} toTime={to2}
+                onDateChange={setDate2} onFromTimeChange={setFrom2} onToTimeChange={setTo2}
               />
               <CandidateInput
                 label="第3希望"
-                date={date3} time={time3}
-                onDateChange={setDate3} onTimeChange={setTime3}
+                date={date3} fromTime={from3} toTime={to3}
+                onDateChange={setDate3} onFromTimeChange={setFrom3} onToTimeChange={setTo3}
               />
             </div>
 

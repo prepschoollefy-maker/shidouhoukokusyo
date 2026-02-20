@@ -79,7 +79,7 @@ export async function POST(
   }
 
   const body = await request.json()
-  const { candidate1, candidate2, candidate3, message } = body
+  const { candidate1, candidate2, candidate3, candidate1_end, candidate2_end, candidate3_end, message } = body
 
   if (!candidate1 || !candidate2 || !candidate3) {
     return NextResponse.json({ error: '3つの希望日時を入力してください' }, { status: 400 })
@@ -93,6 +93,9 @@ export async function POST(
       candidate1,
       candidate2,
       candidate3,
+      candidate1_end: candidate1_end || null,
+      candidate2_end: candidate2_end || null,
+      candidate3_end: candidate3_end || null,
       message: message || null,
     })
 

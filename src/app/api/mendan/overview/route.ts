@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
   // Fetch all requests (via mendan_tokens -> mendan_requests)
   const { data: requests } = await admin
     .from('mendan_requests')
-    .select('id, student_id, candidate1, candidate2, candidate3, message, submitted_at, token:mendan_tokens!inner(period_label)')
+    .select('id, student_id, candidate1, candidate2, candidate3, candidate1_end, candidate2_end, candidate3_end, message, submitted_at, token:mendan_tokens!inner(period_label)')
     .in('student_id', studentIds)
     .order('submitted_at', { ascending: false })
 
@@ -117,6 +117,9 @@ export async function GET(request: NextRequest) {
         candidate1: r.candidate1,
         candidate2: r.candidate2,
         candidate3: r.candidate3,
+        candidate1_end: r.candidate1_end,
+        candidate2_end: r.candidate2_end,
+        candidate3_end: r.candidate3_end,
         message: r.message,
         submitted_at: r.submitted_at,
       })),

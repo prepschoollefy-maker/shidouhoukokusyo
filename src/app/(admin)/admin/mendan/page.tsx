@@ -42,6 +42,9 @@ interface OverviewRow {
     candidate1: string
     candidate2: string
     candidate3: string
+    candidate1_end: string | null
+    candidate2_end: string | null
+    candidate3_end: string | null
     message: string | null
     submitted_at: string
   }[]
@@ -52,6 +55,19 @@ function formatDateTime(iso: string) {
     return format(new Date(iso), 'M/d (E) HH:mm', { locale: ja })
   } catch {
     return iso
+  }
+}
+
+function formatTimeRange(start: string, end: string | null) {
+  try {
+    const startStr = format(new Date(start), 'M/d (E) HH:mm', { locale: ja })
+    if (end) {
+      const endStr = format(new Date(end), 'HH:mm', { locale: ja })
+      return `${startStr}〜${endStr}`
+    }
+    return startStr
+  } catch {
+    return start
   }
 }
 
@@ -469,15 +485,15 @@ function StudentRow({
                         <div className="grid grid-cols-3 gap-2 text-sm mt-2">
                           <div>
                             <span className="text-xs text-muted-foreground">第1希望</span>
-                            <p>{formatDateTime(req.candidate1)}</p>
+                            <p>{formatTimeRange(req.candidate1, req.candidate1_end)}</p>
                           </div>
                           <div>
                             <span className="text-xs text-muted-foreground">第2希望</span>
-                            <p>{formatDateTime(req.candidate2)}</p>
+                            <p>{formatTimeRange(req.candidate2, req.candidate2_end)}</p>
                           </div>
                           <div>
                             <span className="text-xs text-muted-foreground">第3希望</span>
-                            <p>{formatDateTime(req.candidate3)}</p>
+                            <p>{formatTimeRange(req.candidate3, req.candidate3_end)}</p>
                           </div>
                         </div>
                         {req.message && (
