@@ -10,12 +10,12 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { period_label } = body
+  const { period_label, custom_body } = body
 
   if (!period_label) {
     return NextResponse.json({ error: '期間ラベルを入力してください' }, { status: 400 })
   }
 
-  const result = await sendMendanEmails(period_label)
+  const result = await sendMendanEmails(period_label, custom_body || undefined)
   return NextResponse.json({ data: result })
 }

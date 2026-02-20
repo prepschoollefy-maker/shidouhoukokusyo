@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/resend/client'
 import { buildMendanHtmlEmail } from './email-template'
 
-export async function sendMendanEmails(periodLabel: string) {
+export async function sendMendanEmails(periodLabel: string, customBody?: string) {
   const admin = createAdminClient()
 
   // Get school settings
@@ -67,9 +67,19 @@ export async function sendMendanEmails(periodLabel: string) {
 
     const requestUrl = `${appUrl}/mendan/request/${tokenRow.token}`
     const emailSubject = `【${schoolName}】${student.name}さんの面談日程のご案内`
-    const emailText = `${student.name}さんの${periodLabel}の面談日程についてご案内いたします。\n\n下記URLより面談のご希望日時を3つお選びください。\n${requestUrl}\n\n回答期限: ${new Date(expiresAt).toLocaleDateString('ja-JP')}\n\n${signature}`
+
+    let emailText: string
+    if (customBody) {
+      const replacedBody = customBody
+        .replace(/\{生徒名\}/g, student.name)
+        .replace(/\{期間\}/g, periodLabel)
+      emailText = `${replacedBody}\n\n下記URLより面談のご希望日時を3つお選びください。\n${requestUrl}\n\n回答期限: ${new Date(expiresAt).toLocaleDateString('ja-JP')}\n\n${signature}`
+    } else {
+      emailText = `${student.name}さんの${periodLabel}の面談日程についてご案内いたします。\n\n下記URLより面談のご希望日時を3つお選びください。\n${requestUrl}\n\n回答期限: ${new Date(expiresAt).toLocaleDateString('ja-JP')}\n\n${signature}`
+    }
+
     const emailHtml = buildMendanHtmlEmail(
-      student.name, periodLabel, requestUrl, expiresAt, schoolName, signature
+      student.name, periodLabel, requestUrl, expiresAt, schoolName, signature, customBody
     )
 
     for (const pe of parentEmails) {

@@ -4,10 +4,24 @@ export function buildMendanHtmlEmail(
   requestUrl: string,
   expiresAt: string,
   schoolName: string,
-  signature: string
+  signature: string,
+  customBody?: string
 ): string {
   const expiresDate = new Date(expiresAt)
   const expiresStr = `${expiresDate.getFullYear()}年${expiresDate.getMonth() + 1}月${expiresDate.getDate()}日`
+
+  // Build body HTML from custom or default text
+  let bodyHtml: string
+  if (customBody) {
+    const replaced = customBody
+      .replace(/\{生徒名\}/g, studentName)
+      .replace(/\{期間\}/g, periodLabel)
+    bodyHtml = replaced.split('\n').map(line => `<p>${line || '&nbsp;'}</p>`).join('\n        ')
+  } else {
+    bodyHtml = `<p>保護者様</p>
+        <p>${studentName}さんの${periodLabel}の面談日程についてご案内いたします。</p>
+        <p>下記のボタンより、面談のご希望日時を3つお選びください。</p>`
+  }
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -23,9 +37,7 @@ export function buildMendanHtmlEmail(
     <!-- Body -->
     <div style="background:#fff;padding:28px;border-radius:0 0 12px 12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
       <div style="font-size:14px;line-height:1.8;color:#333;">
-        <p>保護者様</p>
-        <p>${studentName}さんの${periodLabel}の面談日程についてご案内いたします。</p>
-        <p>下記のボタンより、面談のご希望日時を3つお選びください。</p>
+        ${bodyHtml}
         <p style="font-size:13px;color:#666;">※ 回答期限: ${expiresStr}</p>
       </div>
 
