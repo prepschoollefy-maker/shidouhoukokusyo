@@ -360,7 +360,6 @@ function EmailTab() {
   // 自動送信設定
   const [autoEnabled, setAutoEnabled] = useState(false)
   const [autoDay, setAutoDay] = useState(1)
-  const [autoHour, setAutoHour] = useState(9)
   const [loadingSettings, setLoadingSettings] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
 
@@ -371,7 +370,6 @@ function EmailTab() {
         if (json.data) {
           setAutoEnabled(json.data.mendan_auto_send_enabled ?? false)
           setAutoDay(json.data.mendan_auto_send_day ?? 1)
-          setAutoHour(json.data.mendan_auto_send_hour ?? 9)
         }
         setLoadingSettings(false)
       })
@@ -387,7 +385,6 @@ function EmailTab() {
         body: JSON.stringify({
           mendan_auto_send_enabled: autoEnabled,
           mendan_auto_send_day: autoDay,
-          mendan_auto_send_hour: autoHour,
         }),
       })
       if (!res.ok) throw new Error('保存に失敗しました')
@@ -426,7 +423,6 @@ function EmailTab() {
   }
 
   const dayOptions = Array.from({ length: 28 }, (_, i) => i + 1)
-  const hourOptions = Array.from({ length: 24 }, (_, i) => i)
 
   return (
     <div className="space-y-4 mt-4">
@@ -452,17 +448,6 @@ function EmailTab() {
                   <SelectContent>
                     {dayOptions.map(d => (
                       <SelectItem key={d} value={String(d)}>{d}日</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">時刻 (JST)</Label>
-                <Select value={String(autoHour)} onValueChange={(v) => setAutoHour(Number(v))}>
-                  <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {hourOptions.map(h => (
-                      <SelectItem key={h} value={String(h)}>{h}:00</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

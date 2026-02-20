@@ -20,13 +20,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data: { skipped: true, reason: 'auto_send_disabled' } })
   }
 
-  // Check if today matches the configured day and hour (JST)
+  // Check if today matches the configured day (JST)
   const nowJST = new Date(Date.now() + 9 * 60 * 60 * 1000)
   const dayJST = nowJST.getUTCDate()
-  const hourJST = nowJST.getUTCHours()
 
-  if (dayJST !== settings.mendan_auto_send_day || hourJST !== settings.mendan_auto_send_hour) {
-    return NextResponse.json({ data: { skipped: true, reason: 'not_scheduled_time' } })
+  if (dayJST !== settings.mendan_auto_send_day) {
+    return NextResponse.json({ data: { skipped: true, reason: 'not_scheduled_day' } })
   }
 
   const periodLabel = `${nowJST.getUTCFullYear()}年${nowJST.getUTCMonth() + 1}月`
