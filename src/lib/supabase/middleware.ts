@@ -34,7 +34,7 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   // Public routes that don't require auth
-  const publicRoutes = ['/login', '/admin/login', '/register', '/reset-password', '/auth/callback', '/auth/confirm', '/view', '/api/summaries/view', '/print']
+  const publicRoutes = ['/login', '/admin/login', '/register', '/reset-password', '/auth/callback', '/auth/confirm', '/view', '/api/summaries/view', '/print', '/mendan', '/api/mendan/requests']
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
 
   if (!user && !isPublicRoute) {

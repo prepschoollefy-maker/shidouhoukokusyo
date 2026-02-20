@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Menu, X, LayoutDashboard, FileText, Users, GraduationCap, Mail, Settings, BookOpen, LogOut, ClipboardList, Printer } from 'lucide-react'
+import { Menu, X, LayoutDashboard, FileText, Users, GraduationCap, Mail, Settings, BookOpen, LogOut, ClipboardList, Printer, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
@@ -16,6 +16,7 @@ const navItems = [
   { href: '/print', label: 'レポート用紙', icon: Printer, external: true },
   { href: '/admin/students', label: '生徒管理', icon: GraduationCap },
   { href: '/admin/teachers', label: '講師管理', icon: Users },
+  { href: '/admin/mendan', label: '面談管理', icon: Calendar },
   { href: '/admin/email-history', label: 'メール履歴', icon: Mail },
   { href: '/admin/master/subjects', label: '科目マスタ', icon: BookOpen },
   { href: '/admin/master/attitudes', label: '様子マスタ', icon: BookOpen },

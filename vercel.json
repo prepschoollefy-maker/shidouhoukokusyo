@@ -3,6 +3,10 @@
     {
       "path": "/api/email/cron",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/mendan/cron",
+      "schedule": "0 * * * *"
     }
   ]
 }

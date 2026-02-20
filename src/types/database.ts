@@ -141,3 +141,34 @@ export interface SchoolSettings {
   created_at: string
   updated_at: string
 }
+
+export interface MendanToken {
+  id: string
+  student_id: string
+  token: string
+  period_label: string
+  expires_at: string
+  created_at: string
+}
+
+export interface MendanRequest {
+  id: string
+  token_id: string
+  student_id: string
+  candidate1: string
+  candidate2: string
+  candidate3: string
+  message: string | null
+  submitted_at: string
+}
+
+export interface MendanRecord {
+  id: string
+  student_id: string
+  mendan_date: string
+  attendees: string | null
+  content: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
