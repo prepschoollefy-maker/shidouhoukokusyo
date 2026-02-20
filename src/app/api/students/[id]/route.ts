@@ -114,6 +114,13 @@ export async function DELETE(
   }
 
   const admin = createAdminClient()
+
+  // Delete related data without ON DELETE CASCADE first
+  await admin.from('email_logs').delete().eq('student_id', id)
+  await admin.from('summaries').delete().eq('student_id', id)
+  await admin.from('lesson_reports').delete().eq('student_id', id)
+
+  // Now delete student (CASCADE handles parent_emails, student_subjects, etc.)
   const { error } = await admin.from('students').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })

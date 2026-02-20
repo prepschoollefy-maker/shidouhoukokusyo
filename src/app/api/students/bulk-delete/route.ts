@@ -10,10 +10,20 @@ export async function DELETE() {
   }
 
   const admin = createAdminClient()
+
+  // Delete related data without ON DELETE CASCADE first
+  const condition = 'id' // dummy column to match all rows via neq
+  const dummyId = '00000000-0000-0000-0000-000000000000'
+
+  await admin.from('email_logs').delete().neq(condition, dummyId)
+  await admin.from('summaries').delete().neq(condition, dummyId)
+  await admin.from('lesson_reports').delete().neq(condition, dummyId)
+
+  // Now delete students (CASCADE handles parent_emails, student_subjects, etc.)
   const { error } = await admin
     .from('students')
     .delete()
-    .neq('id', '00000000-0000-0000-0000-000000000000') // delete all rows
+    .neq(condition, dummyId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
