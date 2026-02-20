@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, Pencil, Trash2, Search, Send, ChevronDown, ChevronUp, AlertCircle, Clock, Mail } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, Send, ChevronDown, ChevronUp, Mail, Check } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -29,25 +29,28 @@ interface OverviewRow {
   record_count: number
   last_mendan_date: string | null
   next_due_date: string | null
-  alert: 'overdue' | 'soon' | null
   records: {
     id: string
     mendan_date: string
     attendees: string | null
     content: string | null
   }[]
-  requests: {
-    id: string
-    period_label: string
-    candidate1: string
-    candidate2: string
-    candidate3: string
-    candidate1_end: string | null
-    candidate2_end: string | null
-    candidate3_end: string | null
-    message: string | null
-    submitted_at: string
-  }[]
+}
+
+interface MendanRequestRow {
+  id: string
+  student_id: string
+  candidate1: string
+  candidate2: string
+  candidate3: string
+  candidate1_end: string | null
+  candidate2_end: string | null
+  candidate3_end: string | null
+  message: string | null
+  submitted_at: string
+  handled: boolean
+  student: { name: string }
+  token: { period_label: string }
 }
 
 function formatDateTime(iso: string) {
@@ -90,9 +93,11 @@ export default function MendanPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="overview">面談一覧</TabsTrigger>
+          <TabsTrigger value="requests">面談希望申請</TabsTrigger>
           <TabsTrigger value="email">メール送信</TabsTrigger>
         </TabsList>
         <TabsContent value="overview"><OverviewTab /></TabsContent>
+        <TabsContent value="requests"><RequestsTab /></TabsContent>
         <TabsContent value="email"><EmailTab /></TabsContent>
       </Tabs>
     </div>
@@ -106,7 +111,7 @@ function OverviewTab() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('active')
   const [searchQuery, setSearchQuery] = useState('')
-  const [overdueOnly, setOverdueOnly] = useState(false)
+  const [over90Only, setOver90Only] = useState(false)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
   // Record dialog state
@@ -146,9 +151,14 @@ function OverviewTab() {
   }
 
   // Filter
+  const now = new Date()
   const filtered = rows.filter(r => {
     if (searchQuery && !r.student_name.includes(searchQuery)) return false
-    if (overdueOnly && r.alert !== 'overdue') return false
+    if (over90Only) {
+      if (!r.last_mendan_date) return true // 記録なし = 対象
+      const diff = now.getTime() - new Date(r.last_mendan_date).getTime()
+      if (diff < 90 * 24 * 60 * 60 * 1000) return false
+    }
     return true
   })
 
@@ -226,29 +236,8 @@ function OverviewTab() {
 
   if (loading) return <LoadingSpinner />
 
-  const overdueCount = rows.filter(r => r.alert === 'overdue').length
-  const soonCount = rows.filter(r => r.alert === 'soon').length
-
   return (
     <div className="space-y-4 mt-4">
-      {/* Summary badges */}
-      {(overdueCount > 0 || soonCount > 0) && (
-        <div className="flex gap-2">
-          {overdueCount > 0 && (
-            <Badge variant="destructive" className="gap-1">
-              <AlertCircle className="h-3 w-3" />
-              要連絡: {overdueCount}名
-            </Badge>
-          )}
-          {soonCount > 0 && (
-            <Badge variant="outline" className="gap-1 border-yellow-500 text-yellow-700">
-              <Clock className="h-3 w-3" />
-              もうすぐ: {soonCount}名
-            </Badge>
-          )}
-        </div>
-      )}
-
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">
@@ -272,11 +261,11 @@ function OverviewTab() {
         </Select>
         <div className="flex items-center gap-2">
           <Checkbox
-            id="overdue-only"
-            checked={overdueOnly}
-            onCheckedChange={(checked) => setOverdueOnly(checked === true)}
+            id="over90"
+            checked={over90Only}
+            onCheckedChange={(checked) => setOver90Only(checked === true)}
           />
-          <Label htmlFor="overdue-only" className="text-sm cursor-pointer">要連絡のみ</Label>
+          <Label htmlFor="over90" className="text-sm cursor-pointer">90日以上経過</Label>
         </div>
       </div>
 
@@ -287,19 +276,17 @@ function OverviewTab() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10"></TableHead>
-                <TableHead className="w-20">アラート</TableHead>
                 <TableHead>生徒名</TableHead>
                 <TableHead className="text-center">面談回数</TableHead>
                 <TableHead>最終面談日</TableHead>
-                <TableHead>次回目安</TableHead>
-                <TableHead>保護者回答</TableHead>
+                <TableHead>経過日数</TableHead>
                 <TableHead className="w-20">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     該当する生徒はいません
                   </TableCell>
                 </TableRow>
@@ -387,7 +374,11 @@ function StudentRow({
   onEditRecord: (rec: OverviewRow['records'][0]) => void
   onDeleteRecord: (id: string) => void
 }) {
-  const latestRequest = row.requests.length > 0 ? row.requests[0] : null
+  const now = new Date()
+  let elapsedDays: number | null = null
+  if (row.last_mendan_date) {
+    elapsedDays = Math.floor((now.getTime() - new Date(row.last_mendan_date).getTime()) / (1000 * 60 * 60 * 24))
+  }
 
   return (
     <>
@@ -397,28 +388,18 @@ function StudentRow({
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
         </TableCell>
-        <TableCell>
-          <AlertBadge alert={row.alert} />
-        </TableCell>
         <TableCell className="font-medium">{row.student_name}</TableCell>
         <TableCell className="text-center">{row.record_count}回</TableCell>
         <TableCell className="whitespace-nowrap">
           {row.last_mendan_date ? formatDate(row.last_mendan_date) : '-'}
         </TableCell>
         <TableCell className="whitespace-nowrap">
-          {row.next_due_date ? (
-            <span className={row.alert === 'overdue' ? 'text-red-600 font-medium' : row.alert === 'soon' ? 'text-yellow-600' : ''}>
-              {formatDate(row.next_due_date)}
-            </span>
-          ) : '-'}
-        </TableCell>
-        <TableCell>
-          {latestRequest ? (
-            <span className="text-sm">
-              {latestRequest.period_label} 回答済
+          {elapsedDays !== null ? (
+            <span className={elapsedDays >= 90 ? 'text-red-600 font-medium' : ''}>
+              {elapsedDays}日
             </span>
           ) : (
-            <span className="text-muted-foreground text-sm">-</span>
+            <span className="text-muted-foreground">記録なし</span>
           )}
         </TableCell>
         <TableCell>
@@ -430,7 +411,7 @@ function StudentRow({
 
       {expanded && (
         <TableRow>
-          <TableCell colSpan={8} className="bg-muted/30 p-0">
+          <TableCell colSpan={6} className="bg-muted/30 p-0">
             <div className="p-4 space-y-4">
               {/* 面談履歴 */}
               <div>
@@ -468,42 +449,6 @@ function StudentRow({
                   </div>
                 )}
               </div>
-
-              {/* 保護者回答 */}
-              {row.requests.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-semibold mb-2">保護者回答</h4>
-                  <div className="space-y-2">
-                    {row.requests.map(req => (
-                      <div key={req.id} className="bg-white rounded-lg border p-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant="secondary" className="text-xs">{req.period_label}</Badge>
-                          <span className="text-xs text-muted-foreground">
-                            申請日: {formatDateTime(req.submitted_at)}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2 text-sm mt-2">
-                          <div>
-                            <span className="text-xs text-muted-foreground">第1希望</span>
-                            <p>{formatTimeRange(req.candidate1, req.candidate1_end)}</p>
-                          </div>
-                          <div>
-                            <span className="text-xs text-muted-foreground">第2希望</span>
-                            <p>{formatTimeRange(req.candidate2, req.candidate2_end)}</p>
-                          </div>
-                          <div>
-                            <span className="text-xs text-muted-foreground">第3希望</span>
-                            <p>{formatTimeRange(req.candidate3, req.candidate3_end)}</p>
-                          </div>
-                        </div>
-                        {req.message && (
-                          <p className="text-sm text-muted-foreground mt-2">メッセージ: {req.message}</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </TableCell>
         </TableRow>
@@ -512,27 +457,142 @@ function StudentRow({
   )
 }
 
-function AlertBadge({ alert }: { alert: 'overdue' | 'soon' | null }) {
-  if (alert === 'overdue') {
-    return (
-      <Badge variant="destructive" className="gap-1 text-xs">
-        <AlertCircle className="h-3 w-3" />
-        要連絡
-      </Badge>
-    )
+// ─── Tab 2: 面談希望申請 ───────────────────────────
+
+function RequestsTab() {
+  const [requests, setRequests] = useState<MendanRequestRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [handledFilter, setHandledFilter] = useState<'all' | 'unhandled' | 'handled'>('unhandled')
+
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/mendan/requests')
+      const json = await res.json()
+      setRequests(json.data || [])
+    } catch {
+      toast.error('データの取得に失敗しました')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  const toggleHandled = async (id: string, currentHandled: boolean) => {
+    // Optimistic update
+    setRequests(prev => prev.map(r => r.id === id ? { ...r, handled: !currentHandled } : r))
+    try {
+      const res = await fetch('/api/mendan/requests', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, handled: !currentHandled }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      // Revert
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, handled: currentHandled } : r))
+      toast.error('更新に失敗しました')
+    }
   }
-  if (alert === 'soon') {
-    return (
-      <Badge variant="outline" className="gap-1 text-xs border-yellow-500 text-yellow-700">
-        <Clock className="h-3 w-3" />
-        もうすぐ
-      </Badge>
-    )
-  }
-  return null
+
+  if (loading) return <LoadingSpinner />
+
+  const filtered = requests.filter(r => {
+    if (searchQuery && !r.student.name.includes(searchQuery) && !(r.token as unknown as { period_label: string }).period_label.includes(searchQuery)) return false
+    if (handledFilter === 'unhandled' && r.handled) return false
+    if (handledFilter === 'handled' && !r.handled) return false
+    return true
+  })
+
+  const unhandledCount = requests.filter(r => !r.handled).length
+
+  return (
+    <div className="space-y-4 mt-4">
+      {/* Header */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="生徒名・期間で検索..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select value={handledFilter} onValueChange={(v) => setHandledFilter(v as 'all' | 'unhandled' | 'handled')}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="unhandled">未対応</SelectItem>
+            <SelectItem value="handled">対応済</SelectItem>
+            <SelectItem value="all">すべて</SelectItem>
+          </SelectContent>
+        </Select>
+        {unhandledCount > 0 && (
+          <Badge variant="destructive">{unhandledCount}件 未対応</Badge>
+        )}
+      </div>
+
+      {/* Table */}
+      <Card>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-16 text-center">対応</TableHead>
+                <TableHead>生徒名</TableHead>
+                <TableHead>期間</TableHead>
+                <TableHead>第1希望</TableHead>
+                <TableHead>第2希望</TableHead>
+                <TableHead>第3希望</TableHead>
+                <TableHead>メッセージ</TableHead>
+                <TableHead>申請日</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                    {handledFilter === 'unhandled' ? '未対応の申請はありません' : '面談申請はありません'}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filtered.map(r => (
+                  <TableRow key={r.id} className={r.handled ? 'opacity-60' : ''}>
+                    <TableCell className="text-center">
+                      <button
+                        onClick={() => toggleHandled(r.id, r.handled)}
+                        className={`inline-flex items-center justify-center w-7 h-7 rounded-md border transition-colors ${
+                          r.handled
+                            ? 'bg-green-100 border-green-400 text-green-700'
+                            : 'bg-white border-gray-300 text-gray-400 hover:border-green-400 hover:text-green-600'
+                        }`}
+                        title={r.handled ? '対応済 → 未対応に戻す' : '対応済にする'}
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                    </TableCell>
+                    <TableCell className="font-medium">{r.student.name}</TableCell>
+                    <TableCell>{(r.token as unknown as { period_label: string }).period_label}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">{formatTimeRange(r.candidate1, r.candidate1_end)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">{formatTimeRange(r.candidate2, r.candidate2_end)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">{formatTimeRange(r.candidate3, r.candidate3_end)}</TableCell>
+                    <TableCell className="max-w-[200px] truncate">{r.message || '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap">{formatDateTime(r.submitted_at)}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
 
-// ─── Tab 2: メール送信（強化版） ───────────────────────────
+// ─── Tab 3: メール送信（強化版） ───────────────────────────
 
 function EmailTab() {
   const now = new Date()
