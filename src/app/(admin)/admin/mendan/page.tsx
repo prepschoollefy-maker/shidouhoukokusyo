@@ -847,8 +847,8 @@ function EmailTab() {
               ) : (
                 <div className="divide-y">
                   {students.map(s => {
-                    const disabled = !s.has_email || s.already_sent
-                    const reason = !s.has_email ? 'メール未登録' : s.already_sent ? '送信済み' : null
+                    const disabled = !s.has_email
+                    const reason = !s.has_email ? 'メール未登録' : s.already_sent ? '送信済み（再送可）' : null
                     return (
                       <label key={s.id} className={`flex items-center gap-3 px-3 py-2 text-sm ${disabled ? 'opacity-50' : 'hover:bg-muted/50 cursor-pointer'}`}>
                         <Checkbox

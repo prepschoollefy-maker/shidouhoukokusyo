@@ -45,33 +45,42 @@ export async function sendMendanEmails(periodLabel: string, customBody?: string,
     // Check if token already exists for this student + period
     const { data: existing } = await admin
       .from('mendan_tokens')
-      .select('id')
+      .select('id, token')
       .eq('student_id', student.id)
       .eq('period_label', periodLabel)
       .limit(1)
 
-    if (existing?.length) {
+    // 明示的に生徒が指定されていない場合、送信済みはスキップ
+    if (existing?.length && !studentIds?.length) {
       skipped++
       continue
     }
 
-    // Create token
-    const { data: tokenRow, error: tokenError } = await admin
-      .from('mendan_tokens')
-      .insert({
-        student_id: student.id,
-        period_label: periodLabel,
-        expires_at: expiresAt,
-      })
-      .select('token')
-      .single()
+    let token: string
 
-    if (tokenError || !tokenRow) {
-      errors.push(`${student.name}: トークン生成失敗`)
-      continue
+    if (existing?.length) {
+      // 既存トークンを再利用して再送
+      token = existing[0].token
+    } else {
+      // Create new token
+      const { data: tokenRow, error: tokenError } = await admin
+        .from('mendan_tokens')
+        .insert({
+          student_id: student.id,
+          period_label: periodLabel,
+          expires_at: expiresAt,
+        })
+        .select('token')
+        .single()
+
+      if (tokenError || !tokenRow) {
+        errors.push(`${student.name}: トークン生成失敗`)
+        continue
+      }
+      token = tokenRow.token
     }
 
-    const requestUrl = `${appUrl}/mendan/request/${tokenRow.token}`
+    const requestUrl = `${appUrl}/mendan/request/${token}`
     const emailSubject = `【${schoolName}】${student.name}さんの面談日程のご案内`
 
     let emailText: string
