@@ -19,10 +19,16 @@ interface StudentPreview {
   already_sent: boolean
 }
 
+function defaultDeadline() {
+  const d = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+  return d.toISOString().split('T')[0]
+}
+
 export default function MendanEmailPage() {
   const now = new Date()
   const defaultLabel = `${now.getFullYear()}年${now.getMonth() + 1}月`
   const [periodLabel, setPeriodLabel] = useState(defaultLabel)
+  const [deadline, setDeadline] = useState(defaultDeadline)
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<{ sent: number; skipped: number; errors: string[] } | null>(null)
 
@@ -149,6 +155,7 @@ export default function MendanEmailPage() {
           period_label: periodLabel,
           student_ids: Array.from(selectedIds),
           ...(isCustom ? { custom_body: customBody } : {}),
+          deadline,
         }),
       })
       const json = await res.json()
@@ -218,9 +225,15 @@ export default function MendanEmailPage() {
         <CardContent className="p-6 space-y-4">
           <p className="text-sm font-medium">手動送信</p>
 
-          <div className="space-y-2">
-            <Label>期間ラベル</Label>
-            <Input value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)} placeholder="例：2026年3月" className="max-w-xs" />
+          <div className="flex flex-wrap gap-4">
+            <div className="space-y-2">
+              <Label>期間ラベル</Label>
+              <Input value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)} placeholder="例：2026年3月" className="w-48" />
+            </div>
+            <div className="space-y-2">
+              <Label>回答期限</Label>
+              <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="w-48" />
+            </div>
           </div>
 
           {/* 送信先選択 */}

@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/resend/client'
 import { buildMendanHtmlEmail } from './email-template'
 
-export async function sendMendanEmails(periodLabel: string, customBody?: string, studentIds?: string[]) {
+export async function sendMendanEmails(periodLabel: string, customBody?: string, studentIds?: string[], deadline?: string) {
   const admin = createAdminClient()
 
   // Get school settings
@@ -36,7 +36,9 @@ export async function sendMendanEmails(periodLabel: string, customBody?: string,
   let sent = 0
   let skipped = 0
   const errors: string[] = []
-  const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+  const expiresAt = deadline
+    ? new Date(deadline + 'T23:59:59+09:00').toISOString()
+    : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
 
   for (const student of students) {
     const parentEmails = (student.parent_emails as { email: string }[]) || []
