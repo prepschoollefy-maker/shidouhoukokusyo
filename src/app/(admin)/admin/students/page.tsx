@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Download, Search, RotateCcw } from 'lucide-react'
+import { Plus, Pencil, Trash2, Download, Search, RotateCcw, UserMinus } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -372,7 +372,9 @@ export default function StudentsPage() {
                       {statusFilter === 'active' ? (
                         <>
                           <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" aria-label="退塾" onClick={() => setWithdrawTarget(s)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                          <Button variant="ghost" size="sm" aria-label="退塾" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50" onClick={() => setWithdrawTarget(s)}>
+                            <UserMinus className="h-4 w-4 mr-1" />退塾
+                          </Button>
                         </>
                       ) : (
                         <>
