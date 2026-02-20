@@ -4,25 +4,76 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Menu, X, LayoutDashboard, FileText, Users, GraduationCap, Mail, Settings, BookOpen, LogOut, ClipboardList, Printer, Calendar } from 'lucide-react'
+import {
+  Menu,
+  LayoutDashboard,
+  FileText,
+  Users,
+  GraduationCap,
+  Mail,
+  Settings,
+  BookOpen,
+  LogOut,
+  ClipboardList,
+  Printer,
+  Calendar,
+  ClipboardCheck,
+  Send,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 
-const navItems = [
+interface NavItem {
+  href: string
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  external?: boolean
+}
+
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
+const navGroups: (NavItem | NavGroup)[] = [
   { href: '/admin/dashboard', label: 'ダッシュボード', icon: LayoutDashboard },
-  { href: '/admin/summaries', label: '定期レポート', icon: FileText },
-  { href: '/admin/reports', label: 'レポート一覧', icon: ClipboardList },
-  { href: '/print', label: 'レポート用紙', icon: Printer, external: true },
-  { href: '/admin/students', label: '生徒管理', icon: GraduationCap },
-  { href: '/admin/teachers', label: '講師管理', icon: Users },
-  { href: '/admin/mendan', label: '面談管理', icon: Calendar },
-  { href: '/admin/email-history', label: 'メール履歴', icon: Mail },
-  { href: '/admin/master/subjects', label: '科目マスタ', icon: BookOpen },
-  { href: '/admin/master/attitudes', label: '様子マスタ', icon: BookOpen },
-  { href: '/admin/master/textbooks', label: 'テキストマスタ', icon: BookOpen },
-  { href: '/admin/settings', label: '設定', icon: Settings },
+  {
+    label: 'レポート',
+    items: [
+      { href: '/admin/summaries', label: '定期レポート', icon: FileText },
+      { href: '/admin/reports', label: 'レポート一覧', icon: ClipboardList },
+      { href: '/print', label: 'レポート用紙', icon: Printer, external: true },
+    ],
+  },
+  {
+    label: '面談',
+    items: [
+      { href: '/admin/mendan', label: '面談一覧', icon: Calendar },
+      { href: '/admin/mendan/requests', label: '希望申請', icon: ClipboardCheck },
+      { href: '/admin/mendan/email', label: 'メール送信', icon: Send },
+    ],
+  },
+  {
+    label: '管理',
+    items: [
+      { href: '/admin/students', label: '生徒管理', icon: GraduationCap },
+      { href: '/admin/teachers', label: '講師管理', icon: Users },
+    ],
+  },
+  {
+    label: 'その他',
+    items: [
+      { href: '/admin/email-history', label: 'メール履歴', icon: Mail },
+      { href: '/admin/master', label: 'マスタ管理', icon: BookOpen },
+      { href: '/admin/settings', label: '設定', icon: Settings },
+    ],
+  },
 ]
+
+function isNavItem(item: NavItem | NavGroup): item is NavItem {
+  return 'href' in item
+}
 
 export function AdminHeader() {
   const pathname = usePathname()
@@ -34,6 +85,28 @@ export function AdminHeader() {
     await supabase.auth.signOut()
     router.push('/login')
     router.refresh()
+  }
+
+  const renderLink = (item: NavItem) => {
+    const Icon = item.icon
+    const isActive = item.href === '/admin/mendan'
+      ? pathname === '/admin/mendan'
+      : pathname.startsWith(item.href)
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={() => setOpen(false)}
+        {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+        className={cn(
+          'flex items-center px-3 py-2 text-sm font-medium rounded-md',
+          isActive ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
+        )}
+      >
+        <Icon className="mr-3 h-5 w-5" />
+        {item.label}
+      </Link>
+    )
   }
 
   return (
@@ -49,24 +122,18 @@ export function AdminHeader() {
           <div className="flex items-center h-14 px-4 border-b">
             <h2 className="text-lg font-bold">メニュー</h2>
           </div>
-          <nav className="px-2 py-4 space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname.startsWith(item.href)
+          <nav className="px-2 py-4 space-y-1 overflow-y-auto">
+            {navGroups.map((entry, i) => {
+              if (isNavItem(entry)) {
+                return renderLink(entry)
+              }
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                  className={cn(
-                    'flex items-center px-3 py-2 text-sm font-medium rounded-md',
-                    isActive ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
-                  )}
-                >
-                  <Icon className="mr-3 h-5 w-5" />
-                  {item.label}
-                </Link>
+                <div key={entry.label} className={cn(i > 0 && 'pt-3')}>
+                  <p className="px-3 mb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    {entry.label}
+                  </p>
+                  {entry.items.map(renderLink)}
+                </div>
               )
             })}
           </nav>
