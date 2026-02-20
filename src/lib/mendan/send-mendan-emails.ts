@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/resend/client'
 import { buildMendanHtmlEmail } from './email-template'
 
-export async function sendMendanEmails(periodLabel: string, customBody?: string) {
+export async function sendMendanEmails(periodLabel: string, customBody?: string, studentIds?: string[]) {
   const admin = createAdminClient()
 
   // Get school settings
@@ -16,12 +16,18 @@ export async function sendMendanEmails(periodLabel: string, customBody?: string)
   const signature = settings?.email_signature || ''
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://shidouhoukokusyo.vercel.app'
 
-  // Get active students with parent emails
-  const { data: students } = await admin
+  // Get students with parent emails
+  let studentQuery = admin
     .from('students')
     .select('id, name, parent_emails(email)')
     .eq('status', 'active')
     .order('name')
+
+  if (studentIds?.length) {
+    studentQuery = studentQuery.in('id', studentIds)
+  }
+
+  const { data: students } = await studentQuery
 
   if (!students?.length) {
     return { sent: 0, skipped: 0, errors: [] }

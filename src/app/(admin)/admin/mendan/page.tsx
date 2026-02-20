@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, Pencil, Trash2, Search, Send, ChevronDown, ChevronUp, Mail, Check } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, Send, ChevronDown, ChevronUp, Mail, Check, Link2, Copy } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -28,7 +28,6 @@ interface OverviewRow {
   student_status: string
   record_count: number
   last_mendan_date: string | null
-  next_due_date: string | null
   records: {
     id: string
     mendan_date: string
@@ -51,6 +50,13 @@ interface MendanRequestRow {
   handled: boolean
   student: { name: string }
   token: { period_label: string }
+}
+
+interface StudentPreview {
+  id: string
+  name: string
+  has_email: boolean
+  already_sent: boolean
 }
 
 function formatDateTime(iso: string) {
@@ -114,7 +120,7 @@ function OverviewTab() {
   const [over90Only, setOver90Only] = useState(false)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
-  // Record dialog state
+  // Record dialog
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingRecord, setEditingRecord] = useState<{ id: string; student_id: string } | null>(null)
   const [formStudentId, setFormStudentId] = useState('')
@@ -123,8 +129,15 @@ function OverviewTab() {
   const [formAttendees, setFormAttendees] = useState('')
   const [formContent, setFormContent] = useState('')
   const [saving, setSaving] = useState(false)
-
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+  // Link dialog
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false)
+  const [linkStudentId, setLinkStudentId] = useState('')
+  const [linkStudentName, setLinkStudentName] = useState('')
+  const [linkPeriod, setLinkPeriod] = useState('')
+  const [generatedUrl, setGeneratedUrl] = useState('')
+  const [generating, setGenerating] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -150,19 +163,17 @@ function OverviewTab() {
     })
   }
 
-  // Filter
   const now = new Date()
   const filtered = rows.filter(r => {
     if (searchQuery && !r.student_name.includes(searchQuery)) return false
     if (over90Only) {
-      if (!r.last_mendan_date) return true // 記録なし = 対象
+      if (!r.last_mendan_date) return true
       const diff = now.getTime() - new Date(r.last_mendan_date).getTime()
       if (diff < 90 * 24 * 60 * 60 * 1000) return false
     }
     return true
   })
 
-  // Record form handlers
   const resetForm = () => {
     setEditingRecord(null)
     setFormStudentId('')
@@ -198,19 +209,13 @@ function OverviewTab() {
     }
     if (saving) return
     setSaving(true)
-
     try {
       const url = editingRecord ? `/api/mendan/records/${editingRecord.id}` : '/api/mendan/records'
       const method = editingRecord ? 'PUT' : 'POST'
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          student_id: formStudentId,
-          mendan_date: formDate,
-          attendees: formAttendees,
-          content: formContent,
-        }),
+        body: JSON.stringify({ student_id: formStudentId, mendan_date: formDate, attendees: formAttendees, content: formContent }),
       })
       if (!res.ok) throw new Error('保存に失敗しました')
       toast.success(editingRecord ? '更新しました' : '登録しました')
@@ -234,6 +239,51 @@ function OverviewTab() {
     }
   }
 
+  const openLinkDialog = (studentId: string, studentName: string) => {
+    const defaultLabel = `${now.getFullYear()}年${now.getMonth() + 1}月`
+    setLinkStudentId(studentId)
+    setLinkStudentName(studentName)
+    setLinkPeriod(defaultLabel)
+    setGeneratedUrl('')
+    setLinkDialogOpen(true)
+  }
+
+  const handleGenerateLink = async () => {
+    if (!linkPeriod) {
+      toast.error('期間ラベルを入力してください')
+      return
+    }
+    setGenerating(true)
+    try {
+      const res = await fetch('/api/mendan/tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: linkStudentId, period_label: linkPeriod }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'リンク生成に失敗しました')
+      setGeneratedUrl(json.data.url)
+      if (json.data.existing) {
+        toast.info('既存のリンクを取得しました')
+      } else {
+        toast.success('リンクを発行しました')
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'エラーが発生しました')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(generatedUrl)
+      toast.success('コピーしました')
+    } catch {
+      toast.error('コピーに失敗しました')
+    }
+  }
+
   if (loading) return <LoadingSpinner />
 
   return (
@@ -242,17 +292,10 @@ function OverviewTab() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="生徒名で検索..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+          <Input placeholder="生徒名で検索..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[130px]">
-            <SelectValue />
-          </SelectTrigger>
+          <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="active">通塾生</SelectItem>
             <SelectItem value="inactive">退塾済</SelectItem>
@@ -260,11 +303,7 @@ function OverviewTab() {
           </SelectContent>
         </Select>
         <div className="flex items-center gap-2">
-          <Checkbox
-            id="over90"
-            checked={over90Only}
-            onCheckedChange={(checked) => setOver90Only(checked === true)}
-          />
+          <Checkbox id="over90" checked={over90Only} onCheckedChange={(checked) => setOver90Only(checked === true)} />
           <Label htmlFor="over90" className="text-sm cursor-pointer">90日以上経過</Label>
         </div>
       </div>
@@ -280,15 +319,13 @@ function OverviewTab() {
                 <TableHead className="text-center">面談回数</TableHead>
                 <TableHead>最終面談日</TableHead>
                 <TableHead>経過日数</TableHead>
-                <TableHead className="w-20">操作</TableHead>
+                <TableHead className="w-32">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    該当する生徒はいません
-                  </TableCell>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">該当する生徒はいません</TableCell>
                 </TableRow>
               ) : (
                 filtered.map(row => (
@@ -300,6 +337,7 @@ function OverviewTab() {
                     onNewRecord={() => openNewRecord(row.student_id, row.student_name)}
                     onEditRecord={(rec) => openEditRecord(rec, row.student_id, row.student_name)}
                     onDeleteRecord={(id) => setDeleteTarget(id)}
+                    onGenerateLink={() => openLinkDialog(row.student_id, row.student_name)}
                   />
                 ))
               )}
@@ -330,19 +368,46 @@ function OverviewTab() {
             </div>
             <div className="space-y-2 flex-1 flex flex-col">
               <Label>内容</Label>
-              <Textarea
-                value={formContent}
-                onChange={(e) => setFormContent(e.target.value)}
-                rows={12}
-                placeholder="面談内容を入力..."
-                className="flex-1 min-h-[200px] resize-y text-sm leading-relaxed"
-              />
+              <Textarea value={formContent} onChange={(e) => setFormContent(e.target.value)} rows={12} placeholder="面談内容を入力..." className="flex-1 min-h-[200px] resize-y text-sm leading-relaxed" />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm() }}>キャンセル</Button>
             <Button onClick={handleSave} disabled={saving}>{saving ? '保存中...' : editingRecord ? '更新' : '登録'}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link Dialog */}
+      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>リンク発行 - {linkStudentName}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>期間ラベル</Label>
+              <Input value={linkPeriod} onChange={(e) => setLinkPeriod(e.target.value)} placeholder="例：2026年3月" />
+            </div>
+            {!generatedUrl && (
+              <Button onClick={handleGenerateLink} disabled={generating} className="w-full">
+                <Link2 className="h-4 w-4 mr-1" />
+                {generating ? '生成中...' : 'リンクを発行'}
+              </Button>
+            )}
+            {generatedUrl && (
+              <div className="space-y-2">
+                <Label>面談希望日入力リンク</Label>
+                <div className="flex gap-2">
+                  <Input value={generatedUrl} readOnly className="text-xs" />
+                  <Button variant="outline" size="icon" onClick={copyToClipboard} title="コピー">
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">このリンクを保護者にお送りください（有効期限: 14日間）</p>
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -357,15 +422,10 @@ function OverviewTab() {
   )
 }
 
-// ─── Student Row (with expand) ───────────────────────────
+// ─── Student Row ───────────────────────────
 
 function StudentRow({
-  row,
-  expanded,
-  onToggle,
-  onNewRecord,
-  onEditRecord,
-  onDeleteRecord,
+  row, expanded, onToggle, onNewRecord, onEditRecord, onDeleteRecord, onGenerateLink,
 }: {
   row: OverviewRow
   expanded: boolean
@@ -373,6 +433,7 @@ function StudentRow({
   onNewRecord: () => void
   onEditRecord: (rec: OverviewRow['records'][0]) => void
   onDeleteRecord: (id: string) => void
+  onGenerateLink: () => void
 }) {
   const now = new Date()
   let elapsedDays: number | null = null
@@ -390,65 +451,53 @@ function StudentRow({
         </TableCell>
         <TableCell className="font-medium">{row.student_name}</TableCell>
         <TableCell className="text-center">{row.record_count}回</TableCell>
-        <TableCell className="whitespace-nowrap">
-          {row.last_mendan_date ? formatDate(row.last_mendan_date) : '-'}
-        </TableCell>
+        <TableCell className="whitespace-nowrap">{row.last_mendan_date ? formatDate(row.last_mendan_date) : '-'}</TableCell>
         <TableCell className="whitespace-nowrap">
           {elapsedDays !== null ? (
-            <span className={elapsedDays >= 90 ? 'text-red-600 font-medium' : ''}>
-              {elapsedDays}日
-            </span>
+            <span className={elapsedDays >= 90 ? 'text-red-600 font-medium' : ''}>{elapsedDays}日</span>
           ) : (
             <span className="text-muted-foreground">記録なし</span>
           )}
         </TableCell>
         <TableCell>
-          <Button size="sm" variant="outline" onClick={onNewRecord}>
-            <Plus className="h-3 w-3 mr-1" />記録
-          </Button>
+          <div className="flex gap-1">
+            <Button size="sm" variant="outline" onClick={onNewRecord}>
+              <Plus className="h-3 w-3 mr-1" />記録
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onGenerateLink} title="リンク発行">
+              <Link2 className="h-3 w-3" />
+            </Button>
+          </div>
         </TableCell>
       </TableRow>
 
       {expanded && (
         <TableRow>
           <TableCell colSpan={6} className="bg-muted/30 p-0">
-            <div className="p-4 space-y-4">
-              {/* 面談履歴 */}
-              <div>
-                <h4 className="text-sm font-semibold mb-2">面談履歴</h4>
-                {row.records.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">面談記録はありません</p>
-                ) : (
-                  <div className="space-y-2">
-                    {row.records.map((rec, idx) => (
-                      <div key={rec.id} className="flex items-start justify-between bg-white rounded-lg border p-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium text-muted-foreground">第{idx + 1}回</span>
-                            <span className="text-sm font-medium">
-                              {format(new Date(rec.mendan_date), 'yyyy/M/d', { locale: ja })}
-                            </span>
-                            {rec.attendees && (
-                              <span className="text-xs text-muted-foreground">({rec.attendees})</span>
-                            )}
-                          </div>
-                          {rec.content && (
-                            <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{rec.content}</p>
-                          )}
+            <div className="p-4">
+              <h4 className="text-sm font-semibold mb-2">面談履歴</h4>
+              {row.records.length === 0 ? (
+                <p className="text-sm text-muted-foreground">面談記録はありません</p>
+              ) : (
+                <div className="space-y-2">
+                  {row.records.map((rec, idx) => (
+                    <div key={rec.id} className="flex items-start justify-between bg-white rounded-lg border p-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-muted-foreground">第{idx + 1}回</span>
+                          <span className="text-sm font-medium">{format(new Date(rec.mendan_date), 'yyyy/M/d', { locale: ja })}</span>
+                          {rec.attendees && <span className="text-xs text-muted-foreground">({rec.attendees})</span>}
                         </div>
-                        <div className="flex gap-1 ml-2 shrink-0">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEditRecord(rec)}>
-                            <Pencil className="h-3 w-3" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDeleteRecord(rec.id)}>
-                            <Trash2 className="h-3 w-3 text-red-500" />
-                          </Button>
-                        </div>
+                        {rec.content && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{rec.content}</p>}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                      <div className="flex gap-1 ml-2 shrink-0">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEditRecord(rec)}><Pencil className="h-3 w-3" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDeleteRecord(rec.id)}><Trash2 className="h-3 w-3 text-red-500" /></Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </TableCell>
         </TableRow>
@@ -480,7 +529,6 @@ function RequestsTab() {
   useEffect(() => { fetchData() }, [fetchData])
 
   const toggleHandled = async (id: string, currentHandled: boolean) => {
-    // Optimistic update
     setRequests(prev => prev.map(r => r.id === id ? { ...r, handled: !currentHandled } : r))
     try {
       const res = await fetch('/api/mendan/requests', {
@@ -490,7 +538,6 @@ function RequestsTab() {
       })
       if (!res.ok) throw new Error()
     } catch {
-      // Revert
       setRequests(prev => prev.map(r => r.id === id ? { ...r, handled: currentHandled } : r))
       toast.error('更新に失敗しました')
     }
@@ -509,33 +556,22 @@ function RequestsTab() {
 
   return (
     <div className="space-y-4 mt-4">
-      {/* Header */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="生徒名・期間で検索..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+          <Input placeholder="生徒名・期間で検索..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
         </div>
         <Select value={handledFilter} onValueChange={(v) => setHandledFilter(v as 'all' | 'unhandled' | 'handled')}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue />
-          </SelectTrigger>
+          <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="unhandled">未対応</SelectItem>
             <SelectItem value="handled">対応済</SelectItem>
             <SelectItem value="all">すべて</SelectItem>
           </SelectContent>
         </Select>
-        {unhandledCount > 0 && (
-          <Badge variant="destructive">{unhandledCount}件 未対応</Badge>
-        )}
+        {unhandledCount > 0 && <Badge variant="destructive">{unhandledCount}件 未対応</Badge>}
       </div>
 
-      {/* Table */}
       <Card>
         <CardContent className="p-0 overflow-x-auto">
           <Table>
@@ -565,9 +601,7 @@ function RequestsTab() {
                       <button
                         onClick={() => toggleHandled(r.id, r.handled)}
                         className={`inline-flex items-center justify-center w-7 h-7 rounded-md border transition-colors ${
-                          r.handled
-                            ? 'bg-green-100 border-green-400 text-green-700'
-                            : 'bg-white border-gray-300 text-gray-400 hover:border-green-400 hover:text-green-600'
+                          r.handled ? 'bg-green-100 border-green-400 text-green-700' : 'bg-white border-gray-300 text-gray-400 hover:border-green-400 hover:text-green-600'
                         }`}
                         title={r.handled ? '対応済 → 未対応に戻す' : '対応済にする'}
                       >
@@ -592,7 +626,7 @@ function RequestsTab() {
   )
 }
 
-// ─── Tab 3: メール送信（強化版） ───────────────────────────
+// ─── Tab 3: メール送信（送信先選択付き） ───────────────────────────
 
 function EmailTab() {
   const now = new Date()
@@ -614,8 +648,12 @@ function EmailTab() {
   const [loadingSettings, setLoadingSettings] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
 
+  // Student selection
+  const [students, setStudents] = useState<StudentPreview[]>([])
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [loadingStudents, setLoadingStudents] = useState(false)
+
   useEffect(() => {
-    // Load email config
     fetch('/api/mendan/email-config')
       .then(res => res.json())
       .then(json => {
@@ -629,7 +667,6 @@ function EmailTab() {
       })
       .catch(() => setLoadingConfig(false))
 
-    // Load auto-send settings
     fetch('/api/settings')
       .then(res => res.json())
       .then(json => {
@@ -642,16 +679,53 @@ function EmailTab() {
       .catch(() => setLoadingSettings(false))
   }, [])
 
+  // Fetch students when period label changes
+  const fetchStudents = useCallback(async () => {
+    if (!periodLabel) return
+    setLoadingStudents(true)
+    try {
+      const res = await fetch(`/api/mendan/send-emails?period_label=${encodeURIComponent(periodLabel)}`)
+      const json = await res.json()
+      const data: StudentPreview[] = json.data || []
+      setStudents(data)
+      // Pre-select: has_email and not already_sent
+      const eligible = data.filter(s => s.has_email && !s.already_sent).map(s => s.id)
+      setSelectedIds(new Set(eligible))
+    } catch {
+      toast.error('生徒一覧の取得に失敗しました')
+    } finally {
+      setLoadingStudents(false)
+    }
+  }, [periodLabel])
+
+  useEffect(() => {
+    const timer = setTimeout(fetchStudents, 500)
+    return () => clearTimeout(timer)
+  }, [fetchStudents])
+
+  const toggleStudent = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectAll = () => {
+    const eligible = students.filter(s => s.has_email && !s.already_sent).map(s => s.id)
+    setSelectedIds(new Set(eligible))
+  }
+
+  const deselectAll = () => setSelectedIds(new Set())
+
   const handleSaveSettings = async () => {
     setSavingSettings(true)
     try {
       const res = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mendan_auto_send_enabled: autoEnabled,
-          mendan_auto_send_day: autoDay,
-        }),
+        body: JSON.stringify({ mendan_auto_send_enabled: autoEnabled, mendan_auto_send_day: autoDay }),
       })
       if (!res.ok) throw new Error('保存に失敗しました')
       toast.success('自動送信設定を保存しました')
@@ -667,6 +741,10 @@ function EmailTab() {
       toast.error('期間ラベルを入力してください')
       return
     }
+    if (selectedIds.size === 0) {
+      toast.error('送信先の生徒を選択してください')
+      return
+    }
     if (sending) return
     setSending(true)
     setResult(null)
@@ -678,6 +756,7 @@ function EmailTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           period_label: periodLabel,
+          student_ids: Array.from(selectedIds),
           ...(isCustom ? { custom_body: customBody } : {}),
         }),
       })
@@ -685,6 +764,7 @@ function EmailTab() {
       if (!res.ok) throw new Error(json.error || '送信に失敗しました')
       setResult(json.data)
       toast.success(`${json.data.sent}件のメールを送信しました`)
+      fetchStudents() // Refresh to update already_sent status
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'エラーが発生しました')
     } finally {
@@ -693,6 +773,7 @@ function EmailTab() {
   }
 
   const dayOptions = Array.from({ length: 28 }, (_, i) => i + 1)
+  const eligibleCount = students.filter(s => s.has_email && !s.already_sent).length
 
   return (
     <div className="space-y-4 mt-4">
@@ -717,11 +798,8 @@ function EmailTab() {
               <p className="text-sm font-medium">自動送信</p>
               <p className="text-xs text-muted-foreground">毎月指定した日時に面談案内メールを自動送信します</p>
             </div>
-            {!loadingSettings && (
-              <Switch checked={autoEnabled} onCheckedChange={setAutoEnabled} />
-            )}
+            {!loadingSettings && <Switch checked={autoEnabled} onCheckedChange={setAutoEnabled} />}
           </div>
-
           {autoEnabled && (
             <div className="flex items-end gap-4 pt-2">
               <div className="space-y-1">
@@ -729,22 +807,15 @@ function EmailTab() {
                 <Select value={String(autoDay)} onValueChange={(v) => setAutoDay(Number(v))}>
                   <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {dayOptions.map(d => (
-                      <SelectItem key={d} value={String(d)}>{d}日</SelectItem>
-                    ))}
+                    {dayOptions.map(d => <SelectItem key={d} value={String(d)}>{d}日</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <Button size="sm" onClick={handleSaveSettings} disabled={savingSettings}>
-                {savingSettings ? '保存中...' : '保存'}
-              </Button>
+              <Button size="sm" onClick={handleSaveSettings} disabled={savingSettings}>{savingSettings ? '保存中...' : '保存'}</Button>
             </div>
           )}
-
           {!autoEnabled && !loadingSettings && (
-            <Button size="sm" variant="outline" onClick={handleSaveSettings} disabled={savingSettings}>
-              {savingSettings ? '保存中...' : 'OFFで保存'}
-            </Button>
+            <Button size="sm" variant="outline" onClick={handleSaveSettings} disabled={savingSettings}>{savingSettings ? '保存中...' : 'OFFで保存'}</Button>
           )}
         </CardContent>
       </Card>
@@ -753,58 +824,70 @@ function EmailTab() {
       <Card>
         <CardContent className="p-6 space-y-4">
           <p className="text-sm font-medium">手動送信</p>
-          <p className="text-sm text-muted-foreground">
-            保護者メールアドレスが登録されている全生徒に面談案内メールを一括送信します。
-            同じ期間ラベルで既に送信済みの生徒はスキップされます。
-          </p>
 
           <div className="space-y-2">
             <Label>期間ラベル</Label>
-            <Input
-              value={periodLabel}
-              onChange={(e) => setPeriodLabel(e.target.value)}
-              placeholder="例：2026年3月"
-              className="max-w-xs"
-            />
+            <Input value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)} placeholder="例：2026年3月" className="max-w-xs" />
           </div>
 
-          {/* メール本文編集 */}
+          {/* 送信先選択 */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>送信先 ({selectedIds.size}/{eligibleCount}名 選択中)</Label>
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" className="text-xs h-6" onClick={selectAll}>全選択</Button>
+                <Button variant="ghost" size="sm" className="text-xs h-6" onClick={deselectAll}>全解除</Button>
+              </div>
+            </div>
+            <div className="border rounded-md max-h-[200px] overflow-y-auto">
+              {loadingStudents ? (
+                <div className="p-4 text-center text-sm text-muted-foreground">読み込み中...</div>
+              ) : students.length === 0 ? (
+                <div className="p-4 text-center text-sm text-muted-foreground">対象の生徒がいません</div>
+              ) : (
+                <div className="divide-y">
+                  {students.map(s => {
+                    const disabled = !s.has_email || s.already_sent
+                    const reason = !s.has_email ? 'メール未登録' : s.already_sent ? '送信済み' : null
+                    return (
+                      <label key={s.id} className={`flex items-center gap-3 px-3 py-2 text-sm ${disabled ? 'opacity-50' : 'hover:bg-muted/50 cursor-pointer'}`}>
+                        <Checkbox
+                          checked={selectedIds.has(s.id)}
+                          onCheckedChange={() => toggleStudent(s.id)}
+                          disabled={disabled}
+                        />
+                        <span className="flex-1">{s.name}</span>
+                        {reason && <span className="text-xs text-muted-foreground">{reason}</span>}
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* メール本文 */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>メール本文</Label>
               {customBody.trim() !== defaultBody.trim() && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs h-6"
-                  onClick={() => setCustomBody(defaultBody)}
-                >
-                  デフォルトに戻す
-                </Button>
+                <Button variant="ghost" size="sm" className="text-xs h-6" onClick={() => setCustomBody(defaultBody)}>デフォルトに戻す</Button>
               )}
             </div>
-            <Textarea
-              value={customBody}
-              onChange={(e) => setCustomBody(e.target.value)}
-              rows={6}
-              placeholder="メール本文を入力..."
-              className="font-mono text-sm"
-            />
+            <Textarea value={customBody} onChange={(e) => setCustomBody(e.target.value)} rows={6} placeholder="メール本文を入力..." className="font-mono text-sm" />
             {variables.length > 0 && (
               <div className="text-xs text-muted-foreground space-y-0.5">
                 <p className="font-medium">利用可能な変数:</p>
                 {variables.map(v => (
-                  <p key={v.key}>
-                    <code className="bg-muted px-1 rounded">{v.key}</code> … {v.description}
-                  </p>
+                  <p key={v.key}><code className="bg-muted px-1 rounded">{v.key}</code> … {v.description}</p>
                 ))}
               </div>
             )}
           </div>
 
-          <Button onClick={handleSend} disabled={sending}>
+          <Button onClick={handleSend} disabled={sending || selectedIds.size === 0}>
             <Send className="h-4 w-4 mr-1" />
-            {sending ? '送信中...' : '一括送信'}
+            {sending ? '送信中...' : `${selectedIds.size}名に送信`}
           </Button>
 
           {result && (
