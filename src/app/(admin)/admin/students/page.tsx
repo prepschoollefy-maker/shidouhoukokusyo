@@ -47,7 +47,8 @@ export default function StudentsPage() {
   const [editing, setEditing] = useState<Student | null>(null)
   const [withdrawTarget, setWithdrawTarget] = useState<Student | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<Student | null>(null)
-  const [bulkWithdrawOpen, setBulkWithdrawOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Student | null>(null)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'active' | 'withdrawn'>('active')
 
@@ -172,14 +173,25 @@ export default function StudentsPage() {
     URL.revokeObjectURL(url)
   }
 
-  const handleBulkWithdraw = async () => {
+  const handleDelete = async (id: string) => {
+    try {
+      const res = await fetch(`/api/students/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('削除に失敗しました')
+      toast.success('削除しました')
+      fetchData()
+    } catch {
+      toast.error('削除に失敗しました')
+    }
+  }
+
+  const handleBulkDelete = async () => {
     try {
       const res = await fetch('/api/students/bulk-delete', { method: 'DELETE' })
-      if (!res.ok) throw new Error('一括退塾に失敗しました')
-      toast.success('全通塾生を退塾処理しました')
+      if (!res.ok) throw new Error('一括削除に失敗しました')
+      toast.success('全生徒データを削除しました')
       fetchData()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '一括退塾に失敗しました')
+      toast.error(error instanceof Error ? error.message : '一括削除に失敗しました')
     }
   }
 
@@ -194,18 +206,18 @@ export default function StudentsPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">生徒管理</h2>
         <div className="flex gap-2">
+          {students.length > 0 && (
+            <>
+              <Button variant="outline" onClick={handleExport}>
+                <Download className="h-4 w-4 mr-1" />CSVエクスポート
+              </Button>
+              <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={() => setBulkDeleteOpen(true)}>
+                <Trash2 className="h-4 w-4 mr-1" />一括削除
+              </Button>
+            </>
+          )}
           {statusFilter === 'active' && (
             <>
-              {students.length > 0 && (
-                <>
-                  <Button variant="outline" onClick={handleExport}>
-                    <Download className="h-4 w-4 mr-1" />CSVエクスポート
-                  </Button>
-                  <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={() => setBulkWithdrawOpen(true)}>
-                    <Trash2 className="h-4 w-4 mr-1" />一括退塾
-                  </Button>
-                </>
-              )}
               <CsvImportDialog
                 title="生徒CSVインポート"
                 description="CSV形式で生徒を一括登録します。ヘッダー行が必要です。"
@@ -319,10 +331,11 @@ export default function StudentsPage() {
               <TableRow>
                 <TableHead>氏名</TableHead>
                 <TableHead>学年</TableHead>
+                <TableHead>メール</TableHead>
                 <TableHead>科目</TableHead>
                 <TableHead>担当</TableHead>
                 <TableHead>週回数</TableHead>
-                <TableHead className="w-20"></TableHead>
+                <TableHead className="w-24"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -330,6 +343,15 @@ export default function StudentsPage() {
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">{s.name}</TableCell>
                   <TableCell>{s.grade || '-'}</TableCell>
+                  <TableCell>
+                    <div className="text-xs text-muted-foreground space-y-0.5">
+                      {s.parent_emails.length > 0
+                        ? s.parent_emails.map(pe => (
+                            <div key={pe.id}>{pe.email}{pe.label ? ` (${pe.label})` : ''}</div>
+                          ))
+                        : '-'}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {s.student_subjects.map(ss => (
@@ -353,9 +375,14 @@ export default function StudentsPage() {
                           <Button variant="ghost" size="icon" aria-label="退塾" onClick={() => setWithdrawTarget(s)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
                         </>
                       ) : (
-                        <Button variant="ghost" size="sm" aria-label="復帰" onClick={() => setRestoreTarget(s)}>
-                          <RotateCcw className="h-4 w-4 mr-1" />復帰
-                        </Button>
+                        <>
+                          <Button variant="ghost" size="sm" aria-label="復帰" onClick={() => setRestoreTarget(s)}>
+                            <RotateCcw className="h-4 w-4 mr-1" />復帰
+                          </Button>
+                          <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(s)}>
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </>
                       )}
                     </div>
                   </TableCell>
@@ -363,7 +390,7 @@ export default function StudentsPage() {
               ))}
               {filteredStudents.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     {statusFilter === 'active' ? '通塾生がいません' : '退塾済の生徒はいません'}
                   </TableCell>
                 </TableRow>
@@ -390,12 +417,20 @@ export default function StudentsPage() {
         confirmLabel="復帰する"
       />
       <ConfirmDialog
-        open={bulkWithdrawOpen}
-        onOpenChange={setBulkWithdrawOpen}
-        title="全通塾生を一括退塾"
-        description={`現在の通塾生${students.length}名を全員退塾処理します。退塾済タブから個別に復帰させることができます。`}
-        onConfirm={() => { handleBulkWithdraw(); setBulkWithdrawOpen(false) }}
-        confirmLabel="一括退塾する"
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="生徒データを削除"
+        description={`${deleteTarget?.name}さんのデータを完全に削除しますか？この操作は取り消せません。`}
+        onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget.id); setDeleteTarget(null) }}
+        confirmLabel="削除する"
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title="全生徒データを一括削除"
+        description={`全${students.length}件の生徒データを完全に削除します。この操作は取り消せません。`}
+        onConfirm={() => { handleBulkDelete(); setBulkDeleteOpen(false) }}
+        confirmLabel="一括削除する"
       />
     </div>
   )
