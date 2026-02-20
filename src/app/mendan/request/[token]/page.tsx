@@ -11,6 +11,100 @@ interface TokenInfo {
   already_submitted: boolean
 }
 
+// 曜日に応じた時間帯オプションを返す
+function getTimeSlots(dateStr: string): string[] {
+  if (!dateStr) return []
+  const date = new Date(dateStr + 'T00:00:00')
+  const day = date.getDay() // 0=日, 6=土
+  const isWeekend = day === 0 || day === 6
+
+  if (isWeekend) {
+    // 土日: 13:00〜19:00 (7種類)
+    return ['13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00']
+  } else {
+    // 平日: 13:00〜20:00 (8種類)
+    return ['13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00']
+  }
+}
+
+function getDayLabel(dateStr: string): string {
+  if (!dateStr) return ''
+  const date = new Date(dateStr + 'T00:00:00')
+  const day = date.getDay()
+  const isWeekend = day === 0 || day === 6
+  const dayNames = ['日', '月', '火', '水', '木', '金', '土']
+  return `${dayNames[day]}曜日${isWeekend ? '（13:00〜19:00）' : '（13:00〜20:00）'}`
+}
+
+// 日付と時間を組み合わせてISO文字列にする
+function combineDateTime(dateStr: string, timeStr: string): string {
+  if (!dateStr || !timeStr) return ''
+  return new Date(`${dateStr}T${timeStr}:00`).toISOString()
+}
+
+function CandidateInput({
+  label,
+  date,
+  time,
+  onDateChange,
+  onTimeChange,
+}: {
+  label: string
+  date: string
+  time: string
+  onDateChange: (v: string) => void
+  onTimeChange: (v: string) => void
+}) {
+  const timeSlots = getTimeSlots(date)
+  const dayLabel = getDayLabel(date)
+
+  // 日付変更時に時間帯をリセット（選択肢が変わるため）
+  const handleDateChange = (newDate: string) => {
+    onDateChange(newDate)
+    // 選択中の時間が新しい曜日の選択肢に含まれるか確認
+    const newSlots = getTimeSlots(newDate)
+    if (time && !newSlots.includes(time)) {
+      onTimeChange('')
+    }
+  }
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {label} <span className="text-red-500">*</span>
+      </label>
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => handleDateChange(e.target.value)}
+            required
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <div className="w-[120px]">
+          <select
+            value={time}
+            onChange={(e) => onTimeChange(e.target.value)}
+            required
+            disabled={!date}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400"
+          >
+            <option value="">時間帯</option>
+            {timeSlots.map(slot => (
+              <option key={slot} value={slot}>{slot}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      {date && (
+        <p className="text-xs text-gray-400 mt-1">{dayLabel}</p>
+      )}
+    </div>
+  )
+}
+
 export default function MendanRequestPage() {
   const params = useParams()
   const [info, setInfo] = useState<TokenInfo | null>(null)
@@ -19,9 +113,12 @@ export default function MendanRequestPage() {
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  const [candidate1, setCandidate1] = useState('')
-  const [candidate2, setCandidate2] = useState('')
-  const [candidate3, setCandidate3] = useState('')
+  const [date1, setDate1] = useState('')
+  const [time1, setTime1] = useState('')
+  const [date2, setDate2] = useState('')
+  const [time2, setTime2] = useState('')
+  const [date3, setDate3] = useState('')
+  const [time3, setTime3] = useState('')
   const [message, setMessage] = useState('')
 
   useEffect(() => {
@@ -48,8 +145,8 @@ export default function MendanRequestPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!candidate1 || !candidate2 || !candidate3) {
-      setError('3つの希望日時を入力してください')
+    if (!date1 || !time1 || !date2 || !time2 || !date3 || !time3) {
+      setError('3つの希望日時（日付と時間帯）をすべて入力してください')
       return
     }
     if (submitting) return
@@ -61,9 +158,9 @@ export default function MendanRequestPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          candidate1: new Date(candidate1).toISOString(),
-          candidate2: new Date(candidate2).toISOString(),
-          candidate3: new Date(candidate3).toISOString(),
+          candidate1: combineDateTime(date1, time1),
+          candidate2: combineDateTime(date2, time2),
+          candidate3: combineDateTime(date3, time3),
           message: message || null,
         }),
       })
@@ -146,43 +243,28 @@ export default function MendanRequestPage() {
               面談のご希望日時を3つご入力ください。日程を調整の上、改めてご連絡いたします。
             </p>
 
+            <div className="bg-blue-50 rounded-md p-3 text-xs text-blue-700 space-y-0.5">
+              <p className="font-medium">選択可能な時間帯</p>
+              <p>平日（月〜金）: 13:00〜20:00</p>
+              <p>土日: 13:00〜19:00</p>
+            </div>
+
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  第1希望 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="datetime-local"
-                  value={candidate1}
-                  onChange={(e) => setCandidate1(e.target.value)}
-                  required
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  第2希望 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="datetime-local"
-                  value={candidate2}
-                  onChange={(e) => setCandidate2(e.target.value)}
-                  required
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  第3希望 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="datetime-local"
-                  value={candidate3}
-                  onChange={(e) => setCandidate3(e.target.value)}
-                  required
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+              <CandidateInput
+                label="第1希望"
+                date={date1} time={time1}
+                onDateChange={setDate1} onTimeChange={setTime1}
+              />
+              <CandidateInput
+                label="第2希望"
+                date={date2} time={time2}
+                onDateChange={setDate2} onTimeChange={setTime2}
+              />
+              <CandidateInput
+                label="第3希望"
+                date={date3} time={time3}
+                onDateChange={setDate3} onTimeChange={setTime3}
+              />
             </div>
 
             <div>

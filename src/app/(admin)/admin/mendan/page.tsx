@@ -307,25 +307,33 @@ function OverviewTab() {
 
       {/* Record Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm() }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>
               {editingRecord ? '面談記録を編集' : '面談記録を作成'}
               {formStudentName && ` - ${formStudentName}`}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>面談日 *</Label>
-              <Input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} />
+          <div className="space-y-4 flex-1 min-h-0 overflow-y-auto">
+            <div className="flex gap-4">
+              <div className="space-y-2 flex-1">
+                <Label>面談日 *</Label>
+                <Input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} />
+              </div>
+              <div className="space-y-2 flex-1">
+                <Label>出席者</Label>
+                <Input value={formAttendees} onChange={(e) => setFormAttendees(e.target.value)} placeholder="例：母親、担任" />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>出席者</Label>
-              <Input value={formAttendees} onChange={(e) => setFormAttendees(e.target.value)} placeholder="例：母親、担任" />
-            </div>
-            <div className="space-y-2">
+            <div className="space-y-2 flex-1 flex flex-col">
               <Label>内容</Label>
-              <Textarea value={formContent} onChange={(e) => setFormContent(e.target.value)} rows={5} placeholder="面談内容を入力" />
+              <Textarea
+                value={formContent}
+                onChange={(e) => setFormContent(e.target.value)}
+                rows={12}
+                placeholder="面談内容を入力..."
+                className="flex-1 min-h-[200px] resize-y text-sm leading-relaxed"
+              />
             </div>
           </div>
           <DialogFooter>
