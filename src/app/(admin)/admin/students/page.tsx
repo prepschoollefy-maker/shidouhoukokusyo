@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Download, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Download, Search, RotateCcw } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -21,6 +21,7 @@ interface Student {
   grade: string | null
   send_mode: string
   weekly_lesson_count: number | null
+  status: 'active' | 'withdrawn'
   parent_emails: { id: string; email: string; label: string | null }[]
   student_subjects: { subject: { id: string; name: string } }[]
   teacher_student_assignments: { teacher_id: string; teacher: { id: string; display_name: string } }[]
@@ -44,9 +45,11 @@ export default function StudentsPage() {
   const [saving, setSaving] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Student | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [withdrawTarget, setWithdrawTarget] = useState<Student | null>(null)
+  const [restoreTarget, setRestoreTarget] = useState<Student | null>(null)
+  const [bulkWithdrawOpen, setBulkWithdrawOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'active' | 'withdrawn'>('active')
 
   // Form state
   const [name, setName] = useState('')
@@ -58,7 +61,7 @@ export default function StudentsPage() {
 
   const fetchData = async () => {
     const [studentsRes, subjectsRes, teachersRes] = await Promise.all([
-      fetch('/api/students'),
+      fetch(`/api/students?status=${statusFilter}`),
       fetch('/api/master/subjects'),
       fetch('/api/teachers'),
     ])
@@ -69,7 +72,7 @@ export default function StudentsPage() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData() }, [statusFilter])
 
   const resetForm = () => {
     setName(''); setGrade('')
@@ -117,12 +120,34 @@ export default function StudentsPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const handleWithdraw = async (id: string) => {
     try {
-      await fetch(`/api/students/${id}`, { method: 'DELETE' })
-      toast.success('削除しました')
+      const res = await fetch(`/api/students/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'withdrawn' }),
+      })
+      if (!res.ok) throw new Error('退塾処理に失敗しました')
+      toast.success('退塾処理を行いました')
       fetchData()
-    } catch { toast.error('削除に失敗しました') }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '退塾処理に失敗しました')
+    }
+  }
+
+  const handleRestore = async (id: string) => {
+    try {
+      const res = await fetch(`/api/students/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' }),
+      })
+      if (!res.ok) throw new Error('復帰処理に失敗しました')
+      toast.success('通塾生に復帰しました')
+      fetchData()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '復帰処理に失敗しました')
+    }
   }
 
   const handleExport = () => {
@@ -147,120 +172,144 @@ export default function StudentsPage() {
     URL.revokeObjectURL(url)
   }
 
-  const handleBulkDelete = async () => {
+  const handleBulkWithdraw = async () => {
     try {
       const res = await fetch('/api/students/bulk-delete', { method: 'DELETE' })
-      if (!res.ok) throw new Error('一括削除に失敗しました')
-      toast.success('全生徒データを削除しました')
+      if (!res.ok) throw new Error('一括退塾に失敗しました')
+      toast.success('全通塾生を退塾処理しました')
       fetchData()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '削除に失敗しました')
+      toast.error(error instanceof Error ? error.message : '一括退塾に失敗しました')
     }
   }
 
   if (loading) return <LoadingSpinner />
+
+  const filteredStudents = students.filter(s =>
+    !searchQuery || s.name.includes(searchQuery) || s.grade?.includes(searchQuery)
+  )
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">生徒管理</h2>
         <div className="flex gap-2">
-          {students.length > 0 && (
+          {statusFilter === 'active' && (
             <>
-              <Button variant="outline" onClick={handleExport}>
-                <Download className="h-4 w-4 mr-1" />CSVエクスポート
-              </Button>
-              <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={() => setBulkDeleteOpen(true)}>
-                <Trash2 className="h-4 w-4 mr-1" />一括削除
-              </Button>
+              {students.length > 0 && (
+                <>
+                  <Button variant="outline" onClick={handleExport}>
+                    <Download className="h-4 w-4 mr-1" />CSVエクスポート
+                  </Button>
+                  <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={() => setBulkWithdrawOpen(true)}>
+                    <Trash2 className="h-4 w-4 mr-1" />一括退塾
+                  </Button>
+                </>
+              )}
+              <CsvImportDialog
+                title="生徒CSVインポート"
+                description="CSV形式で生徒を一括登録します。ヘッダー行が必要です。"
+                sampleCsv={"名前,学年,週当たり通塾回数,メール1,メール2\n山田太郎,中2,3,father@example.com,mother@example.com\n佐藤花子,高1,2,,mother@example.com"}
+                apiEndpoint="/api/students/import"
+                onSuccess={fetchData}
+              />
+              <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm() }}>
+                <DialogTrigger asChild>
+                  <Button><Plus className="h-4 w-4 mr-1" />新規登録</Button>
+                </DialogTrigger>
+              <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                <DialogHeader><DialogTitle>{editing ? '生徒編集' : '生徒登録'}</DialogTitle></DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>氏名 *</Label>
+                    <Input value={name} onChange={(e) => setName(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>学年</Label>
+                    <Select value={grade} onValueChange={setGrade}>
+                      <SelectTrigger><SelectValue placeholder="学年を選択" /></SelectTrigger>
+                      <SelectContent>
+                        {gradeOptions.map(g => (
+                          <SelectItem key={g} value={g}>{g}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>週当たり通塾回数</Label>
+                    <Input type="number" value={weeklyCount} onChange={(e) => setWeeklyCount(e.target.value)} placeholder="例：3" min="0" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>保護者メール</Label>
+                    {emails.map((e, i) => (
+                      <div key={i} className="flex gap-2">
+                        <Input value={e.email} onChange={(ev) => { const ne = [...emails]; ne[i].email = ev.target.value; setEmails(ne) }} placeholder="email@example.com" className="flex-1" />
+                        <Input value={e.label} onChange={(ev) => { const ne = [...emails]; ne[i].label = ev.target.value; setEmails(ne) }} placeholder="ラベル" className="w-24" />
+                        {emails.length > 1 && <Button variant="ghost" size="icon" aria-label="メール削除" onClick={() => setEmails(emails.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button>}
+                      </div>
+                    ))}
+                    <Button type="button" variant="outline" size="sm" onClick={() => setEmails([...emails, { email: '', label: '' }])}>
+                      <Plus className="h-4 w-4 mr-1" />追加
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>通塾科目</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {subjects.map(s => (
+                        <Badge key={s.id} variant={selectedSubjects.includes(s.id) ? 'default' : 'outline'} className="cursor-pointer"
+                          onClick={() => setSelectedSubjects(prev => prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id])}>
+                          {s.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>担当講師</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {teachers.map(t => (
+                        <Badge key={t.id} variant={selectedTeachers.includes(t.id) ? 'default' : 'outline'} className="cursor-pointer"
+                          onClick={() => setSelectedTeachers(prev => prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id])}>
+                          {t.display_name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm() }}>キャンセル</Button>
+                  <Button onClick={handleSave} disabled={saving}>{saving ? '保存中...' : editing ? '更新' : '登録'}</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             </>
           )}
-          <CsvImportDialog
-            title="生徒CSVインポート"
-            description="CSV形式で生徒を一括登録します。ヘッダー行が必要です。"
-            sampleCsv={"名前,学年,週当たり通塾回数,メール1,メール2\n山田太郎,中2,3,father@example.com,mother@example.com\n佐藤花子,高1,2,,mother@example.com"}
-            apiEndpoint="/api/students/import"
-            onSuccess={fetchData}
-          />
-          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm() }}>
-            <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-1" />新規登録</Button>
-            </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>{editing ? '生徒編集' : '生徒登録'}</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>氏名 *</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>学年</Label>
-                <Select value={grade} onValueChange={setGrade}>
-                  <SelectTrigger><SelectValue placeholder="学年を選択" /></SelectTrigger>
-                  <SelectContent>
-                    {gradeOptions.map(g => (
-                      <SelectItem key={g} value={g}>{g}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>週当たり通塾回数</Label>
-                <Input type="number" value={weeklyCount} onChange={(e) => setWeeklyCount(e.target.value)} placeholder="例：3" min="0" />
-              </div>
-              <div className="space-y-2">
-                <Label>保護者メール</Label>
-                {emails.map((e, i) => (
-                  <div key={i} className="flex gap-2">
-                    <Input value={e.email} onChange={(ev) => { const ne = [...emails]; ne[i].email = ev.target.value; setEmails(ne) }} placeholder="email@example.com" className="flex-1" />
-                    <Input value={e.label} onChange={(ev) => { const ne = [...emails]; ne[i].label = ev.target.value; setEmails(ne) }} placeholder="ラベル" className="w-24" />
-                    {emails.length > 1 && <Button variant="ghost" size="icon" aria-label="メール削除" onClick={() => setEmails(emails.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button>}
-                  </div>
-                ))}
-                <Button type="button" variant="outline" size="sm" onClick={() => setEmails([...emails, { email: '', label: '' }])}>
-                  <Plus className="h-4 w-4 mr-1" />追加
-                </Button>
-              </div>
-              <div className="space-y-2">
-                <Label>通塾科目</Label>
-                <div className="flex flex-wrap gap-2">
-                  {subjects.map(s => (
-                    <Badge key={s.id} variant={selectedSubjects.includes(s.id) ? 'default' : 'outline'} className="cursor-pointer"
-                      onClick={() => setSelectedSubjects(prev => prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id])}>
-                      {s.name}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>担当講師</Label>
-                <div className="flex flex-wrap gap-2">
-                  {teachers.map(t => (
-                    <Badge key={t.id} variant={selectedTeachers.includes(t.id) ? 'default' : 'outline'} className="cursor-pointer"
-                      onClick={() => setSelectedTeachers(prev => prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id])}>
-                      {t.display_name}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm() }}>キャンセル</Button>
-              <Button onClick={handleSave} disabled={saving}>{saving ? '保存中...' : editing ? '更新' : '登録'}</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
         </div>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="生徒名で検索..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex gap-2 items-center">
+        <div className="flex rounded-lg border overflow-hidden">
+          <button
+            className={`px-4 py-2 text-sm font-medium transition-colors ${statusFilter === 'active' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+            onClick={() => { setStatusFilter('active'); setLoading(true) }}
+          >
+            通塾生
+          </button>
+          <button
+            className={`px-4 py-2 text-sm font-medium transition-colors ${statusFilter === 'withdrawn' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+            onClick={() => { setStatusFilter('withdrawn'); setLoading(true) }}
+          >
+            退塾済
+          </button>
+        </div>
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="生徒名で検索..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
       </div>
 
       <Card>
@@ -277,7 +326,7 @@ export default function StudentsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {students.filter(s => !searchQuery || s.name.includes(searchQuery) || s.grade?.includes(searchQuery)).map((s) => (
+              {filteredStudents.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">{s.name}</TableCell>
                   <TableCell>{s.grade || '-'}</TableCell>
@@ -298,31 +347,55 @@ export default function StudentsPage() {
                   <TableCell>{s.weekly_lesson_count ? `${s.weekly_lesson_count}回` : '-'}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(s.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                      {statusFilter === 'active' ? (
+                        <>
+                          <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" aria-label="退塾" onClick={() => setWithdrawTarget(s)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                        </>
+                      ) : (
+                        <Button variant="ghost" size="sm" aria-label="復帰" onClick={() => setRestoreTarget(s)}>
+                          <RotateCcw className="h-4 w-4 mr-1" />復帰
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
+              {filteredStudents.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    {statusFilter === 'active' ? '通塾生がいません' : '退塾済の生徒はいません'}
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
       <ConfirmDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
-        title="生徒を削除"
-        description="この生徒を削除しますか？関連するレポートやメール履歴も削除される可能性があります。"
-        onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget); setDeleteTarget(null) }}
+        open={!!withdrawTarget}
+        onOpenChange={(open) => { if (!open) setWithdrawTarget(null) }}
+        title="生徒を退塾処理"
+        description={`${withdrawTarget?.name}さんを退塾処理しますか？退塾済タブから復帰させることができます。`}
+        onConfirm={() => { if (withdrawTarget) handleWithdraw(withdrawTarget.id); setWithdrawTarget(null) }}
+        confirmLabel="退塾する"
       />
       <ConfirmDialog
-        open={bulkDeleteOpen}
-        onOpenChange={setBulkDeleteOpen}
-        title="全生徒データを一括削除"
-        description={`全${students.length}件の生徒データを削除します。この操作は取り消せません。`}
-        onConfirm={() => { handleBulkDelete(); setBulkDeleteOpen(false) }}
-        confirmLabel="一括削除する"
+        open={!!restoreTarget}
+        onOpenChange={(open) => { if (!open) setRestoreTarget(null) }}
+        title="生徒を復帰"
+        description={`${restoreTarget?.name}さんを通塾生に復帰させますか？`}
+        onConfirm={() => { if (restoreTarget) handleRestore(restoreTarget.id); setRestoreTarget(null) }}
+        confirmLabel="復帰する"
+      />
+      <ConfirmDialog
+        open={bulkWithdrawOpen}
+        onOpenChange={setBulkWithdrawOpen}
+        title="全通塾生を一括退塾"
+        description={`現在の通塾生${students.length}名を全員退塾処理します。退塾済タブから個別に復帰させることができます。`}
+        onConfirm={() => { handleBulkWithdraw(); setBulkWithdrawOpen(false) }}
+        confirmLabel="一括退塾する"
       />
     </div>
   )

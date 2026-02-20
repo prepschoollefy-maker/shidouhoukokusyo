@@ -38,10 +38,11 @@ export async function GET() {
     teacherCounts[tid].count++
   })
 
-  // Missing report alerts
+  // Missing report alerts (active students only)
   const { data: students } = await admin
     .from('students')
     .select('id, name, weekly_lesson_count')
+    .eq('status', 'active')
     .not('weekly_lesson_count', 'is', null)
 
   const { data: weekReports } = await admin

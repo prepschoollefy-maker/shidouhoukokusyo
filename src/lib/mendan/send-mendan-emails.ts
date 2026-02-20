@@ -16,10 +16,11 @@ export async function sendMendanEmails(periodLabel: string) {
   const signature = settings?.email_signature || ''
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://shidouhoukokusyo.vercel.app'
 
-  // Get all students with parent emails
+  // Get active students with parent emails
   const { data: students } = await admin
     .from('students')
     .select('id, name, parent_emails(email)')
+    .eq('status', 'active')
     .order('name')
 
   if (!students?.length) {

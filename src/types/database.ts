@@ -8,6 +8,8 @@ export type SendMode = 'manual' | 'auto_send'
 
 export type SummaryFrequency = number // default 4
 
+export type StudentStatus = 'active' | 'withdrawn'
+
 export type AttitudeCategory = 'positive' | 'negative'
 
 export interface Profile {
@@ -24,6 +26,7 @@ export interface Student {
   grade: string | null
   send_mode: SendMode
   weekly_lesson_count: number | null
+  status: StudentStatus
   created_at: string
   updated_at: string
 }

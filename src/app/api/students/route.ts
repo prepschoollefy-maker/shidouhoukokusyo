@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data, error } = await supabase
+  const statusParam = request.nextUrl.searchParams.get('status') || 'active'
+
+  let query = supabase
     .from('students')
     .select(`
       *,
@@ -15,7 +17,12 @@ export async function GET() {
       student_subjects(id, subject_id, subject:subjects(id, name)),
       teacher_student_assignments(id, teacher_id, subject_id, teacher:profiles(id, display_name))
     `)
-    .order('name')
+
+  if (statusParam !== 'all') {
+    query = query.eq('status', statusParam)
+  }
+
+  const { data, error } = await query.order('name')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ data })
