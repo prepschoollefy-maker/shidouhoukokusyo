@@ -36,7 +36,10 @@ export async function POST(request: NextRequest) {
     })
 
     if (error) {
-      errors.push(`${email}: ${error.message}`)
+      const msg = (error.message.includes('already been registered') || error.message.includes('already exists'))
+        ? '既に登録されています'
+        : error.message
+      errors.push(`${email}: ${msg}`)
       continue
     }
 

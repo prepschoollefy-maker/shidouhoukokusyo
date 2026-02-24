@@ -11,8 +11,6 @@ export async function GET() {
 
   const admin = createAdminClient()
 
-  const { data: users } = await admin.auth.admin.listUsers()
-
   const { data: profiles } = await admin
     .from('profiles')
     .select('*')
@@ -26,14 +24,10 @@ export async function GET() {
       subject:subjects(id, name)
     `)
 
-  const teachers = profiles?.map(p => {
-    const authUser = users?.users?.find(u => u.id === p.id)
-    return {
-      ...p,
-      email: authUser?.email || '',
-      assignments: assignments?.filter(a => a.teacher_id === p.id) || [],
-    }
-  })
+  const teachers = profiles?.map(p => ({
+    ...p,
+    assignments: assignments?.filter(a => a.teacher_id === p.id) || [],
+  }))
 
   return NextResponse.json({ data: teachers })
 }
@@ -63,6 +57,9 @@ export async function POST(request: NextRequest) {
   })
 
   if (createError) {
+    if (createError.message.includes('already been registered') || createError.message.includes('already exists')) {
+      return NextResponse.json({ error: 'このメールアドレスは既に登録されています' }, { status: 409 })
+    }
     return NextResponse.json({ error: createError.message }, { status: 500 })
   }
 

@@ -14,6 +14,9 @@ export async function GET(request: Request) {
     })
 
     if (!error) {
+      if (type === 'recovery') {
+        return NextResponse.redirect(`${origin}/reset-password?type=recovery`)
+      }
       return NextResponse.redirect(`${origin}/reports`)
     }
   }

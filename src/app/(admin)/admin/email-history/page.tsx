@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
@@ -15,6 +16,7 @@ import { Mail, Search } from 'lucide-react'
 
 interface EmailLogEntry {
   id: string
+  summary_id: string | null
   to_email: string
   subject: string
   status: string
@@ -24,6 +26,8 @@ interface EmailLogEntry {
   student_id: string
 }
 
+type EmailType = 'all' | 'report' | 'mendan'
+
 const PER_PAGE = 20
 
 export default function EmailHistoryPage() {
@@ -31,6 +35,7 @@ export default function EmailHistoryPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [typeFilter, setTypeFilter] = useState<EmailType>('all')
   const supabase = createClient()
 
   useEffect(() => {
@@ -47,13 +52,26 @@ export default function EmailHistoryPage() {
   }, [supabase])
 
   const filtered = useMemo(() => {
-    if (!search) return logs
-    const q = search.toLowerCase()
-    return logs.filter(l =>
-      l.to_email.toLowerCase().includes(q) ||
-      l.subject.toLowerCase().includes(q)
-    )
-  }, [logs, search])
+    let result = logs
+
+    // Type filter
+    if (typeFilter === 'report') {
+      result = result.filter(l => l.summary_id !== null)
+    } else if (typeFilter === 'mendan') {
+      result = result.filter(l => l.summary_id === null)
+    }
+
+    // Search
+    if (search) {
+      const q = search.toLowerCase()
+      result = result.filter(l =>
+        l.to_email.toLowerCase().includes(q) ||
+        l.subject.toLowerCase().includes(q)
+      )
+    }
+
+    return result
+  }, [logs, search, typeFilter])
 
   const totalPages = Math.ceil(filtered.length / PER_PAGE)
   const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
@@ -63,11 +81,30 @@ export default function EmailHistoryPage() {
     setPage(1)
   }
 
+  const handleTypeChange = (value: string) => {
+    setTypeFilter(value as EmailType)
+    setPage(1)
+  }
+
+  // Counts
+  const reportCount = logs.filter(l => l.summary_id !== null).length
+  const mendanCount = logs.filter(l => l.summary_id === null).length
+
   if (loading) return <LoadingSpinner />
 
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">メール送信履歴</h2>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Tabs value={typeFilter} onValueChange={handleTypeChange}>
+          <TabsList>
+            <TabsTrigger value="all">すべて ({logs.length})</TabsTrigger>
+            <TabsTrigger value="report">授業レポート ({reportCount})</TabsTrigger>
+            <TabsTrigger value="mendan">面談案内 ({mendanCount})</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -89,6 +126,7 @@ export default function EmailHistoryPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>送信日時</TableHead>
+                <TableHead className="w-20">種別</TableHead>
                 <TableHead>宛先</TableHead>
                 <TableHead>件名</TableHead>
                 <TableHead>ステータス</TableHead>
@@ -97,7 +135,7 @@ export default function EmailHistoryPage() {
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-12">
+                  <TableCell colSpan={5} className="text-center py-12">
                     <Mail className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
                     <p className="text-muted-foreground">
                       {search ? `「${search}」に一致する履歴はありません` : '送信履歴がありません'}
@@ -108,8 +146,15 @@ export default function EmailHistoryPage() {
               ) : (
                 paginated.map((log) => (
                   <TableRow key={log.id}>
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm whitespace-nowrap">
                       {log.sent_at ? format(new Date(log.sent_at), 'M/d HH:mm', { locale: ja }) : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {log.summary_id ? (
+                        <Badge variant="outline" className="text-xs">レポート</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs border-blue-300 text-blue-700">面談</Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm">{log.to_email}</TableCell>
                     <TableCell className="text-sm max-w-xs">

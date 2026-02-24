@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,7 +19,6 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,21 +39,19 @@ export default function RegisterPage() {
 
     setLoading(true)
 
-    const { error: authError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          display_name: displayName.trim(),
-          role: 'teacher',
-        },
-      },
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        password,
+        display_name: displayName.trim(),
+      }),
     })
 
-    if (authError) {
-      setError(authError.message === 'User already registered'
-        ? 'このメールアドレスは既に登録されています'
-        : '登録に失敗しました。入力内容を確認してください。')
+    if (!res.ok) {
+      const { error: msg } = await res.json()
+      setError(msg || '登録に失敗しました')
       setLoading(false)
       return
     }

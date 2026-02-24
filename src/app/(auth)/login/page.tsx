@@ -29,7 +29,14 @@ export default function LoginPage() {
     })
 
     if (authError) {
-      setError('メールアドレスまたはパスワードが正しくありません')
+      console.error('Supabase signIn error:', authError.message, authError)
+      if (authError.message.includes('Email not confirmed')) {
+        setError('メールアドレスの確認が完了していません。管理者にお問い合わせください。')
+      } else if (authError.message.includes('Invalid login credentials')) {
+        setError('メールアドレスまたはパスワードが正しくありません')
+      } else {
+        setError(`ログインに失敗しました: ${authError.message}`)
+      }
       setLoading(false)
       return
     }
