@@ -17,6 +17,9 @@ import {
   Calendar,
   ClipboardCheck,
   Send,
+  FileSignature,
+  Receipt,
+  TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -49,6 +52,14 @@ const navGroups: (NavItem | NavGroup)[] = [
       { href: '/admin/mendan', label: '面談一覧', icon: Calendar },
       { href: '/admin/mendan/requests', label: '希望申請', icon: ClipboardCheck },
       { href: '/admin/mendan/email', label: 'メール送信', icon: Send },
+    ],
+  },
+  {
+    label: '契約',
+    items: [
+      { href: '/admin/contracts', label: '契約管理', icon: FileSignature },
+      { href: '/admin/contracts/billing', label: '請求一覧', icon: Receipt },
+      { href: '/admin/contracts/dashboard', label: '経営ダッシュボード', icon: TrendingUp },
     ],
   },
   {
