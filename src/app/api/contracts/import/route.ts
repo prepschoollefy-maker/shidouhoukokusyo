@@ -24,11 +24,11 @@ export async function POST(request: NextRequest) {
   // 塾生番号 → student_id のマッピングを事前取得
   const { data: students } = await admin
     .from('students')
-    .select('id, student_number, name')
+    .select('id, student_number, name, grade')
 
-  const studentMap = new Map<string, string>()
+  const studentMap = new Map<string, { id: string; grade: string | null }>()
   for (const s of students || []) {
-    if (s.student_number) studentMap.set(s.student_number, s.id)
+    if (s.student_number) studentMap.set(s.student_number, { id: s.id, grade: s.grade })
   }
 
   let count = 0
@@ -42,17 +42,17 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedNumber = String(studentNumber).replace(/\D/g, '').padStart(7, '0')
-    const studentId = studentMap.get(normalizedNumber)
-    if (!studentId) {
+    const studentInfo = studentMap.get(normalizedNumber)
+    if (!studentInfo) {
       errors.push(`塾生番号 ${studentNumber} の生徒が見つかりません`)
       continue
     }
 
-    const grade = row['学年'] || row['grade']
+    const grade = row['学年'] || row['grade'] || studentInfo.grade
     const startDate = row['開始日'] || row['start_date']
     const endDate = row['終了日'] || row['end_date']
     if (!grade || !startDate || !endDate) {
-      errors.push(`塾生番号 ${studentNumber}: 必須項目（学年/開始日/終了日）が不足`)
+      errors.push(`塾生番号 ${studentNumber}: 必須項目（開始日/終了日）が不足`)
       continue
     }
 
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     const { error } = await admin
       .from('contracts')
       .insert({
-        student_id: studentId,
+        student_id: studentInfo.id,
         start_date: startDate,
         end_date: endDate,
         grade,
