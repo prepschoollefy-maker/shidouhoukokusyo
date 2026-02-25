@@ -17,7 +17,10 @@ interface BillingItem {
   grade: string
   courses: { course: string; lessons: number }[]
   monthly_amount: number
-  effective_amount: number
+  tuition: number
+  enrollment_fee_amount: number
+  facility_fee: number
+  total_amount: number
   start_date: string
   end_date: string
   student: { id: string; name: string; student_number: string | null }
@@ -154,11 +157,11 @@ export default function BillingPage() {
                 <TableRow>
                   <TableHead>塾生番号</TableHead>
                   <TableHead>生徒名</TableHead>
-                  <TableHead>学年</TableHead>
                   <TableHead>コース</TableHead>
                   <TableHead className="text-right">月謝</TableHead>
-                  <TableHead className="text-right">当月請求額</TableHead>
-                  <TableHead>契約期間</TableHead>
+                  <TableHead className="text-right">入塾金</TableHead>
+                  <TableHead className="text-right">設備利用料</TableHead>
+                  <TableHead className="text-right">合計</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -166,16 +169,18 @@ export default function BillingPage() {
                   <TableRow key={b.id}>
                     <TableCell className="text-muted-foreground text-sm">{b.student?.student_number || '-'}</TableCell>
                     <TableCell className="font-medium">{b.student?.name}</TableCell>
-                    <TableCell>{b.grade}</TableCell>
                     <TableCell className="text-sm">{formatCourses(b.courses)}</TableCell>
-                    <TableCell className="text-right font-mono">{formatYen(b.monthly_amount)}</TableCell>
-                    <TableCell className="text-right font-mono font-bold">
-                      {formatYen(b.effective_amount)}
-                      {b.effective_amount !== b.monthly_amount && (
+                    <TableCell className="text-right font-mono">{formatYen(b.tuition)}</TableCell>
+                    <TableCell className="text-right font-mono">
+                      {b.enrollment_fee_amount > 0 ? formatYen(b.enrollment_fee_amount) : '-'}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {formatYen(b.facility_fee)}
+                      {b.facility_fee !== 3300 && (
                         <span className="text-xs text-muted-foreground ml-1">(半月)</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm">{b.start_date} ~ {b.end_date}</TableCell>
+                    <TableCell className="text-right font-mono font-bold">{formatYen(b.total_amount)}</TableCell>
                   </TableRow>
                 ))}
                 {billing.length === 0 && (

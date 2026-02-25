@@ -41,7 +41,7 @@ export async function PUT(
   if (pwError) return pwError
 
   const body = await request.json()
-  const { student_id, type, start_date, end_date, grade, courses, staff_name, notes, campaign } = body
+  const { student_id, type, start_date, end_date, grade, courses, staff_name, notes, enrollment_fee, campaign } = body
 
   const updateData: Record<string, unknown> = {}
   if (student_id !== undefined) updateData.student_id = student_id
@@ -52,6 +52,7 @@ export async function PUT(
   if (courses !== undefined) updateData.courses = courses
   if (staff_name !== undefined) updateData.staff_name = staff_name
   if (notes !== undefined) updateData.notes = notes
+  if (enrollment_fee !== undefined) updateData.enrollment_fee = enrollment_fee
   if (campaign !== undefined) updateData.campaign = campaign
 
   if (grade && courses) {

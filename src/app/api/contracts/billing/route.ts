@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { verifyContractPassword } from '@/lib/contracts/auth'
+import { FACILITY_FEE_MONTHLY_TAX_INCL, FACILITY_FEE_HALF_TAX_INCL } from '@/lib/contracts/pricing'
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
@@ -26,19 +27,36 @@ export async function GET(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // 16日開始の初月は月謝半額
   const billing = (data || []).map((c) => {
     const startDate = new Date(c.start_date)
     const startDay = startDate.getDate()
     const startYear = startDate.getFullYear()
     const startMonth = startDate.getMonth() + 1
     const isFirstMonth = startYear === year && startMonth === month
-    const isHalf = isFirstMonth && startDay === 16
-    const effectiveAmount = isHalf ? Math.floor(c.monthly_amount / 2) : c.monthly_amount
-    return { ...c, effective_amount: effectiveAmount }
+
+    // 授業料（月謝）: 16日開始の初月は半額
+    const isHalf = isFirstMonth && startDay >= 16
+    const tuition = isHalf ? Math.floor(c.monthly_amount / 2) : c.monthly_amount
+
+    // 入塾金: 契約開始月のみ
+    const enrollmentFee = isFirstMonth ? (c.enrollment_fee || 0) : 0
+
+    // 設備利用料: 16日開始の初月は半額
+    const facilityFee = isHalf ? FACILITY_FEE_HALF_TAX_INCL : FACILITY_FEE_MONTHLY_TAX_INCL
+
+    // 合計
+    const totalAmount = tuition + enrollmentFee + facilityFee
+
+    return {
+      ...c,
+      tuition,
+      enrollment_fee_amount: enrollmentFee,
+      facility_fee: facilityFee,
+      total_amount: totalAmount,
+    }
   })
 
-  const total = billing.reduce((sum, b) => sum + b.effective_amount, 0)
+  const total = billing.reduce((sum, b) => sum + b.total_amount, 0)
 
   return NextResponse.json({ data: billing, total })
 }

@@ -53,8 +53,17 @@ export const LESSON_DISCOUNT: Record<number, number> = {
   7: 30000,
 }
 
-/** 設備利用料（税抜/月） */
-export const FACILITY_FEE_MONTHLY = 3000
+/** 設備利用料（税込/月） */
+export const FACILITY_FEE_MONTHLY_TAX_INCL = 3300
+/** 設備利用料（税込/月・半月） */
+export const FACILITY_FEE_HALF_TAX_INCL = 1650
+
+/** 入塾金の選択肢（税込） */
+export const ENROLLMENT_FEE_OPTIONS = [
+  { value: 33000, label: '¥33,000' },
+  { value: 16500, label: '¥16,500（割引）' },
+  { value: 0, label: '¥0（免除）' },
+] as const
 
 /** 消費税率 */
 export const TAX_RATE = 0.10
@@ -65,7 +74,7 @@ export interface CourseEntry {
 }
 
 /**
- * 学年+コース配列 → 月謝（税込整数）
+ * 学年+コース配列 → 授業料（税込整数、設備利用料は含まない）
  */
 export function calcMonthlyAmount(grade: string, courses: CourseEntry[]): number {
   const category = GRADE_CATEGORY_MAP[grade as Grade]
@@ -84,6 +93,6 @@ export function calcMonthlyAmount(grade: string, courses: CourseEntry[]): number
 
   if (tuitionTotal === 0) return 0
 
-  const totalExTax = tuitionTotal + FACILITY_FEE_MONTHLY - discountTotal
+  const totalExTax = tuitionTotal - discountTotal
   return Math.floor(totalExTax * (1 + TAX_RATE))
 }

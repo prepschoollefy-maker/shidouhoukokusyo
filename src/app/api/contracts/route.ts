@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
   if (pwError) return pwError
 
   const body = await request.json()
-  const { student_id, type, start_date, end_date, grade, courses, staff_name, notes, campaign } = body
+  const { student_id, type, start_date, end_date, grade, courses, staff_name, notes, enrollment_fee, campaign } = body
 
   if (!student_id || !start_date || !end_date || !grade || !courses?.length) {
     return NextResponse.json({ error: '必須項目が不足しています' }, { status: 400 })
@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
       monthly_amount,
       staff_name: staff_name || '',
       notes: notes || '',
+      enrollment_fee: enrollment_fee ?? 0,
       campaign: campaign || null,
     })
     .select('*, student:students(id, name, student_number)')

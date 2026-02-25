@@ -14,7 +14,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
-import { GRADES, COURSES } from '@/lib/contracts/pricing'
+import { GRADES, COURSES, ENROLLMENT_FEE_OPTIONS } from '@/lib/contracts/pricing'
 
 interface Student {
   id: string
@@ -37,6 +37,7 @@ interface Contract {
   grade: string
   courses: CourseEntry[]
   monthly_amount: number
+  enrollment_fee: number
   staff_name: string
   notes: string
   campaign: string | null
@@ -71,6 +72,7 @@ export default function ContractsPage() {
   const [formCourses, setFormCourses] = useState<CourseEntry[]>([{ course: '', lessons: 1 }])
   const [formStaffName, setFormStaffName] = useState('')
   const [formNotes, setFormNotes] = useState('')
+  const [formEnrollmentFee, setFormEnrollmentFee] = useState('33000')
   const [formCampaign, setFormCampaign] = useState('')
   const [calcAmount, setCalcAmount] = useState<number | null>(null)
 
@@ -137,7 +139,7 @@ export default function ContractsPage() {
   const resetForm = () => {
     setFormStudentId(''); setFormType('initial'); setFormStartDate(''); setFormEndDate('')
     setFormGrade(''); setFormCourses([{ course: '', lessons: 1 }])
-    setFormStaffName(''); setFormNotes(''); setFormCampaign(''); setCalcAmount(null); setEditing(null)
+    setFormStaffName(''); setFormNotes(''); setFormEnrollmentFee('33000'); setFormCampaign(''); setCalcAmount(null); setEditing(null)
   }
 
   const openEdit = (c: Contract) => {
@@ -150,6 +152,7 @@ export default function ContractsPage() {
     setFormCourses(c.courses.length ? c.courses : [{ course: '', lessons: 1 }])
     setFormStaffName(c.staff_name)
     setFormNotes(c.notes)
+    setFormEnrollmentFee(String(c.enrollment_fee || 0))
     setFormCampaign(c.campaign || '')
     setDialogOpen(true)
   }
@@ -172,6 +175,7 @@ export default function ContractsPage() {
       courses: validCourses,
       staff_name: formStaffName,
       notes: formNotes,
+      enrollment_fee: parseInt(formEnrollmentFee) || 0,
       campaign: formCampaign || null,
     }
 
@@ -365,6 +369,17 @@ export default function ContractsPage() {
                     <span className="ml-2 font-bold text-lg">{formatYen(calcAmount)}</span>
                   </div>
                 )}
+                <div className="space-y-2">
+                  <Label>入塾金</Label>
+                  <Select value={formEnrollmentFee} onValueChange={setFormEnrollmentFee}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {ENROLLMENT_FEE_OPTIONS.map(opt => (
+                        <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>担当</Label>
