@@ -34,6 +34,18 @@ export async function GET(request: NextRequest) {
 
   const contracts = data || []
 
+  // 講習データも取得
+  const { data: lectureRows, error: lectureError } = await supabase
+    .from('lectures')
+    .select('id, student_id, courses')
+
+  if (lectureError) return NextResponse.json({ error: lectureError.message }, { status: 500 })
+
+  const lectures = lectureRows || []
+
+  interface LectureAlloc { year: number; month: number; lessons: number }
+  interface LectureCourse { course: string; total_lessons: number; unit_price: number; subtotal: number; allocation: LectureAlloc[] }
+
   // JS側で月別集計
   const months: { year: number; month: number; revenue: number; count: number }[] = []
   for (let i = 0; i < 12; i++) {
@@ -66,6 +78,19 @@ export async function GET(request: NextRequest) {
 
         revenue += monthRevenue
         studentIds.add(c.student_id)
+      }
+    }
+
+    // 講習の月別売上を加算
+    for (const l of lectures) {
+      const courses = (l.courses || []) as LectureCourse[]
+      for (const c of courses) {
+        for (const a of c.allocation || []) {
+          if (a.year === y && a.month === m && a.lessons > 0) {
+            revenue += c.unit_price * a.lessons
+            studentIds.add(l.student_id)
+          }
+        }
       }
     }
 

@@ -27,12 +27,26 @@ interface BillingItem {
   student: { id: string; name: string; student_number: string | null }
 }
 
+interface LectureBillingItem {
+  id: string
+  student: { id: string; name: string; student_number: string | null }
+  label: string
+  grade: string
+  course: string
+  unit_price: number
+  lessons: number
+  amount: number
+}
+
 export default function BillingPage() {
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [billing, setBilling] = useState<BillingItem[]>([])
+  const [lectureBilling, setLectureBilling] = useState<LectureBillingItem[]>([])
   const [total, setTotal] = useState(0)
+  const [contractTotal, setContractTotal] = useState(0)
+  const [lectureTotal, setLectureTotal] = useState(0)
   const [loading, setLoading] = useState(false)
 
   // パスワード認証
@@ -54,7 +68,10 @@ export default function BillingPage() {
       if (!res.ok) throw new Error('エラーが発生しました')
       const json = await res.json()
       setBilling(json.data || [])
+      setLectureBilling(json.lectureData || [])
       setTotal(json.total || 0)
+      setContractTotal(json.contractTotal || 0)
+      setLectureTotal(json.lectureTotal || 0)
       setStoredPw(password)
       setAuthenticated(true)
     } catch {
@@ -72,7 +89,10 @@ export default function BillingPage() {
       if (res.ok) {
         const json = await res.json()
         setBilling(json.data || [])
+        setLectureBilling(json.lectureData || [])
         setTotal(json.total || 0)
+        setContractTotal(json.contractTotal || 0)
+        setLectureTotal(json.lectureTotal || 0)
       }
       setLoading(false)
     }
@@ -144,61 +164,103 @@ export default function BillingPage() {
         <CardContent className="p-4">
           <div className="text-sm text-muted-foreground">当月合計請求額</div>
           <div className="text-3xl font-bold">{formatYen(total)}</div>
-          <div className="text-sm text-muted-foreground mt-1">{billing.length}件</div>
+          <div className="flex gap-4 text-sm text-muted-foreground mt-1">
+            <span>契約: {formatYen(contractTotal)}（{billing.length}件）</span>
+            {lectureTotal > 0 && <span>講習: {formatYen(lectureTotal)}（{lectureBilling.length}件）</span>}
+          </div>
         </CardContent>
       </Card>
 
       {loading ? (
         <LoadingSpinner />
       ) : (
-        <Card>
-          <CardContent className="p-0 overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>塾生番号</TableHead>
-                  <TableHead>生徒名</TableHead>
-                  <TableHead>コース</TableHead>
-                  <TableHead className="text-right">月謝</TableHead>
-                  <TableHead className="text-right">入塾金</TableHead>
-                  <TableHead className="text-right">設備利用料</TableHead>
-                  <TableHead className="text-right">割引</TableHead>
-                  <TableHead className="text-right">合計</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {billing.map((b) => (
-                  <TableRow key={b.id}>
-                    <TableCell className="text-muted-foreground text-sm">{b.student?.student_number || '-'}</TableCell>
-                    <TableCell className="font-medium">{b.student?.name}</TableCell>
-                    <TableCell className="text-sm">{formatCourses(b.courses)}</TableCell>
-                    <TableCell className="text-right font-mono">{formatYen(b.tuition)}</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {b.enrollment_fee_amount > 0 ? formatYen(b.enrollment_fee_amount) : '-'}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatYen(b.facility_fee)}
-                      {b.facility_fee !== 3300 && (
-                        <span className="text-xs text-muted-foreground ml-1">(半月)</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-red-500">
-                      {b.campaign_discount_amount > 0 ? `-${formatYen(b.campaign_discount_amount)}` : '-'}
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-bold">{formatYen(b.total_amount)}</TableCell>
-                  </TableRow>
-                ))}
-                {billing.length === 0 && (
+        <>
+          <h3 className="text-lg font-semibold">契約</h3>
+          <Card>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                      該当月の請求データがありません
-                    </TableCell>
+                    <TableHead>塾生番号</TableHead>
+                    <TableHead>生徒名</TableHead>
+                    <TableHead>コース</TableHead>
+                    <TableHead className="text-right">月謝</TableHead>
+                    <TableHead className="text-right">入塾金</TableHead>
+                    <TableHead className="text-right">設備利用料</TableHead>
+                    <TableHead className="text-right">割引</TableHead>
+                    <TableHead className="text-right">合計</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {billing.map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell className="text-muted-foreground text-sm">{b.student?.student_number || '-'}</TableCell>
+                      <TableCell className="font-medium">{b.student?.name}</TableCell>
+                      <TableCell className="text-sm">{formatCourses(b.courses)}</TableCell>
+                      <TableCell className="text-right font-mono">{formatYen(b.tuition)}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {b.enrollment_fee_amount > 0 ? formatYen(b.enrollment_fee_amount) : '-'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatYen(b.facility_fee)}
+                        {b.facility_fee !== 3300 && (
+                          <span className="text-xs text-muted-foreground ml-1">(半月)</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-red-500">
+                        {b.campaign_discount_amount > 0 ? `-${formatYen(b.campaign_discount_amount)}` : '-'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-bold">{formatYen(b.total_amount)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {billing.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        該当月の契約請求データがありません
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {lectureBilling.length > 0 && (
+            <>
+              <h3 className="text-lg font-semibold">講習</h3>
+              <Card>
+                <CardContent className="p-0 overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>塾生番号</TableHead>
+                        <TableHead>生徒名</TableHead>
+                        <TableHead>ラベル</TableHead>
+                        <TableHead>コース</TableHead>
+                        <TableHead className="text-right">コマ数</TableHead>
+                        <TableHead className="text-right">単価</TableHead>
+                        <TableHead className="text-right">当月売上</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {lectureBilling.map((l, i) => (
+                        <TableRow key={`${l.id}-${i}`}>
+                          <TableCell className="text-muted-foreground text-sm">{l.student?.student_number || '-'}</TableCell>
+                          <TableCell className="font-medium">{l.student?.name}</TableCell>
+                          <TableCell className="text-sm">{l.label}</TableCell>
+                          <TableCell className="text-sm">{l.course}</TableCell>
+                          <TableCell className="text-right font-mono">{l.lessons}</TableCell>
+                          <TableCell className="text-right font-mono">{formatYen(l.unit_price)}</TableCell>
+                          <TableCell className="text-right font-mono font-bold">{formatYen(l.amount)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </>
       )}
     </div>
   )

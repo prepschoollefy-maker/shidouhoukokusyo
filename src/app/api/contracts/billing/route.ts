@@ -60,7 +60,52 @@ export async function GET(request: NextRequest) {
     }
   })
 
-  const total = billing.reduce((sum, b) => sum + b.total_amount, 0)
+  const contractTotal = billing.reduce((sum, b) => sum + b.total_amount, 0)
 
-  return NextResponse.json({ data: billing, total })
+  // 講習データ: 当月の allocation を含む講習を集計
+  const { data: lectureRows, error: lectureError } = await supabase
+    .from('lectures')
+    .select('*, student:students(id, name, student_number)')
+
+  if (lectureError) return NextResponse.json({ error: lectureError.message }, { status: 500 })
+
+  interface LectureAlloc { year: number; month: number; lessons: number }
+  interface LectureCourse { course: string; total_lessons: number; unit_price: number; subtotal: number; allocation: LectureAlloc[] }
+
+  const lectureData: {
+    id: string
+    student: { id: string; name: string; student_number: string | null }
+    label: string
+    grade: string
+    course: string
+    unit_price: number
+    lessons: number
+    amount: number
+  }[] = []
+
+  for (const l of lectureRows || []) {
+    const courses = (l.courses || []) as LectureCourse[]
+    for (const c of courses) {
+      const monthAlloc = (c.allocation || []).find(
+        (a: LectureAlloc) => a.year === year && a.month === month
+      )
+      if (monthAlloc && monthAlloc.lessons > 0) {
+        lectureData.push({
+          id: l.id,
+          student: l.student,
+          label: l.label,
+          grade: l.grade,
+          course: c.course,
+          unit_price: c.unit_price,
+          lessons: monthAlloc.lessons,
+          amount: c.unit_price * monthAlloc.lessons,
+        })
+      }
+    }
+  }
+
+  const lectureTotal = lectureData.reduce((sum, l) => sum + l.amount, 0)
+  const total = contractTotal + lectureTotal
+
+  return NextResponse.json({ data: billing, lectureData, total, contractTotal, lectureTotal })
 }

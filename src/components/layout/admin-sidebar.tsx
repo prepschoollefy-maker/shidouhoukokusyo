@@ -21,6 +21,7 @@ import {
   Receipt,
   TrendingUp,
   ExternalLink,
+  BookOpenCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -59,6 +60,7 @@ const navGroups: (NavItem | NavGroup)[] = [
     label: '契約',
     items: [
       { href: '/admin/contracts', label: '契約管理', icon: FileSignature },
+      { href: '/admin/contracts/lectures', label: '講習管理', icon: BookOpenCheck },
       { href: '/admin/contracts/billing', label: '請求一覧', icon: Receipt },
       { href: '/admin/contracts/dashboard', label: '経営ダッシュボード', icon: TrendingUp },
       { href: 'https://contract.lefy.jp', label: '契約書作成', icon: ExternalLink, external: true },
