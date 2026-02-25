@@ -98,7 +98,9 @@ export default function LecturesPage() {
   const fetchStudents = useCallback(async () => {
     const res = await fetch('/api/students?status=active')
     const json = await res.json()
-    setStudents((json.data || []).map((s: Student & Record<string, unknown>) => ({ id: s.id, name: s.name, student_number: s.student_number })))
+    const list = (json.data || []).map((s: Student & Record<string, unknown>) => ({ id: s.id, name: s.name, student_number: s.student_number }))
+    list.sort((a: Student, b: Student) => (a.student_number || '').localeCompare(b.student_number || '', 'ja', { numeric: true }))
+    setStudents(list)
   }, [])
 
   useEffect(() => {
