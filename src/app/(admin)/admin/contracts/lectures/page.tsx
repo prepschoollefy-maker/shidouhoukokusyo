@@ -92,7 +92,6 @@ export default function LecturesPage() {
     const res = await fetch(`/api/lectures?pw=${encodeURIComponent(storedPw)}`)
     const json = await res.json()
     setLectures(json.data || [])
-    setLoading(false)
   }, [storedPw])
 
   const fetchStudents = useCallback(async () => {

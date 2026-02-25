@@ -98,7 +98,6 @@ export default function ContractsPage() {
     const res = await fetch(`/api/contracts?pw=${encodeURIComponent(storedPw)}`)
     const json = await res.json()
     setContracts(json.data || [])
-    setLoading(false)
   }, [storedPw])
 
   const fetchStudents = useCallback(async () => {
