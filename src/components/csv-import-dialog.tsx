@@ -42,7 +42,8 @@ export function CsvImportDialog({ title, description, sampleCsv, apiEndpoint, ex
     setImporting(true)
 
     try {
-      const text = await file.text()
+      const rawText = await file.text()
+      const text = rawText.replace(/^\uFEFF/, '')
       const lines = text.split('\n').filter(l => l.trim())
       const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''))
       const rows = lines.slice(1).map(line => {
@@ -64,7 +65,11 @@ export function CsvImportDialog({ title, description, sampleCsv, apiEndpoint, ex
       }
 
       const result = await res.json()
-      toast.success(`${result.count}件をインポートしました`)
+      if (result.errors?.length) {
+        toast.warning(`${result.count}件インポート（${result.errors.length}件エラー）: ${result.errors.slice(0, 3).join(' / ')}`)
+      } else {
+        toast.success(`${result.count}件をインポートしました`)
+      }
       setOpen(false)
       setFile(null)
       setPreview([])

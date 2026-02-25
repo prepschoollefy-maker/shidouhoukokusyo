@@ -52,8 +52,15 @@ export async function POST(request: NextRequest) {
     }
 
     const grade = row['学年'] || row['grade'] || studentInfo.grade
-    const startDate = row['開始日'] || row['start_date']
-    const endDate = row['終了日'] || row['end_date']
+    const rawStart = row['開始日'] || row['start_date'] || ''
+    const rawEnd = row['終了日'] || row['end_date'] || ''
+    // 日付正規化: 2025/4/1 → 2025-04-01
+    const normalizeDate = (d: string) => {
+      const m = d.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/)
+      return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : d
+    }
+    const startDate = normalizeDate(rawStart)
+    const endDate = normalizeDate(rawEnd)
     if (!grade || !startDate || !endDate) {
       errors.push(`塾生番号 ${studentNumber}: 必須項目（開始日/終了日）が不足`)
       continue
