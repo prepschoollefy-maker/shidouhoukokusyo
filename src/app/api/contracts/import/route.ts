@@ -28,7 +28,10 @@ export async function POST(request: NextRequest) {
 
   const studentMap = new Map<string, { id: string; grade: string | null }>()
   for (const s of students || []) {
-    if (s.student_number) studentMap.set(s.student_number, { id: s.id, grade: s.grade })
+    if (s.student_number) {
+      const key = String(s.student_number).replace(/\D/g, '').padStart(7, '0')
+      studentMap.set(key, { id: s.id, grade: s.grade })
+    }
   }
 
   let count = 0
