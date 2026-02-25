@@ -20,7 +20,6 @@ interface Student {
   name: string
   grade: string | null
   send_mode: string
-  weekly_lesson_count: number | null
   status: 'active' | 'withdrawn'
   parent_emails: { id: string; email: string; label: string | null }[]
   student_subjects: { subject: { id: string; name: string } }[]
@@ -55,7 +54,6 @@ export default function StudentsPage() {
   // Form state
   const [name, setName] = useState('')
   const [grade, setGrade] = useState('')
-  const [weeklyCount, setWeeklyCount] = useState('')
   const [emails, setEmails] = useState<{ email: string; label: string }[]>([{ email: '', label: '' }])
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([])
   const [selectedTeachers, setSelectedTeachers] = useState<string[]>([])
@@ -77,7 +75,7 @@ export default function StudentsPage() {
 
   const resetForm = () => {
     setName(''); setGrade('')
-    setWeeklyCount(''); setEmails([{ email: '', label: '' }])
+    setEmails([{ email: '', label: '' }])
     setSelectedSubjects([]); setSelectedTeachers([]); setEditing(null)
   }
 
@@ -85,7 +83,6 @@ export default function StudentsPage() {
     setEditing(s)
     setName(s.name)
     setGrade(s.grade || '')
-    setWeeklyCount(s.weekly_lesson_count ? String(s.weekly_lesson_count) : '')
     setEmails(s.parent_emails.length ? s.parent_emails.map(e => ({ email: e.email, label: e.label || '' })) : [{ email: '', label: '' }])
     setSelectedSubjects(s.student_subjects.map(ss => ss.subject.id))
     setSelectedTeachers([...new Set(s.teacher_student_assignments.map(ta => ta.teacher_id))])
@@ -99,7 +96,6 @@ export default function StudentsPage() {
     const payload = {
       name,
       grade: grade || null,
-      weekly_lesson_count: weeklyCount ? parseInt(weeklyCount) : null,
       parent_emails: emails.filter(e => e.email).map(e => ({ email: e.email, label: e.label || null })),
       subject_ids: selectedSubjects,
       teacher_assignments: selectedTeachers.map(tid => ({ teacher_id: tid })),
@@ -247,10 +243,6 @@ export default function StudentsPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>週当たり通塾回数</Label>
-                    <Input type="number" value={weeklyCount} onChange={(e) => setWeeklyCount(e.target.value)} placeholder="例：3" min="0" />
-                  </div>
-                  <div className="space-y-2">
                     <Label>保護者メール</Label>
                     {emails.map((e, i) => (
                       <div key={i} className="flex gap-2">
@@ -333,7 +325,6 @@ export default function StudentsPage() {
                 <TableHead>メール</TableHead>
                 <TableHead>科目</TableHead>
                 <TableHead>担当</TableHead>
-                <TableHead>週回数</TableHead>
                 <TableHead className="w-24"></TableHead>
               </TableRow>
             </TableHeader>
@@ -365,7 +356,6 @@ export default function StudentsPage() {
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell>{s.weekly_lesson_count ? `${s.weekly_lesson_count}回` : '-'}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       {statusFilter === 'active' ? (
