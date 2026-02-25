@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
   // 1クエリで全期間の契約を取得
   const { data, error } = await supabase
     .from('contracts')
-    .select('id, student_id, start_date, end_date, monthly_amount')
+    .select('id, student_id, start_date, end_date, monthly_amount, enrollment_fee, campaign_discount')
     .lte('start_date', rangeEnd)
     .gte('end_date', rangeStart)
 
@@ -51,10 +51,20 @@ export async function GET(request: NextRequest) {
       const cStart = new Date(c.start_date)
       const cEnd = new Date(c.end_date)
       if (cStart <= lastDay && cEnd >= firstDay) {
-        // 16日開始の初月は半額
         const isFirstMonth = cStart.getFullYear() === y && cStart.getMonth() + 1 === m
-        const isHalf = isFirstMonth && cStart.getDate() === 16
-        revenue += isHalf ? Math.floor(c.monthly_amount / 2) : c.monthly_amount
+        const isHalf = isFirstMonth && cStart.getDate() >= 16
+
+        // 授業料（16日開始の初月は半額）
+        let monthRevenue = isHalf ? Math.floor(c.monthly_amount / 2) : c.monthly_amount
+        // 設備利用料
+        monthRevenue += isHalf ? 1650 : 3300
+        // 初月: 入塾金 - キャンペーン割引
+        if (isFirstMonth) {
+          monthRevenue += (c.enrollment_fee || 0)
+          monthRevenue -= (c.campaign_discount || 0)
+        }
+
+        revenue += monthRevenue
         studentIds.add(c.student_id)
       }
     }

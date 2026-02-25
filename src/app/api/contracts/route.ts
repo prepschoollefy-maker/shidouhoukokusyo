@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { calcMonthlyAmount, CourseEntry } from '@/lib/contracts/pricing'
+import { calcMonthlyAmount, calcCampaignDiscount, getEnrollmentFeeForCampaign, CourseEntry } from '@/lib/contracts/pricing'
 import { verifyContractPassword } from '@/lib/contracts/auth'
 
 export async function GET(request: NextRequest) {
@@ -49,29 +49,32 @@ export async function POST(request: NextRequest) {
   if (pwError) return pwError
 
   const body = await request.json()
-  const { student_id, type, start_date, end_date, grade, courses, staff_name, notes, enrollment_fee, campaign } = body
+  const { student_id, start_date, end_date, grade, courses, notes, campaign } = body
 
   if (!student_id || !start_date || !end_date || !grade || !courses?.length) {
     return NextResponse.json({ error: '必須項目が不足しています' }, { status: 400 })
   }
 
   const monthly_amount = calcMonthlyAmount(grade, courses as CourseEntry[])
+  const enrollment_fee = getEnrollmentFeeForCampaign(campaign || '')
+  const campaign_discount = campaign === '講習キャンペーン'
+    ? calcCampaignDiscount(grade, courses as CourseEntry[])
+    : 0
 
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('contracts')
     .insert({
       student_id,
-      type: type || 'initial',
       start_date,
       end_date,
       grade,
       courses,
       monthly_amount,
-      staff_name: staff_name || '',
       notes: notes || '',
-      enrollment_fee: enrollment_fee ?? 0,
+      enrollment_fee,
       campaign: campaign || null,
+      campaign_discount,
     })
     .select('*, student:students(id, name, student_number)')
     .single()

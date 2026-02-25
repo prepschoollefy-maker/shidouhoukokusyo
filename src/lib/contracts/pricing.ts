@@ -58,11 +58,21 @@ export const FACILITY_FEE_MONTHLY_TAX_INCL = 3300
 /** 設備利用料（税込/月・半月） */
 export const FACILITY_FEE_HALF_TAX_INCL = 1650
 
-/** 入塾金の選択肢（税込） */
-export const ENROLLMENT_FEE_OPTIONS = [
-  { value: 33000, label: '¥33,000' },
-  { value: 16500, label: '¥16,500（割引）' },
-  { value: 0, label: '¥0（免除）' },
+/** 講習キャンペーン割引（税込額）— ハイコースのみ対応 */
+export const CAMPAIGN_DISCOUNT_TAX_INCL: Record<string, number> = {
+  'ハイ_小3-小5': 10500,
+  'ハイ_小6': 12000,
+  'ハイ_中1/2': 11100,
+  'ハイ_中3/高1': 11400,
+  'ハイ_高2/高3': 12000,
+}
+
+/** キャンペーンの選択肢 */
+export const CAMPAIGN_OPTIONS = [
+  { value: '', label: 'なし' },
+  { value: '入塾金無料', label: '入塾金無料' },
+  { value: '入塾金半額', label: '入塾金半額' },
+  { value: '講習キャンペーン', label: '講習キャンペーン' },
 ] as const
 
 /** 消費税率 */
@@ -95,4 +105,30 @@ export function calcMonthlyAmount(grade: string, courses: CourseEntry[]): number
 
   const totalExTax = tuitionTotal - discountTotal
   return Math.floor(totalExTax * (1 + TAX_RATE))
+}
+
+/**
+ * キャンペーン選択 → 入塾金を自動決定
+ */
+export function getEnrollmentFeeForCampaign(campaign: string): number {
+  switch (campaign) {
+    case '入塾金無料': return 0
+    case '入塾金半額': return 16500
+    case '講習キャンペーン': return 0
+    default: return 33000
+  }
+}
+
+/**
+ * 講習キャンペーン割引額（税込）を計算。
+ * コース1（最初のコース）×学年区分で割引額を決定。
+ * Flask版: (tax_incl / 1.1) * 2 → 税抜×2 を初回月謝から差し引き → 税込に戻す
+ * 月次モデルでは初月のみ適用するため、税込額をそのまま使用。
+ */
+export function calcCampaignDiscount(grade: string, courses: CourseEntry[]): number {
+  if (courses.length === 0) return 0
+  const category = GRADE_CATEGORY_MAP[grade as Grade]
+  if (!category) return 0
+  const firstCourse = courses[0].course
+  return CAMPAIGN_DISCOUNT_TAX_INCL[`${firstCourse}_${category}`] ?? 0
 }

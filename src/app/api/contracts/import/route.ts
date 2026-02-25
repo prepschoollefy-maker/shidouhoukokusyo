@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { calcMonthlyAmount } from '@/lib/contracts/pricing'
+import { calcMonthlyAmount, getEnrollmentFeeForCampaign, calcCampaignDiscount } from '@/lib/contracts/pricing'
 import { verifyContractPassword } from '@/lib/contracts/auth'
 
 export async function POST(request: NextRequest) {
@@ -97,26 +97,25 @@ export async function POST(request: NextRequest) {
 
     const monthlyAmount = calcMonthlyAmount(grade, courses)
 
-    // 種別: "新規" or "継続"
-    const typeStr = (row['種別'] || row['type'] || '').trim()
-    const type = typeStr === '継続' ? 'renewal' : 'initial'
-
-    // 入塾金: 数値 or "33000" / "16500" / "0"
-    const enrollmentFeeStr = row['入塾金'] || row['enrollment_fee'] || ''
-    const enrollmentFee = parseInt(enrollmentFeeStr) || 0
+    // キャンペーン
+    const campaign = (row['キャンペーン'] || row['campaign'] || '').trim() || null
+    const enrollmentFee = getEnrollmentFeeForCampaign(campaign || '')
+    const campaignDiscount = campaign === '講習キャンペーン'
+      ? calcCampaignDiscount(grade, courses)
+      : 0
 
     const { error } = await admin
       .from('contracts')
       .insert({
         student_id: studentId,
-        type,
         start_date: startDate,
         end_date: endDate,
         grade,
         courses,
         monthly_amount: monthlyAmount,
         enrollment_fee: enrollmentFee,
-        staff_name: row['担当'] || row['staff_name'] || '',
+        campaign: campaign,
+        campaign_discount: campaignDiscount,
         notes: row['備考'] || row['notes'] || '',
       })
 

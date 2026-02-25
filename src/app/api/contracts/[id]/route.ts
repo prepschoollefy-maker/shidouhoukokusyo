@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { calcMonthlyAmount, CourseEntry } from '@/lib/contracts/pricing'
+import { calcMonthlyAmount, calcCampaignDiscount, getEnrollmentFeeForCampaign, CourseEntry } from '@/lib/contracts/pricing'
 import { verifyContractPassword } from '@/lib/contracts/auth'
 
 export async function GET(
@@ -41,22 +41,27 @@ export async function PUT(
   if (pwError) return pwError
 
   const body = await request.json()
-  const { student_id, type, start_date, end_date, grade, courses, staff_name, notes, enrollment_fee, campaign } = body
+  const { student_id, start_date, end_date, grade, courses, notes, campaign } = body
 
   const updateData: Record<string, unknown> = {}
   if (student_id !== undefined) updateData.student_id = student_id
-  if (type !== undefined) updateData.type = type
   if (start_date !== undefined) updateData.start_date = start_date
   if (end_date !== undefined) updateData.end_date = end_date
   if (grade !== undefined) updateData.grade = grade
   if (courses !== undefined) updateData.courses = courses
-  if (staff_name !== undefined) updateData.staff_name = staff_name
   if (notes !== undefined) updateData.notes = notes
-  if (enrollment_fee !== undefined) updateData.enrollment_fee = enrollment_fee
-  if (campaign !== undefined) updateData.campaign = campaign
+  if (campaign !== undefined) {
+    updateData.campaign = campaign || null
+    updateData.enrollment_fee = getEnrollmentFeeForCampaign(campaign || '')
+  }
 
   if (grade && courses) {
     updateData.monthly_amount = calcMonthlyAmount(grade, courses as CourseEntry[])
+    if (campaign === '講習キャンペーン') {
+      updateData.campaign_discount = calcCampaignDiscount(grade, courses as CourseEntry[])
+    } else if (campaign !== undefined) {
+      updateData.campaign_discount = 0
+    }
   }
 
   const admin = createAdminClient()

@@ -20,6 +20,7 @@ interface BillingItem {
   tuition: number
   enrollment_fee_amount: number
   facility_fee: number
+  campaign_discount_amount: number
   total_amount: number
   start_date: string
   end_date: string
@@ -161,6 +162,7 @@ export default function BillingPage() {
                   <TableHead className="text-right">月謝</TableHead>
                   <TableHead className="text-right">入塾金</TableHead>
                   <TableHead className="text-right">設備利用料</TableHead>
+                  <TableHead className="text-right">割引</TableHead>
                   <TableHead className="text-right">合計</TableHead>
                 </TableRow>
               </TableHeader>
@@ -180,12 +182,15 @@ export default function BillingPage() {
                         <span className="text-xs text-muted-foreground ml-1">(半月)</span>
                       )}
                     </TableCell>
+                    <TableCell className="text-right font-mono text-red-500">
+                      {b.campaign_discount_amount > 0 ? `-${formatYen(b.campaign_discount_amount)}` : '-'}
+                    </TableCell>
                     <TableCell className="text-right font-mono font-bold">{formatYen(b.total_amount)}</TableCell>
                   </TableRow>
                 ))}
                 {billing.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                       該当月の請求データがありません
                     </TableCell>
                   </TableRow>

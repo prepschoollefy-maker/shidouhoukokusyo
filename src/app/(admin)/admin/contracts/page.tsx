@@ -14,7 +14,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
-import { GRADES, COURSES, ENROLLMENT_FEE_OPTIONS } from '@/lib/contracts/pricing'
+import { GRADES, COURSES, CAMPAIGN_OPTIONS } from '@/lib/contracts/pricing'
 
 interface Student {
   id: string
@@ -31,14 +31,11 @@ interface Contract {
   id: string
   student_id: string
   contract_no: string | null
-  type: string
   start_date: string
   end_date: string
   grade: string
   courses: CourseEntry[]
   monthly_amount: number
-  enrollment_fee: number
-  staff_name: string
   notes: string
   campaign: string | null
   student: Student
@@ -65,15 +62,12 @@ export default function ContractsPage() {
 
   // Form state
   const [formStudentId, setFormStudentId] = useState('')
-  const [formType, setFormType] = useState('initial')
   const [formStartDate, setFormStartDate] = useState('')
   const [formEndDate, setFormEndDate] = useState('')
   const [formGrade, setFormGrade] = useState('')
   const [formCourses, setFormCourses] = useState<CourseEntry[]>([{ course: '', lessons: 1 }])
-  const [formStaffName, setFormStaffName] = useState('')
   const [formNotes, setFormNotes] = useState('')
-  const [formEnrollmentFee, setFormEnrollmentFee] = useState('33000')
-  const [formCampaign, setFormCampaign] = useState('')
+  const [formCampaign, setFormCampaign] = useState('_none')
   const [calcAmount, setCalcAmount] = useState<number | null>(null)
 
   const handleAuth = async () => {
@@ -137,23 +131,20 @@ export default function ContractsPage() {
   }, [formGrade, formCourses])
 
   const resetForm = () => {
-    setFormStudentId(''); setFormType('initial'); setFormStartDate(''); setFormEndDate('')
+    setFormStudentId(''); setFormStartDate(''); setFormEndDate('')
     setFormGrade(''); setFormCourses([{ course: '', lessons: 1 }])
-    setFormStaffName(''); setFormNotes(''); setFormEnrollmentFee('33000'); setFormCampaign(''); setCalcAmount(null); setEditing(null)
+    setFormNotes(''); setFormCampaign('_none'); setCalcAmount(null); setEditing(null)
   }
 
   const openEdit = (c: Contract) => {
     setEditing(c)
     setFormStudentId(c.student_id)
-    setFormType(c.type)
     setFormStartDate(c.start_date)
     setFormEndDate(c.end_date)
     setFormGrade(c.grade)
     setFormCourses(c.courses.length ? c.courses : [{ course: '', lessons: 1 }])
-    setFormStaffName(c.staff_name)
     setFormNotes(c.notes)
-    setFormEnrollmentFee(String(c.enrollment_fee || 0))
-    setFormCampaign(c.campaign || '')
+    setFormCampaign(c.campaign || '_none')
     setDialogOpen(true)
   }
 
@@ -168,15 +159,12 @@ export default function ContractsPage() {
 
     const payload = {
       student_id: formStudentId,
-      type: formType,
       start_date: formStartDate,
       end_date: formEndDate,
       grade: formGrade,
       courses: validCourses,
-      staff_name: formStaffName,
       notes: formNotes,
-      enrollment_fee: parseInt(formEnrollmentFee) || 0,
-      campaign: formCampaign || null,
+      campaign: (formCampaign && formCampaign !== '_none') ? formCampaign : null,
     }
 
     try {
@@ -270,8 +258,8 @@ export default function ContractsPage() {
         <div className="flex gap-2">
           <CsvImportDialog
             title="契約CSVインポート"
-            description={`CSV形式で契約を一括登録します。塾生番号で生徒を紐付けます。\n\n【コース名】ハイ / ハイPLUS / エク / エグゼ\n【種別】新規 / 継続\n【入塾金】33000 / 16500 / 0`}
-            sampleCsv={"塾生番号,学年,開始日,終了日,コース1,コマ数1,コース2,コマ数2,種別,入塾金,担当,備考\nS001,中2,2026-04-01,2027-03-31,ハイ,2,,,新規,33000,田中,\nS002,高1,2026-04-01,2027-03-31,エク,1,ハイ,2,新規,16500,佐藤,\nS003,中3,2026-04-01,2027-03-31,エグゼ,3,,,継続,0,田中,"}
+            description={`CSV形式で契約を一括登録します。塾生番号で生徒を紐付けます。\n\n【コース名】ハイ / ハイPLUS / エク / エグゼ\n【キャンペーン】入塾金無料 / 入塾金半額 / 講習キャンペーン（空欄=なし）`}
+            sampleCsv={"塾生番号,学年,開始日,終了日,コース1,コマ数1,コース2,コマ数2,キャンペーン,備考\nS001,中2,2026-04-01,2027-03-31,ハイ,2,,,,\nS002,高1,2026-04-01,2027-03-31,エク,1,ハイ,2,入塾金半額,\nS003,中3,2026-04-01,2027-03-31,エグゼ,3,,,講習キャンペーン,"}
             apiEndpoint="/api/contracts/import"
             extraHeaders={{ 'x-dashboard-pw': storedPw }}
             onSuccess={fetchContracts}
@@ -296,28 +284,16 @@ export default function ContractsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>種別</Label>
-                    <Select value={formType} onValueChange={setFormType}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="initial">新規</SelectItem>
-                        <SelectItem value="renewal">継続</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>学年 *</Label>
-                    <Select value={formGrade} onValueChange={setFormGrade}>
-                      <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
-                      <SelectContent>
-                        {GRADES.map(g => (
-                          <SelectItem key={g} value={g}>{g}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label>学年 *</Label>
+                  <Select value={formGrade} onValueChange={setFormGrade}>
+                    <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
+                    <SelectContent>
+                      {GRADES.map(g => (
+                        <SelectItem key={g} value={g}>{g}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -371,32 +347,15 @@ export default function ContractsPage() {
                   </div>
                 )}
                 <div className="space-y-2">
-                  <Label>入塾金</Label>
-                  <Select value={formEnrollmentFee} onValueChange={setFormEnrollmentFee}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Label>キャンペーン</Label>
+                  <Select value={formCampaign} onValueChange={setFormCampaign}>
+                    <SelectTrigger><SelectValue placeholder="なし" /></SelectTrigger>
                     <SelectContent>
-                      {ENROLLMENT_FEE_OPTIONS.map(opt => (
-                        <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                      {CAMPAIGN_OPTIONS.map(opt => (
+                        <SelectItem key={opt.value || '_none'} value={opt.value || '_none'}>{opt.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>担当</Label>
-                    <Input value={formStaffName} onChange={(e) => setFormStaffName(e.target.value)} placeholder="例: 田中" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>キャンペーン</Label>
-                    <Select value={formCampaign} onValueChange={setFormCampaign}>
-                      <SelectTrigger><SelectValue placeholder="なし" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">なし</SelectItem>
-                        <SelectItem value="入塾金無料">入塾金無料</SelectItem>
-                        <SelectItem value="講習キャンペーン">講習キャンペーン</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>備考</Label>
@@ -445,8 +404,7 @@ export default function ContractsPage() {
                 <TableHead>コース</TableHead>
                 <TableHead className="text-right">月謝</TableHead>
                 <TableHead>契約期間</TableHead>
-                <TableHead>種別</TableHead>
-                <TableHead>担当</TableHead>
+                <TableHead>キャンペーン</TableHead>
                 <TableHead className="w-20"></TableHead>
               </TableRow>
             </TableHeader>
@@ -465,12 +423,9 @@ export default function ContractsPage() {
                   <TableCell className="text-sm">
                     {c.start_date} ~ {c.end_date}
                   </TableCell>
-                  <TableCell>
-                    <Badge variant={c.type === 'initial' ? 'default' : 'secondary'}>
-                      {c.type === 'initial' ? '新規' : '継続'}
-                    </Badge>
+                  <TableCell className="text-sm">
+                    {c.campaign ? <Badge variant="secondary">{c.campaign}</Badge> : '-'}
                   </TableCell>
-                  <TableCell className="text-sm">{c.staff_name || '-'}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(c)}>
@@ -485,7 +440,7 @@ export default function ContractsPage() {
               ))}
               {filteredContracts.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     契約データがありません
                   </TableCell>
                 </TableRow>

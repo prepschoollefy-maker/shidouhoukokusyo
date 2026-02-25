@@ -44,14 +44,18 @@ export async function GET(request: NextRequest) {
     // 設備利用料: 16日開始の初月は半額
     const facilityFee = isHalf ? FACILITY_FEE_HALF_TAX_INCL : FACILITY_FEE_MONTHLY_TAX_INCL
 
+    // キャンペーン割引: 契約開始月のみ
+    const campaignDiscount = isFirstMonth ? (c.campaign_discount || 0) : 0
+
     // 合計
-    const totalAmount = tuition + enrollmentFee + facilityFee
+    const totalAmount = tuition + enrollmentFee + facilityFee - campaignDiscount
 
     return {
       ...c,
       tuition,
       enrollment_fee_amount: enrollmentFee,
       facility_fee: facilityFee,
+      campaign_discount_amount: campaignDiscount,
       total_amount: totalAmount,
     }
   })
