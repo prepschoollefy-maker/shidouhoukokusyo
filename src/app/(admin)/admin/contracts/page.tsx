@@ -270,9 +270,10 @@ export default function ContractsPage() {
         <div className="flex gap-2">
           <CsvImportDialog
             title="契約CSVインポート"
-            description="CSV形式で契約を一括登録します。塾生番号で生徒を紐付けます。"
-            sampleCsv={"塾生番号,学年,開始日,終了日,コース,種別,担当,備考\nS001,中2,2026-04-01,2027-03-31,ハイ,2,新規,田中,\nS002,高1,2026-04-01,2027-03-31,エク,1;ハイ,2,新規,佐藤,"}
+            description={`CSV形式で契約を一括登録します。塾生番号で生徒を紐付けます。\n\n【コース名】ハイ / ハイPLUS / エク / エグゼ\n【種別】新規 / 継続\n【入塾金】33000 / 16500 / 0`}
+            sampleCsv={"塾生番号,学年,開始日,終了日,コース1,コマ数1,コース2,コマ数2,種別,入塾金,担当,備考\nS001,中2,2026-04-01,2027-03-31,ハイ,2,,,新規,33000,田中,\nS002,高1,2026-04-01,2027-03-31,エク,1,ハイ,2,新規,16500,佐藤,\nS003,中3,2026-04-01,2027-03-31,エグゼ,3,,,継続,0,田中,"}
             apiEndpoint="/api/contracts/import"
+            extraHeaders={{ 'x-dashboard-pw': storedPw }}
             onSuccess={fetchContracts}
           />
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm() }}>

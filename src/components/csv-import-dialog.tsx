@@ -11,10 +11,11 @@ interface CsvImportDialogProps {
   description: string
   sampleCsv: string
   apiEndpoint: string
+  extraHeaders?: Record<string, string>
   onSuccess: () => void
 }
 
-export function CsvImportDialog({ title, description, sampleCsv, apiEndpoint, onSuccess }: CsvImportDialogProps) {
+export function CsvImportDialog({ title, description, sampleCsv, apiEndpoint, extraHeaders, onSuccess }: CsvImportDialogProps) {
   const [open, setOpen] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string[][]>([])
@@ -53,7 +54,7 @@ export function CsvImportDialog({ title, description, sampleCsv, apiEndpoint, on
 
       const res = await fetch(apiEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...extraHeaders },
         body: JSON.stringify({ rows }),
       })
 
@@ -96,7 +97,7 @@ export function CsvImportDialog({ title, description, sampleCsv, apiEndpoint, on
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <p className="text-sm text-muted-foreground whitespace-pre-line">{description}</p>
           <Button variant="link" className="p-0 h-auto text-sm" onClick={handleDownloadSample}>
             サンプルCSVをダウンロード
           </Button>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { calcMonthlyAmount } from '@/lib/contracts/pricing'
+import { verifyContractPassword } from '@/lib/contracts/auth'
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -9,6 +10,9 @@ export async function POST(request: NextRequest) {
   if (!user || user.app_metadata?.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+
+  const pwError = verifyContractPassword(request)
+  if (pwError) return pwError
 
   const { rows } = await request.json()
   if (!rows?.length) {
@@ -51,30 +55,67 @@ export async function POST(request: NextRequest) {
       continue
     }
 
-    // コース解析: "コース1名,コマ数;コース2名,コマ数" 形式
-    const coursesStr = row['コース'] || row['courses'] || ''
+    // コース解析
+    // 形式1: "コース1" 列 + "コマ数1" 列 + "コース2" 列 + "コマ数2" 列
+    // 形式2: "コース" 列に "ハイ:2 / エク:1" のようにまとめて記載
     const courses: { course: string; lessons: number }[] = []
-    if (coursesStr) {
-      for (const part of coursesStr.split(';')) {
-        const [name, lessons] = part.split(',').map((s: string) => s.trim())
-        if (name && lessons) {
-          courses.push({ course: name, lessons: parseInt(lessons) || 1 })
+
+    const course1 = (row['コース1'] || '').trim()
+    const lessons1 = parseInt(row['コマ数1']) || 0
+    const course2 = (row['コース2'] || '').trim()
+    const lessons2 = parseInt(row['コマ数2']) || 0
+    const course3 = (row['コース3'] || '').trim()
+    const lessons3 = parseInt(row['コマ数3']) || 0
+
+    if (course1 && lessons1 > 0) {
+      courses.push({ course: course1, lessons: lessons1 })
+    }
+    if (course2 && lessons2 > 0) {
+      courses.push({ course: course2, lessons: lessons2 })
+    }
+    if (course3 && lessons3 > 0) {
+      courses.push({ course: course3, lessons: lessons3 })
+    }
+
+    // フォールバック: "コース" 列に "ハイ:2 / エク:1" 形式
+    if (courses.length === 0) {
+      const coursesStr = row['コース'] || row['courses'] || ''
+      if (coursesStr) {
+        for (const part of coursesStr.split(/[;\/]/).map((s: string) => s.trim()).filter(Boolean)) {
+          const match = part.match(/^(.+?)[:\s,]+(\d+)$/)
+          if (match) {
+            courses.push({ course: match[1].trim(), lessons: parseInt(match[2]) })
+          }
         }
       }
     }
 
+    if (courses.length === 0) {
+      errors.push(`塾生番号 ${studentNumber}: コースが指定されていません`)
+      continue
+    }
+
     const monthlyAmount = calcMonthlyAmount(grade, courses)
+
+    // 種別: "新規" or "継続"
+    const typeStr = (row['種別'] || row['type'] || '').trim()
+    const type = typeStr === '継続' ? 'renewal' : 'initial'
+
+    // 入塾金: 数値 or "33000" / "16500" / "0"
+    const enrollmentFeeStr = row['入塾金'] || row['enrollment_fee'] || ''
+    const enrollmentFee = parseInt(enrollmentFeeStr) || 0
 
     const { error } = await admin
       .from('contracts')
       .insert({
         student_id: studentId,
-        type: row['種別'] === '継続' ? 'renewal' : 'initial',
+        type,
         start_date: startDate,
         end_date: endDate,
         grade,
         courses,
         monthly_amount: monthlyAmount,
+        enrollment_fee: enrollmentFee,
         staff_name: row['担当'] || row['staff_name'] || '',
         notes: row['備考'] || row['notes'] || '',
       })
