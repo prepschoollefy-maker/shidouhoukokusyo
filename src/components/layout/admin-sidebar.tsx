@@ -20,6 +20,7 @@ import {
   FileSignature,
   Receipt,
   TrendingUp,
+  ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -60,6 +61,7 @@ const navGroups: (NavItem | NavGroup)[] = [
       { href: '/admin/contracts', label: '契約管理', icon: FileSignature },
       { href: '/admin/contracts/billing', label: '請求一覧', icon: Receipt },
       { href: '/admin/contracts/dashboard', label: '経営ダッシュボード', icon: TrendingUp },
+      { href: 'https://contract.lefy.jp', label: '契約書作成', icon: ExternalLink, external: true },
     ],
   },
   {
