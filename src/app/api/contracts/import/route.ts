@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
       continue
     }
 
-    const studentId = studentMap.get(String(studentNumber))
+    const normalizedNumber = String(studentNumber).replace(/\D/g, '').padStart(7, '0')
+    const studentId = studentMap.get(normalizedNumber)
     if (!studentId) {
       errors.push(`塾生番号 ${studentNumber} の生徒が見つかりません`)
       continue

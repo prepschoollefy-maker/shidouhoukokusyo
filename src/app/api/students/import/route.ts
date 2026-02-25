@@ -22,12 +22,15 @@ export async function POST(request: NextRequest) {
     if (!name) continue
 
     const grade = row['学年'] || row['grade'] || null
+    const rawNumber = row['塾生番号'] || row['student_number'] || null
+    const student_number = rawNumber ? String(rawNumber).replace(/\D/g, '').padStart(7, '0') : null
 
     const { data: student, error } = await admin
       .from('students')
       .insert({
         name,
         grade,
+        student_number,
       })
       .select()
       .single()
