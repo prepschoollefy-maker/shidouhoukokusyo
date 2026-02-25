@@ -27,7 +27,16 @@
       "Bash(find:*)",
       "Bash(npx tsc:*)",
       "Bash(npx shadcn@latest add:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(pip install:*)",
+      "Bash(python3:*)",
+      "Bash(pip:*)",
+      "Bash(pip3:*)",
+      "Bash(py:*)",
+      "Bash(npx supabase:*)",
+      "Bash(wc:*)",
+      "Bash(grep RESEND:*)",
+      "Bash(cmd:*)"
     ]
   }
 }

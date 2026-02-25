@@ -152,13 +152,12 @@ export default function StudentsPage() {
   }
 
   const handleExport = () => {
-    const header = '名前,学年,週当たり通塾回数,メール1,メール2'
+    const header = '名前,学年,メール1,メール2'
     const rows = students.map(s => {
       const emails = s.parent_emails || []
       return [
         s.name,
         s.grade || '',
-        s.weekly_lesson_count ?? '',
         emails[0]?.email || '',
         emails[1]?.email || '',
       ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
@@ -221,7 +220,7 @@ export default function StudentsPage() {
               <CsvImportDialog
                 title="生徒CSVインポート"
                 description="CSV形式で生徒を一括登録します。ヘッダー行が必要です。"
-                sampleCsv={"名前,学年,週当たり通塾回数,メール1,メール2\n山田太郎,中2,3,father@example.com,mother@example.com\n佐藤花子,高1,2,,mother@example.com"}
+                sampleCsv={"名前,学年,メール1,メール2\n山田太郎,中2,father@example.com,mother@example.com\n佐藤花子,高1,,mother@example.com"}
                 apiEndpoint="/api/students/import"
                 onSuccess={fetchData}
               />

@@ -22,14 +22,12 @@ export async function POST(request: NextRequest) {
     if (!name) continue
 
     const grade = row['学年'] || row['grade'] || null
-    const weeklyCount = parseInt(row['週当たり通塾回数'] || row['weekly_lesson_count'] || '0') || null
 
     const { data: student, error } = await admin
       .from('students')
       .insert({
         name,
         grade,
-        weekly_lesson_count: weeklyCount,
       })
       .select()
       .single()
