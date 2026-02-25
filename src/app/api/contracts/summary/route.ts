@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-
-const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || ''
+import { verifyContractPassword } from '@/lib/contracts/auth'
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // ダッシュボード用パスワードチェック
-  const pw = request.nextUrl.searchParams.get('pw') || ''
-  if (DASHBOARD_PASSWORD && pw !== DASHBOARD_PASSWORD) {
-    return NextResponse.json({ error: 'ダッシュボードのパスワードが正しくありません' }, { status: 403 })
-  }
+  const pwError = verifyContractPassword(request)
+  if (pwError) return pwError
 
   const now = new Date()
   const year = parseInt(request.nextUrl.searchParams.get('year') || String(now.getFullYear()))

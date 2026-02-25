@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, Lock } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -46,6 +46,12 @@ interface Contract {
 type FilterMode = 'active' | 'all' | 'expired'
 
 export default function ContractsPage() {
+  // パスワード認証
+  const [authenticated, setAuthenticated] = useState(false)
+  const [password, setPassword] = useState('')
+  const [storedPw, setStoredPw] = useState('')
+  const [verifying, setVerifying] = useState(false)
+
   const [contracts, setContracts] = useState<Contract[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
@@ -68,12 +74,36 @@ export default function ContractsPage() {
   const [formCampaign, setFormCampaign] = useState('')
   const [calcAmount, setCalcAmount] = useState<number | null>(null)
 
+  const handleAuth = async () => {
+    if (!password) { toast.error('パスワードを入力してください'); return }
+    setVerifying(true)
+    try {
+      const res = await fetch(`/api/contracts?pw=${encodeURIComponent(password)}`)
+      if (res.status === 403) {
+        toast.error('パスワードが正しくありません')
+        setVerifying(false)
+        return
+      }
+      if (!res.ok) throw new Error('エラーが発生しました')
+      const json = await res.json()
+      setContracts(json.data || [])
+      setStoredPw(password)
+      setAuthenticated(true)
+      setLoading(false)
+    } catch {
+      toast.error('認証に失敗しました')
+    } finally {
+      setVerifying(false)
+    }
+  }
+
   const fetchContracts = useCallback(async () => {
-    const res = await fetch('/api/contracts')
+    if (!storedPw) return
+    const res = await fetch(`/api/contracts?pw=${encodeURIComponent(storedPw)}`)
     const json = await res.json()
     setContracts(json.data || [])
     setLoading(false)
-  }, [])
+  }, [storedPw])
 
   const fetchStudents = useCallback(async () => {
     const res = await fetch('/api/students?status=active')
@@ -81,7 +111,10 @@ export default function ContractsPage() {
     setStudents((json.data || []).map((s: Student & Record<string, unknown>) => ({ id: s.id, name: s.name, student_number: s.student_number })))
   }, [])
 
-  useEffect(() => { fetchContracts(); fetchStudents() }, [fetchContracts, fetchStudents])
+  useEffect(() => {
+    if (!authenticated) return
+    fetchContracts(); fetchStudents()
+  }, [authenticated, fetchContracts, fetchStudents])
 
   // 月謝自動計算
   useEffect(() => {
@@ -145,7 +178,11 @@ export default function ContractsPage() {
     try {
       const url = editing ? `/api/contracts/${editing.id}` : '/api/contracts'
       const method = editing ? 'PUT' : 'POST'
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'x-dashboard-pw': storedPw },
+        body: JSON.stringify(payload),
+      })
       if (!res.ok) throw new Error('保存に失敗しました')
       toast.success(editing ? '更新しました' : '登録しました')
       setDialogOpen(false)
@@ -160,7 +197,7 @@ export default function ContractsPage() {
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/contracts/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/contracts/${id}?pw=${encodeURIComponent(storedPw)}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('削除に失敗しました')
       toast.success('削除しました')
       fetchContracts()
@@ -171,6 +208,36 @@ export default function ContractsPage() {
 
   const updateCourse = (index: number, field: keyof CourseEntry, value: string | number) => {
     setFormCourses(prev => prev.map((c, i) => i === index ? { ...c, [field]: value } : c))
+  }
+
+  // パスワード入力画面
+  if (!authenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="w-full max-w-sm">
+          <CardContent className="p-6 space-y-4">
+            <div className="flex flex-col items-center gap-2 mb-2">
+              <Lock className="h-8 w-8 text-muted-foreground" />
+              <h2 className="text-lg font-bold">契約管理</h2>
+              <p className="text-sm text-muted-foreground text-center">閲覧にはパスワードが必要です</p>
+            </div>
+            <div className="space-y-2">
+              <Label>パスワード</Label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAuth() }}
+                autoFocus
+              />
+            </div>
+            <Button className="w-full" onClick={handleAuth} disabled={verifying}>
+              {verifying ? '確認中...' : 'ログイン'}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   if (loading) return <LoadingSpinner />

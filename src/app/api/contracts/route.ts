@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { calcMonthlyAmount, CourseEntry } from '@/lib/contracts/pricing'
+import { verifyContractPassword } from '@/lib/contracts/auth'
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const pwError = verifyContractPassword(request)
+  if (pwError) return pwError
 
   const studentId = request.nextUrl.searchParams.get('student_id')
   const year = request.nextUrl.searchParams.get('year')
@@ -40,6 +44,9 @@ export async function POST(request: NextRequest) {
   if (!user || user.app_metadata?.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+
+  const pwError = verifyContractPassword(request)
+  if (pwError) return pwError
 
   const body = await request.json()
   const { student_id, type, start_date, end_date, grade, courses, staff_name, notes, campaign } = body
