@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2, Search, Lock } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, Lock, ChevronsUpDown, Check } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -26,6 +27,7 @@ interface Student {
   id: string
   name: string
   student_number: string | null
+  grade: string | null
 }
 
 interface Lecture {
@@ -58,7 +60,8 @@ export default function LecturesPage() {
   // Form state
   const [formStudentId, setFormStudentId] = useState('')
   const [formLabel, setFormLabel] = useState('')
-  const [formGrade, setFormGrade] = useState('')
+  const [studentSearch, setStudentSearch] = useState('')
+  const [studentPopoverOpen, setStudentPopoverOpen] = useState(false)
   const [formCourses, setFormCourses] = useState<LectureCourseEntry[]>([
     { course: '', total_lessons: 1, unit_price: 0, subtotal: 0, allocation: [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1, lessons: 1 }] }
   ])
@@ -97,7 +100,7 @@ export default function LecturesPage() {
   const fetchStudents = useCallback(async () => {
     const res = await fetch('/api/students?status=active')
     const json = await res.json()
-    const list = (json.data || []).map((s: Student & Record<string, unknown>) => ({ id: s.id, name: s.name, student_number: s.student_number }))
+    const list = (json.data || []).map((s: Student & Record<string, unknown>) => ({ id: s.id, name: s.name, student_number: s.student_number, grade: (s.grade as string) || null }))
     list.sort((a: Student, b: Student) => (a.student_number || '').localeCompare(b.student_number || '', 'ja', { numeric: true }))
     setStudents(list)
   }, [])
@@ -106,6 +109,10 @@ export default function LecturesPage() {
     if (!authenticated) return
     fetchLectures(); fetchStudents()
   }, [authenticated, fetchLectures, fetchStudents])
+
+  // 選択中の生徒の学年を取得
+  const selectedStudent = students.find(s => s.id === formStudentId)
+  const formGrade = editing ? editing.grade : (selectedStudent?.grade || '')
 
   // 合計金額を計算
   const calcTotal = useCallback(() => {
@@ -130,9 +137,10 @@ export default function LecturesPage() {
   const resetForm = () => {
     setFormStudentId('')
     setFormLabel('')
-    setFormGrade('')
     setFormCourses([makeEmptyCourse()])
     setFormNotes('')
+    setStudentSearch('')
+    setStudentPopoverOpen(false)
     setEditing(null)
   }
 
@@ -140,16 +148,16 @@ export default function LecturesPage() {
     setEditing(l)
     setFormStudentId(l.student_id)
     setFormLabel(l.label)
-    setFormGrade(l.grade)
     setFormCourses(l.courses.length ? l.courses : [makeEmptyCourse()])
     setFormNotes(l.notes)
+    setStudentSearch('')
     setDialogOpen(true)
   }
 
   const handleSave = async () => {
     if (!formStudentId) { toast.error('生徒を選択してください'); return }
     if (!formLabel) { toast.error('ラベルを選択してください'); return }
-    if (!formGrade) { toast.error('学年を選択してください'); return }
+    if (!formGrade) { toast.error('生徒に学年が設定されていません'); return }
     const validCourses = formCourses.filter(c => c.course && c.total_lessons > 0)
     if (validCourses.length === 0) { toast.error('コースを1つ以上設定してください'); return }
 
@@ -308,40 +316,61 @@ export default function LecturesPage() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>生徒 *</Label>
-                <Select value={formStudentId} onValueChange={setFormStudentId}>
-                  <SelectTrigger><SelectValue placeholder="生徒を選択" /></SelectTrigger>
+                <Popover open={studentPopoverOpen} onOpenChange={setStudentPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between font-normal">
+                      {selectedStudent
+                        ? `${selectedStudent.student_number || ''} ${selectedStudent.name}`
+                        : '生徒を選択'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-0" align="start">
+                    <div className="p-2 border-b">
+                      <Input
+                        placeholder="名前・塾生番号で検索..."
+                        value={studentSearch}
+                        onChange={(e) => setStudentSearch(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                    <div className="max-h-60 overflow-y-auto">
+                      {students
+                        .filter(s => {
+                          if (!studentSearch) return true
+                          const q = studentSearch.toLowerCase()
+                          return (s.name || '').toLowerCase().includes(q) || (s.student_number || '').includes(q)
+                        })
+                        .map(s => (
+                          <button
+                            key={s.id}
+                            className="flex items-center w-full px-3 py-2 text-sm hover:bg-muted text-left"
+                            onClick={() => { setFormStudentId(s.id); setStudentPopoverOpen(false); setStudentSearch('') }}
+                          >
+                            <Check className={`mr-2 h-4 w-4 ${formStudentId === s.id ? 'opacity-100' : 'opacity-0'}`} />
+                            <span className="text-muted-foreground mr-2">{s.student_number || ''}</span>
+                            {s.name}
+                          </button>
+                        ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              {formGrade && (
+                <div className="text-sm text-muted-foreground">
+                  学年: <span className="font-medium text-foreground">{formGrade}</span>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>ラベル *</Label>
+                <Select value={formLabel} onValueChange={setFormLabel}>
+                  <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
                   <SelectContent>
-                    {students.map(s => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.student_number ? `${s.student_number} ` : ''}{s.name}
-                      </SelectItem>
+                    {LECTURE_LABELS.map(l => (
+                      <SelectItem key={l} value={l}>{l}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>ラベル *</Label>
-                  <Select value={formLabel} onValueChange={setFormLabel}>
-                    <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
-                    <SelectContent>
-                      {LECTURE_LABELS.map(l => (
-                        <SelectItem key={l} value={l}>{l}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>学年 *</Label>
-                  <Select value={formGrade} onValueChange={setFormGrade}>
-                    <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
-                    <SelectContent>
-                      {GRADES.map(g => (
-                        <SelectItem key={g} value={g}>{g}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
 
               <div className="space-y-3">
