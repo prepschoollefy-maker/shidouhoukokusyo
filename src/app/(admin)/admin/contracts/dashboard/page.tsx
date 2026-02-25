@@ -145,7 +145,7 @@ export default function ContractDashboardPage() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">契約生徒数</div>
+            <div className="text-sm text-muted-foreground">生徒数</div>
             <div className="text-3xl font-bold mt-1">{currentCount}<span className="text-lg ml-1">人</span></div>
           </CardContent>
         </Card>
@@ -182,7 +182,7 @@ export default function ContractDashboardPage() {
             })}
           </div>
           {/* 生徒数推移 */}
-          <h3 className="text-sm font-medium text-muted-foreground mt-6 mb-2">月別契約生徒数</h3>
+          <h3 className="text-sm font-medium text-muted-foreground mt-6 mb-2">月別生徒数</h3>
           <div className="flex gap-1">
             {months.map((m, i) => (
               <div key={i} className="flex-1 text-center">

@@ -59,7 +59,7 @@ const navGroups: (NavItem | NavGroup)[] = [
   {
     label: '契約',
     items: [
-      { href: '/admin/contracts', label: '契約管理', icon: FileSignature },
+      { href: '/admin/contracts', label: '通常コース管理', icon: FileSignature },
       { href: '/admin/contracts/lectures', label: '講習管理', icon: BookOpenCheck },
       { href: '/admin/contracts/billing', label: '請求一覧', icon: Receipt },
       { href: '/admin/contracts/dashboard', label: '経営ダッシュボード', icon: TrendingUp },

@@ -390,20 +390,22 @@ export default function LecturesPage() {
                         </div>
                         {c.allocation.map((a, ai) => (
                           <div key={ai} className="flex gap-2 items-center">
-                            <Input
-                              type="number" min={2020} max={2040}
-                              value={a.year}
-                              onChange={(e) => updateAllocation(ci, ai, 'year', parseInt(e.target.value) || 2026)}
-                              className="w-24"
-                            />
-                            <span className="text-sm">年</span>
-                            <Input
-                              type="number" min={1} max={12}
-                              value={a.month}
-                              onChange={(e) => updateAllocation(ci, ai, 'month', parseInt(e.target.value) || 1)}
-                              className="w-20"
-                            />
-                            <span className="text-sm">月</span>
+                            <Select value={String(a.year)} onValueChange={(v) => updateAllocation(ci, ai, 'year', parseInt(v))}>
+                              <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i).map(y => (
+                                  <SelectItem key={y} value={String(y)}>{y}年</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select value={String(a.month)} onValueChange={(v) => updateAllocation(ci, ai, 'month', parseInt(v))}>
+                              <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                                  <SelectItem key={m} value={String(m)}>{m}月</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                             <Input
                               type="number" min={0}
                               value={a.lessons}

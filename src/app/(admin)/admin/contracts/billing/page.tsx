@@ -165,7 +165,7 @@ export default function BillingPage() {
           <div className="text-sm text-muted-foreground">当月合計請求額</div>
           <div className="text-3xl font-bold">{formatYen(total)}</div>
           <div className="flex gap-4 text-sm text-muted-foreground mt-1">
-            <span>契約: {formatYen(contractTotal)}（{billing.length}件）</span>
+            <span>通常コース: {formatYen(contractTotal)}（{billing.length}件）</span>
             {lectureTotal > 0 && <span>講習: {formatYen(lectureTotal)}（{lectureBilling.length}件）</span>}
           </div>
         </CardContent>
@@ -175,7 +175,7 @@ export default function BillingPage() {
         <LoadingSpinner />
       ) : (
         <>
-          <h3 className="text-lg font-semibold">契約</h3>
+          <h3 className="text-lg font-semibold">通常コース</h3>
           <Card>
             <CardContent className="p-0 overflow-x-auto">
               <Table>
@@ -216,7 +216,7 @@ export default function BillingPage() {
                   {billing.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                        該当月の契約請求データがありません
+                        該当月の通常コース請求データがありません
                       </TableCell>
                     </TableRow>
                   )}
@@ -225,41 +225,44 @@ export default function BillingPage() {
             </CardContent>
           </Card>
 
-          {lectureBilling.length > 0 && (
-            <>
-              <h3 className="text-lg font-semibold">講習</h3>
-              <Card>
-                <CardContent className="p-0 overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>塾生番号</TableHead>
-                        <TableHead>生徒名</TableHead>
-                        <TableHead>ラベル</TableHead>
-                        <TableHead>コース</TableHead>
-                        <TableHead className="text-right">コマ数</TableHead>
-                        <TableHead className="text-right">単価</TableHead>
-                        <TableHead className="text-right">当月売上</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {lectureBilling.map((l, i) => (
-                        <TableRow key={`${l.id}-${i}`}>
-                          <TableCell className="text-muted-foreground text-sm">{l.student?.student_number || '-'}</TableCell>
-                          <TableCell className="font-medium">{l.student?.name}</TableCell>
-                          <TableCell className="text-sm">{l.label}</TableCell>
-                          <TableCell className="text-sm">{l.course}</TableCell>
-                          <TableCell className="text-right font-mono">{l.lessons}</TableCell>
-                          <TableCell className="text-right font-mono">{formatYen(l.unit_price)}</TableCell>
-                          <TableCell className="text-right font-mono font-bold">{formatYen(l.amount)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </>
-          )}
+          <h3 className="text-lg font-semibold">講習</h3>
+          <Card>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>塾生番号</TableHead>
+                    <TableHead>生徒名</TableHead>
+                    <TableHead>ラベル</TableHead>
+                    <TableHead>コース</TableHead>
+                    <TableHead className="text-right">コマ数</TableHead>
+                    <TableHead className="text-right">単価</TableHead>
+                    <TableHead className="text-right">当月売上</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lectureBilling.map((l, i) => (
+                    <TableRow key={`${l.id}-${i}`}>
+                      <TableCell className="text-muted-foreground text-sm">{l.student?.student_number || '-'}</TableCell>
+                      <TableCell className="font-medium">{l.student?.name}</TableCell>
+                      <TableCell className="text-sm">{l.label}</TableCell>
+                      <TableCell className="text-sm">{l.course}</TableCell>
+                      <TableCell className="text-right font-mono">{l.lessons}</TableCell>
+                      <TableCell className="text-right font-mono">{formatYen(l.unit_price)}</TableCell>
+                      <TableCell className="text-right font-mono font-bold">{formatYen(l.amount)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {lectureBilling.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        該当月の講習請求データがありません
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>

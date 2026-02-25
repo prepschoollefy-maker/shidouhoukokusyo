@@ -150,7 +150,7 @@ export default function ContractsPage() {
 
   const handleSave = async () => {
     if (!formStudentId) { toast.error('生徒を選択してください'); return }
-    if (!formStartDate || !formEndDate) { toast.error('契約期間を入力してください'); return }
+    if (!formStartDate || !formEndDate) { toast.error('期間を入力してください'); return }
     if (!formGrade) { toast.error('学年を選択してください'); return }
     const validCourses = formCourses.filter(c => c.course && c.lessons > 0)
     if (validCourses.length === 0) { toast.error('コースを1つ以上設定してください'); return }
@@ -210,7 +210,7 @@ export default function ContractsPage() {
           <CardContent className="p-6 space-y-4">
             <div className="flex flex-col items-center gap-2 mb-2">
               <Lock className="h-8 w-8 text-muted-foreground" />
-              <h2 className="text-lg font-bold">契約管理</h2>
+              <h2 className="text-lg font-bold">通常コース管理</h2>
               <p className="text-sm text-muted-foreground text-center">閲覧にはパスワードが必要です</p>
             </div>
             <div className="space-y-2">
@@ -254,11 +254,11 @@ export default function ContractsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">契約管理</h2>
+        <h2 className="text-2xl font-bold">通常コース管理</h2>
         <div className="flex gap-2">
           <CsvImportDialog
-            title="契約CSVインポート"
-            description={`CSV形式で契約を一括登録します。塾生番号で生徒を紐付けます。\n\n【コース名】ハイ / ハイPLUS / エク / エグゼ\n【キャンペーン】入塾金無料 / 入塾金半額 / 講習キャンペーン（空欄=なし）`}
+            title="通常コースCSVインポート"
+            description={`CSV形式で通常コースを一括登録します。塾生番号で生徒を紐付けます。\n\n【コース名】ハイ / ハイPLUS / エク / エグゼ\n【キャンペーン】入塾金無料 / 入塾金半額 / 講習キャンペーン（空欄=なし）`}
             sampleCsv={"塾生番号,学年,開始日,終了日,コース1,コマ数1,コース2,コマ数2,キャンペーン,備考\nS001,中2,2026-04-01,2027-03-31,ハイ,2,,,,\nS002,高1,2026-04-01,2027-03-31,エク,1,ハイ,2,入塾金半額,\nS003,中3,2026-04-01,2027-03-31,エグゼ,3,,,講習キャンペーン,"}
             apiEndpoint="/api/contracts/import"
             extraHeaders={{ 'x-dashboard-pw': storedPw }}
@@ -269,7 +269,7 @@ export default function ContractsPage() {
               <Button><Plus className="h-4 w-4 mr-1" />新規登録</Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>{editing ? '契約編集' : '契約登録'}</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{editing ? '通常コース編集' : '通常コース登録'}</DialogTitle></DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>生徒 *</Label>
@@ -441,7 +441,7 @@ export default function ContractsPage() {
               {filteredContracts.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    契約データがありません
+                    通常コースデータがありません
                   </TableCell>
                 </TableRow>
               )}
@@ -453,8 +453,8 @@ export default function ContractsPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
-        title="契約を削除"
-        description={`${deleteTarget?.student?.name}さんの契約を削除しますか？この操作は取り消せません。`}
+        title="通常コースを削除"
+        description={`${deleteTarget?.student?.name}さんの通常コースデータを削除しますか？この操作は取り消せません。`}
         onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget.id); setDeleteTarget(null) }}
         confirmLabel="削除する"
       />
