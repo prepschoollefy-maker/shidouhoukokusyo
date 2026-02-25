@@ -22,6 +22,7 @@ import {
   TrendingUp,
   ExternalLink,
   BookOpenCheck,
+  History,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -61,7 +62,8 @@ const navGroups: (NavItem | NavGroup)[] = [
     items: [
       { href: '/admin/contracts', label: '通常コース管理', icon: FileSignature },
       { href: '/admin/contracts/lectures', label: '講習管理', icon: BookOpenCheck },
-      { href: '/admin/contracts/billing', label: '請求一覧', icon: Receipt },
+      { href: '/admin/contracts/billing', label: '請求・入金', icon: Receipt },
+      { href: '/admin/contracts/billing/history', label: '入金履歴', icon: History },
       { href: '/admin/contracts/dashboard', label: '経営ダッシュボード', icon: TrendingUp },
       { href: 'https://contract.lefy.jp', label: '契約書作成', icon: ExternalLink, external: true },
     ],
@@ -100,8 +102,8 @@ export function AdminSidebar() {
 
   const renderLink = (item: NavItem) => {
     const Icon = item.icon
-    const isActive = item.href === '/admin/mendan'
-      ? pathname === '/admin/mendan'
+    const isActive = ['/admin/mendan', '/admin/contracts/billing'].includes(item.href)
+      ? pathname === item.href
       : pathname.startsWith(item.href)
     return (
       <Link

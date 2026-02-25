@@ -15,6 +15,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
 import { GRADES } from '@/lib/contracts/pricing'
+import { useDashboardAuth } from '@/hooks/use-dashboard-auth'
 import {
   LECTURE_LABELS,
   LECTURE_COURSES,
@@ -42,11 +43,8 @@ interface Lecture {
 }
 
 export default function LecturesPage() {
-  // パスワード認証
-  const [authenticated, setAuthenticated] = useState(false)
-  const [password, setPassword] = useState('')
-  const [storedPw, setStoredPw] = useState('')
-  const [verifying, setVerifying] = useState(false)
+  // パスワード認証（共通フック）
+  const { authenticated, password, setPassword, storedPw, verifying, initializing, handleAuth: authHandler } = useDashboardAuth()
 
   const [lectures, setLectures] = useState<Lecture[]>([])
   const [students, setStudents] = useState<Student[]>([])
@@ -67,28 +65,7 @@ export default function LecturesPage() {
   ])
   const [formNotes, setFormNotes] = useState('')
 
-  const handleAuth = async () => {
-    if (!password) { toast.error('パスワードを入力してください'); return }
-    setVerifying(true)
-    try {
-      const res = await fetch(`/api/lectures?pw=${encodeURIComponent(password)}`)
-      if (res.status === 403) {
-        toast.error('パスワードが正しくありません')
-        setVerifying(false)
-        return
-      }
-      if (!res.ok) throw new Error('エラーが発生しました')
-      const json = await res.json()
-      setLectures(json.data || [])
-      setStoredPw(password)
-      setAuthenticated(true)
-      setLoading(false)
-    } catch {
-      toast.error('認証に失敗しました')
-    } finally {
-      setVerifying(false)
-    }
-  }
+  const handleAuth = () => authHandler('/api/lectures')
 
   const fetchLectures = useCallback(async () => {
     if (!storedPw) return
@@ -106,9 +83,10 @@ export default function LecturesPage() {
   }, [])
 
   useEffect(() => {
-    if (!authenticated) return
-    fetchLectures(); fetchStudents()
-  }, [authenticated, fetchLectures, fetchStudents])
+    if (!authenticated || initializing) return
+    setLoading(true)
+    Promise.all([fetchLectures(), fetchStudents()]).finally(() => setLoading(false))
+  }, [authenticated, initializing, fetchLectures, fetchStudents])
 
   // 選択中の生徒の学年を取得
   const selectedStudent = students.find(s => s.id === formStudentId)
@@ -257,7 +235,8 @@ export default function LecturesPage() {
     }))
   }
 
-  // パスワード入力画面
+  // 初期化中またはパスワード入力画面
+  if (initializing) return <LoadingSpinner />
   if (!authenticated) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">

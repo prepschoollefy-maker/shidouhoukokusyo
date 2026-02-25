@@ -8,14 +8,14 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Plus, Pencil, Trash2, Search, Lock, ChevronsUpDown, Check } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
-import { COURSES, CAMPAIGN_OPTIONS } from '@/lib/contracts/pricing'
+import { COURSES, CAMPAIGN_OPTIONS, GRADES } from '@/lib/contracts/pricing'
+import { useDashboardAuth } from '@/hooks/use-dashboard-auth'
 
 interface Student {
   id: string
@@ -46,11 +46,8 @@ interface Contract {
 type FilterMode = 'active' | 'all' | 'expired'
 
 export default function ContractsPage() {
-  // パスワード認証
-  const [authenticated, setAuthenticated] = useState(false)
-  const [password, setPassword] = useState('')
-  const [storedPw, setStoredPw] = useState('')
-  const [verifying, setVerifying] = useState(false)
+  // パスワード認証（共通フック）
+  const { authenticated, password, setPassword, storedPw, verifying, initializing, handleAuth: authHandler } = useDashboardAuth()
 
   const [contracts, setContracts] = useState<Contract[]>([])
   const [students, setStudents] = useState<Student[]>([])
@@ -61,6 +58,7 @@ export default function ContractsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Contract | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterMode, setFilterMode] = useState<FilterMode>('active')
+  const [sortBy, setSortBy] = useState<'student_number' | 'grade'>('student_number')
 
   // Form state
   const [formStudentId, setFormStudentId] = useState('')
@@ -73,28 +71,7 @@ export default function ContractsPage() {
   const [formCampaign, setFormCampaign] = useState('_none')
   const [calcAmount, setCalcAmount] = useState<number | null>(null)
 
-  const handleAuth = async () => {
-    if (!password) { toast.error('パスワードを入力してください'); return }
-    setVerifying(true)
-    try {
-      const res = await fetch(`/api/contracts?pw=${encodeURIComponent(password)}`)
-      if (res.status === 403) {
-        toast.error('パスワードが正しくありません')
-        setVerifying(false)
-        return
-      }
-      if (!res.ok) throw new Error('エラーが発生しました')
-      const json = await res.json()
-      setContracts(json.data || [])
-      setStoredPw(password)
-      setAuthenticated(true)
-      setLoading(false)
-    } catch {
-      toast.error('認証に失敗しました')
-    } finally {
-      setVerifying(false)
-    }
-  }
+  const handleAuth = () => authHandler('/api/contracts')
 
   const fetchContracts = useCallback(async () => {
     if (!storedPw) return
@@ -112,9 +89,10 @@ export default function ContractsPage() {
   }, [])
 
   useEffect(() => {
-    if (!authenticated) return
-    fetchContracts(); fetchStudents()
-  }, [authenticated, fetchContracts, fetchStudents])
+    if (!authenticated || initializing) return
+    setLoading(true)
+    Promise.all([fetchContracts(), fetchStudents()]).finally(() => setLoading(false))
+  }, [authenticated, initializing, fetchContracts, fetchStudents])
 
   // 選択中の生徒の学年を取得
   const selectedStudent = students.find(s => s.id === formStudentId)
@@ -184,7 +162,10 @@ export default function ContractsPage() {
         headers: { 'Content-Type': 'application/json', 'x-dashboard-pw': storedPw },
         body: JSON.stringify(payload),
       })
-      if (!res.ok) throw new Error('保存に失敗しました')
+      if (!res.ok) {
+        const err = await res.json().catch(() => null)
+        throw new Error(err?.error || '保存に失敗しました')
+      }
       toast.success(editing ? '更新しました' : '登録しました')
       setDialogOpen(false)
       resetForm()
@@ -211,7 +192,8 @@ export default function ContractsPage() {
     setFormCourses(prev => prev.map((c, i) => i === index ? { ...c, [field]: value } : c))
   }
 
-  // パスワード入力画面
+  // 初期化中またはパスワード入力画面
+  if (initializing) return <LoadingSpinner />
   if (!authenticated) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -244,17 +226,29 @@ export default function ContractsPage() {
   if (loading) return <LoadingSpinner />
 
   const today = new Date().toISOString().split('T')[0]
-  const filteredContracts = contracts.filter(c => {
-    if (filterMode === 'active' && c.end_date < today) return false
-    if (filterMode === 'expired' && c.end_date >= today) return false
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase()
-      const name = c.student?.name?.toLowerCase() || ''
-      const num = c.student?.student_number?.toLowerCase() || ''
-      return name.includes(q) || num.includes(q)
-    }
-    return true
-  })
+  const gradeOrder = GRADES as readonly string[]
+  const filteredContracts = contracts
+    .filter(c => {
+      if (filterMode === 'active' && c.end_date < today) return false
+      if (filterMode === 'expired' && c.end_date >= today) return false
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase()
+        const name = c.student?.name?.toLowerCase() || ''
+        const num = c.student?.student_number?.toLowerCase() || ''
+        return name.includes(q) || num.includes(q)
+      }
+      return true
+    })
+    .sort((a, b) => {
+      if (sortBy === 'student_number') {
+        return (a.student?.student_number || '').localeCompare(b.student?.student_number || '', 'ja', { numeric: true })
+      }
+      // 学年順: GRADES配列のインデックスで比較、同学年は塾生番号順
+      const ga = gradeOrder.indexOf(a.grade)
+      const gb = gradeOrder.indexOf(b.grade)
+      if (ga !== gb) return (ga === -1 ? 999 : ga) - (gb === -1 ? 999 : gb)
+      return (a.student?.student_number || '').localeCompare(b.student?.student_number || '', 'ja', { numeric: true })
+    })
 
   const formatYen = (n: number) => `¥${n.toLocaleString()}`
   const formatCourses = (courses: CourseEntry[]) =>
@@ -403,7 +397,7 @@ export default function ContractsPage() {
         </div>
       </div>
 
-      <div className="flex gap-2 items-center">
+      <div className="flex gap-2 items-center flex-wrap">
         <div className="flex rounded-lg border overflow-hidden">
           {(['active', 'all', 'expired'] as FilterMode[]).map(mode => (
             <button
@@ -415,7 +409,18 @@ export default function ContractsPage() {
             </button>
           ))}
         </div>
-        <div className="relative flex-1">
+        <div className="flex rounded-lg border overflow-hidden">
+          {([['student_number', '塾生番号順'], ['grade', '学年順']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              className={`px-3 py-2 text-sm font-medium transition-colors ${sortBy === key ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+              onClick={() => setSortBy(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="生徒名・塾生番号で検索..."
@@ -436,7 +441,6 @@ export default function ContractsPage() {
                 <TableHead>コース</TableHead>
                 <TableHead className="text-right">月謝</TableHead>
                 <TableHead>契約期間</TableHead>
-                <TableHead>キャンペーン</TableHead>
                 <TableHead className="w-20"></TableHead>
               </TableRow>
             </TableHeader>
@@ -455,9 +459,6 @@ export default function ContractsPage() {
                   <TableCell className="text-sm">
                     {c.start_date} ~ {c.end_date}
                   </TableCell>
-                  <TableCell className="text-sm">
-                    {c.campaign ? <Badge variant="secondary">{c.campaign}</Badge> : '-'}
-                  </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(c)}>
@@ -472,7 +473,7 @@ export default function ContractsPage() {
               ))}
               {filteredContracts.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     通常コースデータがありません
                   </TableCell>
                 </TableRow>

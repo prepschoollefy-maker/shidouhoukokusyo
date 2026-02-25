@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json()
   const {
-    name, grade, send_mode, weekly_lesson_count,
+    name, grade, send_mode, weekly_lesson_count, student_number,
     parent_emails, subject_ids, teacher_assignments
   } = body
 
@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
       grade: grade || null,
       send_mode: send_mode || 'manual',
       weekly_lesson_count: weekly_lesson_count || null,
+      student_number: student_number || null,
     })
     .select()
     .single()

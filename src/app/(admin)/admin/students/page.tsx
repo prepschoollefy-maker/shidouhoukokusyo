@@ -19,6 +19,7 @@ interface Student {
   id: string
   name: string
   grade: string | null
+  student_number: string | null
   send_mode: string
   status: 'active' | 'withdrawn'
   parent_emails: { id: string; email: string; label: string | null }[]
@@ -52,6 +53,7 @@ export default function StudentsPage() {
   const [statusFilter, setStatusFilter] = useState<'active' | 'withdrawn'>('active')
 
   // Form state
+  const [studentNumber, setStudentNumber] = useState('')
   const [name, setName] = useState('')
   const [grade, setGrade] = useState('')
   const [emails, setEmails] = useState<{ email: string; label: string }[]>([{ email: '', label: '' }])
@@ -74,13 +76,14 @@ export default function StudentsPage() {
   useEffect(() => { fetchData() }, [statusFilter])
 
   const resetForm = () => {
-    setName(''); setGrade('')
+    setStudentNumber(''); setName(''); setGrade('')
     setEmails([{ email: '', label: '' }])
     setSelectedSubjects([]); setSelectedTeachers([]); setEditing(null)
   }
 
   const openEdit = (s: Student) => {
     setEditing(s)
+    setStudentNumber(s.student_number || '')
     setName(s.name)
     setGrade(s.grade || '')
     setEmails(s.parent_emails.length ? s.parent_emails.map(e => ({ email: e.email, label: e.label || '' })) : [{ email: '', label: '' }])
@@ -96,6 +99,7 @@ export default function StudentsPage() {
     const payload = {
       name,
       grade: grade || null,
+      student_number: studentNumber || null,
       parent_emails: emails.filter(e => e.email).map(e => ({ email: e.email, label: e.label || null })),
       subject_ids: selectedSubjects,
       teacher_assignments: selectedTeachers.map(tid => ({ teacher_id: tid })),
@@ -148,10 +152,11 @@ export default function StudentsPage() {
   }
 
   const handleExport = () => {
-    const header = '名前,学年,メール1,メール2'
+    const header = '塾生番号,名前,学年,メール1,メール2'
     const rows = students.map(s => {
       const emails = s.parent_emails || []
       return [
+        s.student_number || '',
         s.name,
         s.grade || '',
         emails[0]?.email || '',
@@ -193,7 +198,7 @@ export default function StudentsPage() {
   if (loading) return <LoadingSpinner />
 
   const filteredStudents = students.filter(s =>
-    !searchQuery || s.name.includes(searchQuery) || s.grade?.includes(searchQuery)
+    !searchQuery || s.name.includes(searchQuery) || s.grade?.includes(searchQuery) || s.student_number?.includes(searchQuery)
   )
 
   return (
@@ -216,7 +221,7 @@ export default function StudentsPage() {
               <CsvImportDialog
                 title="生徒CSVインポート"
                 description="CSV形式で生徒を一括登録します。ヘッダー行が必要です。"
-                sampleCsv={"名前,学年,メール1,メール2\n山田太郎,中2,father@example.com,mother@example.com\n佐藤花子,高1,,mother@example.com"}
+                sampleCsv={"塾生番号,名前,学年,メール1,メール2\nS001,山田太郎,中2,father@example.com,mother@example.com\nS002,佐藤花子,高1,,mother@example.com"}
                 apiEndpoint="/api/students/import"
                 onSuccess={fetchData}
               />
@@ -227,6 +232,10 @@ export default function StudentsPage() {
               <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                 <DialogHeader><DialogTitle>{editing ? '生徒編集' : '生徒登録'}</DialogTitle></DialogHeader>
                 <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>塾生番号</Label>
+                    <Input value={studentNumber} onChange={(e) => setStudentNumber(e.target.value)} placeholder="例: S001" />
+                  </div>
                   <div className="space-y-2">
                     <Label>氏名 *</Label>
                     <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -307,7 +316,7 @@ export default function StudentsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="生徒名で検索..."
+            placeholder="塾生番号・生徒名で検索..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -320,6 +329,7 @@ export default function StudentsPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>塾生番号</TableHead>
                 <TableHead>氏名</TableHead>
                 <TableHead>学年</TableHead>
                 <TableHead>メール</TableHead>
@@ -331,6 +341,7 @@ export default function StudentsPage() {
             <TableBody>
               {filteredStudents.map((s) => (
                 <TableRow key={s.id}>
+                  <TableCell className="text-muted-foreground text-sm">{s.student_number || '-'}</TableCell>
                   <TableCell className="font-medium">{s.name}</TableCell>
                   <TableCell>{s.grade || '-'}</TableCell>
                   <TableCell>
@@ -381,7 +392,7 @@ export default function StudentsPage() {
               ))}
               {filteredStudents.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     {statusFilter === 'active' ? '通塾生がいません' : '退塾済の生徒はいません'}
                   </TableCell>
                 </TableRow>

@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
     .from('contracts')
     .insert({
       student_id,
+      type: 'initial',
       start_date,
       end_date,
       grade,

@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Lock } from 'lucide-react'
 import { toast } from 'sonner'
+import { useDashboardAuth } from '@/hooks/use-dashboard-auth'
 
 interface MonthData {
   year: number
@@ -24,36 +25,13 @@ export default function ContractDashboardPage() {
   const [months, setMonths] = useState<MonthData[]>([])
   const [loading, setLoading] = useState(false)
 
-  // パスワード認証
-  const [authenticated, setAuthenticated] = useState(false)
-  const [password, setPassword] = useState('')
-  const [verifying, setVerifying] = useState(false)
-  const [storedPw, setStoredPw] = useState('')
+  // パスワード認証（共通フック）
+  const { authenticated, password, setPassword, storedPw, verifying, initializing, handleAuth: authHandler } = useDashboardAuth()
 
-  const handleAuth = async () => {
-    if (!password) { toast.error('パスワードを入力してください'); return }
-    setVerifying(true)
-    try {
-      const res = await fetch(`/api/contracts/summary?year=${year}&month=${month}&pw=${encodeURIComponent(password)}`)
-      if (res.status === 403) {
-        toast.error('パスワードが正しくありません')
-        setVerifying(false)
-        return
-      }
-      if (!res.ok) throw new Error('エラーが発生しました')
-      const json = await res.json()
-      setMonths(json.data || [])
-      setStoredPw(password)
-      setAuthenticated(true)
-    } catch {
-      toast.error('認証に失敗しました')
-    } finally {
-      setVerifying(false)
-    }
-  }
+  const handleAuth = () => authHandler(`/api/contracts/summary?year=${year}&month=${month}`)
 
   useEffect(() => {
-    if (!authenticated) return
+    if (!authenticated || initializing) return
     const fetchSummary = async () => {
       setLoading(true)
       const res = await fetch(`/api/contracts/summary?year=${year}&month=${month}&pw=${encodeURIComponent(storedPw)}`)
@@ -64,9 +42,10 @@ export default function ContractDashboardPage() {
       setLoading(false)
     }
     fetchSummary()
-  }, [year, month, authenticated, storedPw])
+  }, [year, month, authenticated, initializing, storedPw])
 
-  // パスワード入力画面
+  // 初期化中またはパスワード入力画面
+  if (initializing) return <LoadingSpinner />
   if (!authenticated) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -157,39 +136,138 @@ export default function ContractDashboardPage() {
         </Card>
       </div>
 
-      {/* 12ヶ月推移グラフ（CSSのみ） */}
+      {/* 月別売上推移グラフ */}
       <Card>
         <CardContent className="p-4">
           <h3 className="text-sm font-medium text-muted-foreground mb-4">月別売上推移（12ヶ月）</h3>
-          <div className="flex items-end gap-1 h-48">
-            {months.map((m, i) => {
-              const height = maxRevenue > 0 ? (m.revenue / maxRevenue) * 100 : 0
-              const isCurrent = i === months.length - 1
-              return (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full flex flex-col items-center justify-end" style={{ height: '160px' }}>
-                    <div className="text-xs text-muted-foreground mb-1 whitespace-nowrap">
-                      {m.revenue > 0 ? `${Math.floor(m.revenue / 10000)}万` : ''}
+          {(() => {
+            // Y軸の目盛り計算（きりのいい数値で4段階）
+            const rawMax = Math.max(...months.map(m => m.revenue), 1)
+            const step = rawMax <= 500000 ? 100000
+              : rawMax <= 1000000 ? 200000
+              : rawMax <= 2000000 ? 500000
+              : rawMax <= 5000000 ? 1000000
+              : 2000000
+            const gridMax = Math.ceil(rawMax / step) * step
+            const gridLines = Array.from({ length: Math.ceil(gridMax / step) + 1 }, (_, i) => i * step)
+            const chartHeight = 220
+
+            const formatAmount = (n: number) => {
+              if (n >= 10000) return `${(n / 10000).toFixed(n % 10000 === 0 ? 0 : 1)}万`
+              return n.toLocaleString()
+            }
+
+            return (
+              <div className="flex">
+                {/* Y軸ラベル */}
+                <div className="flex flex-col justify-between pr-2 text-right" style={{ height: `${chartHeight}px`, width: '48px' }}>
+                  {[...gridLines].reverse().map((v, i) => (
+                    <div key={i} className="text-xs text-muted-foreground leading-none whitespace-nowrap">
+                      {formatAmount(v)}
                     </div>
-                    <div
-                      className={`w-full rounded-t transition-all ${isCurrent ? 'bg-blue-500' : 'bg-blue-200'}`}
-                      style={{ height: `${Math.max(height, 2)}%`, minHeight: m.revenue > 0 ? '4px' : '2px' }}
-                    />
-                  </div>
-                  <div className="text-xs text-muted-foreground">{m.month}月</div>
+                  ))}
                 </div>
-              )
-            })}
-          </div>
-          {/* 生徒数推移 */}
-          <h3 className="text-sm font-medium text-muted-foreground mt-6 mb-2">月別生徒数</h3>
-          <div className="flex gap-1">
-            {months.map((m, i) => (
-              <div key={i} className="flex-1 text-center">
-                <div className="text-sm font-medium">{m.count}</div>
-                <div className="text-xs text-muted-foreground">{m.month}月</div>
+                {/* グラフ本体 */}
+                <div className="flex-1 relative" style={{ height: `${chartHeight}px` }}>
+                  {/* グリッドライン */}
+                  {gridLines.map((v, i) => (
+                    <div
+                      key={i}
+                      className="absolute left-0 right-0 border-t border-gray-200"
+                      style={{ bottom: `${(v / gridMax) * 100}%` }}
+                    />
+                  ))}
+                  {/* バー */}
+                  <div className="absolute inset-0 flex items-end gap-1 px-1">
+                    {months.map((m, i) => {
+                      const barH = gridMax > 0 ? (m.revenue / gridMax) * chartHeight : 0
+                      const isCurrent = i === months.length - 1
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center justify-end h-full relative group">
+                          {/* ホバー時の詳細ツールチップ */}
+                          <div className="absolute bottom-full mb-1 hidden group-hover:block z-10">
+                            <div className="bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap shadow-lg">
+                              <div>¥{m.revenue.toLocaleString()}</div>
+                              <div>{m.count}人</div>
+                            </div>
+                          </div>
+                          {/* 金額ラベル（当月のみ常時表示） */}
+                          {isCurrent && m.revenue > 0 && (
+                            <div className="text-xs font-semibold text-blue-600 mb-1 whitespace-nowrap">
+                              ¥{m.revenue.toLocaleString()}
+                            </div>
+                          )}
+                          {/* バー */}
+                          <div
+                            className={`w-full max-w-[40px] rounded-t transition-all ${
+                              isCurrent ? 'bg-blue-500' : 'bg-blue-300 hover:bg-blue-400'
+                            }`}
+                            style={{ height: `${Math.max(barH, m.revenue > 0 ? 4 : 2)}px` }}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
-            ))}
+            )
+          })()}
+          {/* X軸ラベル + 生徒数 */}
+          <div className="flex mt-1" style={{ marginLeft: '48px' }}>
+            <div className="flex-1 flex gap-1 px-1">
+              {months.map((m, i) => {
+                const isCurrent = i === months.length - 1
+                return (
+                  <div key={i} className="flex-1 text-center">
+                    <div className={`text-xs ${isCurrent ? 'font-bold text-blue-600' : 'text-muted-foreground'}`}>
+                      {m.month}月
+                    </div>
+                    <div className={`text-xs mt-0.5 ${isCurrent ? 'font-semibold' : 'text-muted-foreground'}`}>
+                      {m.count}人
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 月別詳細テーブル */}
+      <Card>
+        <CardContent className="p-4">
+          <h3 className="text-sm font-medium text-muted-foreground mb-3">月別詳細</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 px-2 font-medium text-muted-foreground">月</th>
+                  <th className="text-right py-2 px-2 font-medium text-muted-foreground">売上</th>
+                  <th className="text-right py-2 px-2 font-medium text-muted-foreground">生徒数</th>
+                  <th className="text-right py-2 px-2 font-medium text-muted-foreground">平均月謝</th>
+                  <th className="text-right py-2 px-2 font-medium text-muted-foreground">前月比</th>
+                </tr>
+              </thead>
+              <tbody>
+                {months.map((m, i) => {
+                  const prev = i > 0 ? months[i - 1] : null
+                  const diff = prev ? m.revenue - prev.revenue : 0
+                  const avg = m.count > 0 ? Math.floor(m.revenue / m.count) : 0
+                  const isCurrent = i === months.length - 1
+                  return (
+                    <tr key={i} className={`border-b last:border-b-0 ${isCurrent ? 'bg-blue-50' : ''}`}>
+                      <td className={`py-2 px-2 ${isCurrent ? 'font-bold' : ''}`}>{m.year}/{m.month}月</td>
+                      <td className="py-2 px-2 text-right font-medium">¥{m.revenue.toLocaleString()}</td>
+                      <td className="py-2 px-2 text-right">{m.count}人</td>
+                      <td className="py-2 px-2 text-right">¥{avg.toLocaleString()}</td>
+                      <td className={`py-2 px-2 text-right ${diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-500' : ''}`}>
+                        {prev ? (diff > 0 ? '+' : '') + `¥${diff.toLocaleString()}` : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </CardContent>
       </Card>

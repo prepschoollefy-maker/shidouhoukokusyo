@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('contracts')
-    .select('*, student:students(id, name, student_number)')
+    .select('*, student:students(id, name, student_number, payment_method)')
     .lte('start_date', lastDay)
     .gte('end_date', firstDay)
     .order('start_date', { ascending: true })
@@ -62,10 +62,10 @@ export async function GET(request: NextRequest) {
 
   const contractTotal = billing.reduce((sum, b) => sum + b.total_amount, 0)
 
-  // 講習データ: 当月の allocation を含む講習を集計
+  // 講習データ: 当月の allocation を含む講習を集計（lecture_id でグループ化）
   const { data: lectureRows, error: lectureError } = await supabase
     .from('lectures')
-    .select('*, student:students(id, name, student_number)')
+    .select('*, student:students(id, name, student_number, payment_method)')
 
   if (lectureError) return NextResponse.json({ error: lectureError.message }, { status: 500 })
 
@@ -74,27 +74,23 @@ export async function GET(request: NextRequest) {
 
   const lectureData: {
     id: string
-    student: { id: string; name: string; student_number: string | null }
+    student: { id: string; name: string; student_number: string | null; payment_method: string }
     label: string
     grade: string
-    course: string
-    unit_price: number
-    lessons: number
-    amount: number
+    courses: { course: string; unit_price: number; lessons: number; amount: number }[]
+    total_amount: number
   }[] = []
 
   for (const l of lectureRows || []) {
     const courses = (l.courses || []) as LectureCourse[]
+    const monthCourses: { course: string; unit_price: number; lessons: number; amount: number }[] = []
+
     for (const c of courses) {
       const monthAlloc = (c.allocation || []).find(
         (a: LectureAlloc) => a.year === year && a.month === month
       )
       if (monthAlloc && monthAlloc.lessons > 0) {
-        lectureData.push({
-          id: l.id,
-          student: l.student,
-          label: l.label,
-          grade: l.grade,
+        monthCourses.push({
           course: c.course,
           unit_price: c.unit_price,
           lessons: monthAlloc.lessons,
@@ -102,9 +98,20 @@ export async function GET(request: NextRequest) {
         })
       }
     }
+
+    if (monthCourses.length > 0) {
+      lectureData.push({
+        id: l.id,
+        student: l.student,
+        label: l.label,
+        grade: l.grade,
+        courses: monthCourses,
+        total_amount: monthCourses.reduce((sum, c) => sum + c.amount, 0),
+      })
+    }
   }
 
-  const lectureTotal = lectureData.reduce((sum, l) => sum + l.amount, 0)
+  const lectureTotal = lectureData.reduce((sum, l) => sum + l.total_amount, 0)
   const total = contractTotal + lectureTotal
 
   return NextResponse.json({ data: billing, lectureData, total, contractTotal, lectureTotal })
