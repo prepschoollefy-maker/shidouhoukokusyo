@@ -70,6 +70,7 @@ export const CAMPAIGN_DISCOUNT_TAX_INCL: Record<string, number> = {
 /** キャンペーンの選択肢 */
 export const CAMPAIGN_OPTIONS = [
   { value: '', label: 'なし' },
+  { value: '入塾金支払い済み', label: '入塾金支払い済み' },
   { value: '入塾金無料', label: '入塾金無料' },
   { value: '入塾金半額', label: '入塾金半額' },
   { value: '講習キャンペーン', label: '講習キャンペーン' },
@@ -112,6 +113,7 @@ export function calcMonthlyAmount(grade: string, courses: CourseEntry[]): number
  */
 export function getEnrollmentFeeForCampaign(campaign: string): number {
   switch (campaign) {
+    case '入塾金支払い済み': return 0
     case '入塾金無料': return 0
     case '入塾金半額': return 16500
     case '講習キャンペーン': return 0
