@@ -43,12 +43,10 @@ export async function GET(request: NextRequest) {
 
   const lectures = lectureRows || []
 
-  // 教材販売データも取得
-  const { data: materialRows, error: materialError } = await supabase
+  // 教材販売データも取得（テーブル未作成等でエラー時は空配列で続行）
+  const { data: materialRows } = await supabase
     .from('material_sales')
     .select('id, student_id, total_amount, billing_year, billing_month')
-
-  if (materialError) return NextResponse.json({ error: materialError.message }, { status: 500 })
 
   const materialSales = materialRows || []
 

@@ -114,6 +114,18 @@ export async function GET(request: NextRequest) {
   const lectureTotal = lectureData.reduce((sum, l) => sum + l.total_amount, 0)
 
   // 教材販売データ: 当月の billing_year/month に該当するもの
+  // テーブル未作成やRLS等でエラーの場合は空配列で続行（請求全体を壊さない）
+  let materialData: {
+    id: string
+    student: { id: string; name: string; student_number: string | null; payment_method: string }
+    item_name: string
+    unit_price: number
+    quantity: number
+    total_amount: number
+    sale_date: string
+    notes: string
+  }[] = []
+
   const { data: materialRows, error: materialError } = await supabase
     .from('material_sales')
     .select('*, student:students(id, name, student_number, payment_method)')
@@ -121,18 +133,18 @@ export async function GET(request: NextRequest) {
     .eq('billing_month', month)
     .order('sale_date', { ascending: true })
 
-  if (materialError) return NextResponse.json({ error: materialError.message }, { status: 500 })
-
-  const materialData = (materialRows || []).map((m) => ({
-    id: m.id,
-    student: m.student,
-    item_name: m.item_name,
-    unit_price: m.unit_price,
-    quantity: m.quantity,
-    total_amount: m.total_amount,
-    sale_date: m.sale_date,
-    notes: m.notes,
-  }))
+  if (!materialError && materialRows) {
+    materialData = materialRows.map((m) => ({
+      id: m.id,
+      student: m.student,
+      item_name: m.item_name,
+      unit_price: m.unit_price,
+      quantity: m.quantity,
+      total_amount: m.total_amount,
+      sale_date: m.sale_date,
+      notes: m.notes,
+    }))
+  }
 
   const materialTotal = materialData.reduce((sum, m) => sum + m.total_amount, 0)
   const total = contractTotal + lectureTotal + materialTotal
