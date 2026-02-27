@@ -76,7 +76,7 @@ const OCR_PROMPT = `あなたは個別指導塾「レフィー」の授業レポ
 export async function performOcr(imageBase64: string, mimeType: string): Promise<OcrResult> {
   const genAI = getGeminiClient()
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-pro',
+    model: 'gemini-2.5-flash',
     generationConfig: { maxOutputTokens: 8192 },
   })
 

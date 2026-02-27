@@ -421,6 +421,7 @@ export function ReportForm({ initialData, reportId, ocrHighlights }: ReportFormP
         {/* Homework assigned */}
         <div className="space-y-2">
           <Label>宿題内容 *</Label>
+          <p className="text-xs text-muted-foreground">※ 宿題を出さない場合は「宿題なし」と入力してください</p>
           <Textarea
             {...register('homework_assigned', { required: true })}
             rows={4}

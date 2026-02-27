@@ -46,7 +46,7 @@ export async function generateLessonSummary(
 ): Promise<string> {
   const genAI = getGeminiClient()
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-pro',
+    model: 'gemini-2.5-flash',
     generationConfig: {
       temperature: 0.3,
       maxOutputTokens: 1024,
@@ -98,7 +98,7 @@ export async function generateMonthlySummary(
 ): Promise<string> {
   const genAI = getGeminiClient()
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-pro',
+    model: 'gemini-2.5-flash',
     generationConfig: {
       temperature: 0.3,
       maxOutputTokens: 2048,
