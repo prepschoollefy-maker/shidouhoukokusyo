@@ -1,4 +1,4 @@
-import { getClaudeClient } from './client'
+import { getGeminiClient } from './client'
 
 interface OcrField {
   value: string
@@ -22,27 +22,7 @@ export interface OcrResult {
   internal_notes: OcrField
 }
 
-export async function performOcr(imageBase64: string, mimeType: string): Promise<OcrResult> {
-  const client = getClaudeClient()
-
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 8192,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-              data: imageBase64,
-            },
-          },
-          {
-            type: 'text',
-            text: `あなたは個別指導塾「レフィー」の授業レポート用紙を読み取る専門家です。
+const OCR_PROMPT = `あなたは個別指導塾「レフィー」の授業レポート用紙を読み取る専門家です。
 この画像は講師が手書きで記入した授業レポートです。
 
 ## 用紙のレイアウト（上から順に）
@@ -91,14 +71,26 @@ export async function performOcr(imageBase64: string, mimeType: string): Promise
   "next_lesson_plan": { "value": "次回やること", "confidence": "high" },
   "internal_notes": { "value": "講師間申し送りの内容", "confidence": "high" }
 }
-\`\`\``,
-          },
-        ],
-      },
-    ],
+\`\`\``
+
+export async function performOcr(imageBase64: string, mimeType: string): Promise<OcrResult> {
+  const genAI = getGeminiClient()
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-pro',
+    generationConfig: { maxOutputTokens: 8192 },
   })
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : ''
+  const result = await model.generateContent([
+    {
+      inlineData: {
+        mimeType,
+        data: imageBase64,
+      },
+    },
+    { text: OCR_PROMPT },
+  ])
+
+  const text = result.response.text()
   // Extract JSON from response - it may be wrapped in ```json ... ``` or preceded by thinking text
   const codeBlockMatch = text.match(/```json\s*([\s\S]*?)```/)
   const jsonStr = codeBlockMatch ? codeBlockMatch[1] : text

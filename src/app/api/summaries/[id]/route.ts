@@ -20,9 +20,9 @@ export async function GET(
         id,
         report:lesson_reports(
           *,
-          student:students!inner(id, name, grade),
-          subject:subjects!inner(id, name),
-          teacher:profiles!inner(id, display_name),
+          student:students(id, name, grade),
+          subject:subjects(id, name),
+          teacher:profiles(id, display_name),
           report_textbooks(id, textbook_name, pages, sort_order),
           report_attitudes(id, attitude_option_id, attitude_option:attitude_options(id, label, category))
         )

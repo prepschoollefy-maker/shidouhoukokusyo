@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { generateMonthlySummary } from '@/lib/claude/summary'
+import { generateMonthlySummary } from '@/lib/gemini/summary'
 import crypto from 'crypto'
 
 export async function GET(request: NextRequest) {
@@ -88,9 +88,9 @@ export async function POST(request: NextRequest) {
     .from('lesson_reports')
     .select(`
       *,
-      student:students!inner(id, name, grade),
-      subject:subjects!inner(id, name),
-      teacher:profiles!inner(id, display_name),
+      student:students(id, name, grade),
+      subject:subjects(id, name),
+      teacher:profiles(id, display_name),
       report_textbooks(id, textbook_name, pages, sort_order),
       report_attitudes(id, attitude_option_id, attitude_option:attitude_options(id, label, category))
     `)

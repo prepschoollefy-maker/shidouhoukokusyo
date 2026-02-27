@@ -23,7 +23,7 @@ export async function GET() {
 
   const { data: recentReports } = await admin
     .from('lesson_reports')
-    .select('teacher_id, teacher:profiles!inner(display_name)')
+    .select('teacher_id, teacher:profiles(display_name)')
     .gte('created_at', sevenDaysAgo.toISOString())
 
   const teacherCounts: Record<string, { name: string; count: number }> = {}

@@ -1,4 +1,4 @@
-import { getClaudeClient } from './client'
+import { getGeminiClient } from './client'
 import type { ReportWithDetails } from '@/types/report'
 
 function formatReportText(r: ReportWithDetails, index: number): string {
@@ -44,18 +44,18 @@ export async function generateLessonSummary(
   studentName: string,
   grade: string | null
 ): Promise<string> {
-  const client = getClaudeClient()
+  const genAI = getGeminiClient()
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-pro',
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 1024,
+    },
+  })
 
   const reportText = formatReportText(report, 0)
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    temperature: 0.3,
-    messages: [
-      {
-        role: 'user',
-        content: `あなたは個別指導塾の授業レポートを保護者向けに要約するアシスタントです。
+  const result = await model.generateContent(`あなたは個別指導塾の授業レポートを保護者向けに要約するアシスタントです。
 以下の1回の授業データをもとに、保護者向けの授業報告を作成してください。
 
 生徒: ${studentName}${grade ? ` (${grade})` : ''}
@@ -82,12 +82,9 @@ ${reportText}
 - ネガティブな内容は建設的に表現する
 - 保護者が読んで「ちゃんと見てもらっている」と感じる具体性を担保する
 - 講師間申し送り（internal_notes）は含めない
-- 全体で300〜500字程度にまとめる`,
-      },
-    ],
-  })
+- 全体で300〜500字程度にまとめる`)
 
-  return response.content[0].type === 'text' ? response.content[0].text : ''
+  return result.response.text()
 }
 
 /**
@@ -99,18 +96,18 @@ export async function generateMonthlySummary(
   grade: string | null,
   periodLabel: string
 ): Promise<string> {
-  const client = getClaudeClient()
+  const genAI = getGeminiClient()
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-pro',
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 2048,
+    },
+  })
 
   const reportTexts = reports.map((r, i) => formatReportText(r, i)).join('\n\n')
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
-    temperature: 0.3,
-    messages: [
-      {
-        role: 'user',
-        content: `あなたは個別指導塾の学習レポートをまとめるアシスタントです。
+  const result = await model.generateContent(`あなたは個別指導塾の学習レポートをまとめるアシスタントです。
 以下の${periodLabel}の授業レポートデータをもとに、保護者向けの学習まとめを作成してください。
 
 生徒: ${studentName}${grade ? ` (${grade})` : ''}
@@ -136,12 +133,9 @@ ${reportTexts}
 - 事実ベースで書く。根拠のない評価をしない
 - ネガティブな内容は建設的に表現する（例：「できなかった」→「課題として残っています」）
 - 保護者が読んで「ちゃんと見てもらっている」と感じる具体性を担保する
-- 講師間申し送り（internal_notes）は含めない`,
-      },
-    ],
-  })
+- 講師間申し送り（internal_notes）は含めない`)
 
-  return response.content[0].type === 'text' ? response.content[0].text : ''
+  return result.response.text()
 }
 
 /**

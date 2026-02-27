@@ -3,13 +3,14 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ClipboardList, PlusCircle, Camera, HelpCircle, LogOut } from 'lucide-react'
+import { ClipboardList, PlusCircle, Camera, Users, HelpCircle, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/reports', label: 'レポート', icon: ClipboardList },
   { href: '/reports/new', label: '新規入力', icon: PlusCircle },
   { href: '/ocr', label: '写真入力', icon: Camera },
+  { href: '/students', label: '生徒カルテ', icon: Users },
   { href: '/guide', label: '使い方', icon: HelpCircle },
 ]
 
@@ -29,7 +30,7 @@ export function TeacherNav() {
       <div className="flex items-center justify-around h-16">
         {navItems.map((item) => {
           const Icon = item.icon
-          const isActive = pathname === item.href
+          const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href + '/'))
           return (
             <Link
               key={item.href}

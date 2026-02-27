@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { generateLessonSummary } from '@/lib/claude/summary'
+import { generateLessonSummary } from '@/lib/gemini/summary'
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
@@ -20,8 +20,8 @@ export async function GET(request: NextRequest) {
     .select(`
       *,
       student:students!inner(id, name, grade),
-      subject:subjects!inner(id, name),
-      teacher:profiles!inner(id, display_name),
+      subject:subjects(id, name),
+      teacher:profiles(id, display_name),
       report_textbooks(id, textbook_name, pages, sort_order),
       report_attitudes(id, attitude_option_id, attitude_option:attitude_options(id, label, category))
     `, { count: 'exact' })
@@ -108,9 +108,9 @@ export async function POST(request: NextRequest) {
         .from('lesson_reports')
         .select(`
           *,
-          student:students!inner(id, name, grade),
-          subject:subjects!inner(id, name),
-          teacher:profiles!inner(id, display_name),
+          student:students(id, name, grade),
+          subject:subjects(id, name),
+          teacher:profiles(id, display_name),
           report_textbooks(id, textbook_name, pages, sort_order),
           report_attitudes(id, attitude_option_id, attitude_option:attitude_options(id, label, category))
         `)
