@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { performOcr } from '@/lib/gemini/ocr'
+import { performOcr } from '@/lib/claude/ocr'
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()

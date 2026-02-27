@@ -33,6 +33,7 @@ interface Report {
   strengths: string | null
   weaknesses: string | null
   free_comment: string | null
+  ai_summary: string | null
   subject: { id: string; name: string }
   teacher: { id: string; display_name: string }
   report_textbooks: { id: string; textbook_name: string; pages: string | null; sort_order: number }[]
@@ -217,78 +218,78 @@ export default function StudentKartePage() {
                     {/* Expanded detail */}
                     {isExpanded && (
                       <div className="px-4 pb-3 pt-0 space-y-2 border-t">
-                        {/* Textbooks */}
-                        {report.report_textbooks.length > 0 && (
-                          <DetailRow label="テキスト・ページ">
-                            {report.report_textbooks
-                              .sort((a, b) => a.sort_order - b.sort_order)
-                              .map((t) => (
-                                <span key={t.id} className="block text-sm">
-                                  {t.textbook_name}{t.pages ? ` (${t.pages})` : ''}
-                                </span>
-                              ))}
-                          </DetailRow>
+                        {report.ai_summary ? (
+                          <>
+                            {/* AI Summary */}
+                            <div className="pt-2">
+                              <span className="text-xs font-medium text-muted-foreground">AI授業レポート</span>
+                              <div className="text-sm mt-1 whitespace-pre-wrap leading-relaxed">{report.ai_summary}</div>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            {/* Fallback: raw data */}
+                            {report.report_textbooks.length > 0 && (
+                              <DetailRow label="テキスト・ページ">
+                                {report.report_textbooks
+                                  .sort((a, b) => a.sort_order - b.sort_order)
+                                  .map((t) => (
+                                    <span key={t.id} className="block text-sm">
+                                      {t.textbook_name}{t.pages ? ` (${t.pages})` : ''}
+                                    </span>
+                                  ))}
+                              </DetailRow>
+                            )}
+                            {report.homework_check && (
+                              <DetailRow label="宿題チェック">
+                                <Badge variant={report.homework_check === 'done' ? 'default' : 'secondary'} className="text-xs">
+                                  {homeworkCheckLabels[report.homework_check] || report.homework_check}
+                                </Badge>
+                              </DetailRow>
+                            )}
+                            {report.homework_assigned && (
+                              <DetailRow label="宿題">{report.homework_assigned}</DetailRow>
+                            )}
+                            {report.next_lesson_plan && (
+                              <DetailRow label="次回予定">{report.next_lesson_plan}</DetailRow>
+                            )}
+                            {positiveAttitudes.length > 0 && (
+                              <DetailRow label="良い点">
+                                <div className="flex flex-wrap gap-1">
+                                  {positiveAttitudes.map((a) => (
+                                    <Badge key={a.id} variant="default" className="text-xs bg-green-100 text-green-800 hover:bg-green-100">
+                                      {a.attitude_option.label}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </DetailRow>
+                            )}
+                            {negativeAttitudes.length > 0 && (
+                              <DetailRow label="課題">
+                                <div className="flex flex-wrap gap-1">
+                                  {negativeAttitudes.map((a) => (
+                                    <Badge key={a.id} variant="secondary" className="text-xs bg-red-50 text-red-700">
+                                      {a.attitude_option.label}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </DetailRow>
+                            )}
+                            {report.strengths && (
+                              <DetailRow label="強み">{report.strengths}</DetailRow>
+                            )}
+                            {report.weaknesses && (
+                              <DetailRow label="弱み">{report.weaknesses}</DetailRow>
+                            )}
+                            {report.free_comment && (
+                              <DetailRow label="自由記述">{report.free_comment}</DetailRow>
+                            )}
+                          </>
                         )}
 
-                        {/* Homework check */}
-                        {report.homework_check && (
-                          <DetailRow label="宿題チェック">
-                            <Badge variant={report.homework_check === 'done' ? 'default' : 'secondary'} className="text-xs">
-                              {homeworkCheckLabels[report.homework_check] || report.homework_check}
-                            </Badge>
-                          </DetailRow>
-                        )}
-
-                        {/* Homework assigned */}
-                        {report.homework_assigned && (
-                          <DetailRow label="宿題">{report.homework_assigned}</DetailRow>
-                        )}
-
-                        {/* Next lesson plan */}
-                        {report.next_lesson_plan && (
-                          <DetailRow label="次回予定">{report.next_lesson_plan}</DetailRow>
-                        )}
-
-                        {/* Internal notes */}
+                        {/* Internal notes - always shown (excluded from AI summary) */}
                         {report.internal_notes && (
                           <DetailRow label="講師間申し送り">{report.internal_notes}</DetailRow>
-                        )}
-
-                        {/* Attitudes */}
-                        {positiveAttitudes.length > 0 && (
-                          <DetailRow label="良い点">
-                            <div className="flex flex-wrap gap-1">
-                              {positiveAttitudes.map((a) => (
-                                <Badge key={a.id} variant="default" className="text-xs bg-green-100 text-green-800 hover:bg-green-100">
-                                  {a.attitude_option.label}
-                                </Badge>
-                              ))}
-                            </div>
-                          </DetailRow>
-                        )}
-                        {negativeAttitudes.length > 0 && (
-                          <DetailRow label="課題">
-                            <div className="flex flex-wrap gap-1">
-                              {negativeAttitudes.map((a) => (
-                                <Badge key={a.id} variant="secondary" className="text-xs bg-red-50 text-red-700">
-                                  {a.attitude_option.label}
-                                </Badge>
-                              ))}
-                            </div>
-                          </DetailRow>
-                        )}
-
-                        {/* Strengths/Weaknesses */}
-                        {report.strengths && (
-                          <DetailRow label="強み">{report.strengths}</DetailRow>
-                        )}
-                        {report.weaknesses && (
-                          <DetailRow label="弱み">{report.weaknesses}</DetailRow>
-                        )}
-
-                        {/* Free comment */}
-                        {report.free_comment && (
-                          <DetailRow label="自由記述">{report.free_comment}</DetailRow>
                         )}
                       </div>
                     )}

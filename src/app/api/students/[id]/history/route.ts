@@ -35,7 +35,7 @@ export async function GET(
     .from('lesson_reports')
     .select(`
       id, lesson_date, unit_covered, homework_check, homework_assigned,
-      next_lesson_plan, internal_notes, strengths, weaknesses, free_comment,
+      next_lesson_plan, internal_notes, strengths, weaknesses, free_comment, ai_summary,
       subject:subjects(id, name),
       teacher:profiles(id, display_name),
       report_textbooks(id, textbook_name, pages, sort_order),

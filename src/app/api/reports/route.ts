@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { generateLessonSummary } from '@/lib/gemini/summary'
+import { generateLessonSummary } from '@/lib/claude/summary'
+import { getAiPromptSettings } from '@/lib/settings'
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
@@ -134,10 +135,12 @@ export async function POST(request: NextRequest) {
 
       if (!fullReport) return
 
+      const { ai_lesson_prompt } = await getAiPromptSettings()
       const summary = await generateLessonSummary(
         fullReport,
         fullReport.student.name,
-        fullReport.student.grade
+        fullReport.student.grade,
+        ai_lesson_prompt
       )
 
       await admin

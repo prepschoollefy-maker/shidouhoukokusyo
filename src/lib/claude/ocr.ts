@@ -1,4 +1,4 @@
-import { getGeminiClient } from './client'
+import { getClaudeClient } from './client'
 
 interface OcrField {
   value: string
@@ -49,8 +49,7 @@ const OCR_PROMPT = `あなたは個別指導塾「レフィー」の授業レポ
 - 読めない文字は前後の文脈から推測してください。それでも不明な場合のみ confidence を "low" にしてください
 - 空欄の項目は value を空文字列にしてください
 
-まず、画像の手書き内容をじっくり観察し、各欄に何が書かれているか考えてください。
-その後、以下のJSON形式で結果を出力してください。
+以下のJSON形式で結果を出力してください。JSONのみを出力し、他のテキストは含めないでください。
 
 \`\`\`json
 {
@@ -74,24 +73,35 @@ const OCR_PROMPT = `あなたは個別指導塾「レフィー」の授業レポ
 \`\`\``
 
 export async function performOcr(imageBase64: string, mimeType: string): Promise<OcrResult> {
-  const genAI = getGeminiClient()
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
-    generationConfig: { maxOutputTokens: 8192 },
+  const client = getClaudeClient()
+
+  const mediaType = mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+
+  const message = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 4096,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: mediaType,
+              data: imageBase64,
+            },
+          },
+          {
+            type: 'text',
+            text: OCR_PROMPT,
+          },
+        ],
+      },
+    ],
   })
 
-  const result = await model.generateContent([
-    {
-      inlineData: {
-        mimeType,
-        data: imageBase64,
-      },
-    },
-    { text: OCR_PROMPT },
-  ])
-
-  const text = result.response.text()
-  // Extract JSON from response - it may be wrapped in ```json ... ``` or preceded by thinking text
+  const text = message.content[0].type === 'text' ? message.content[0].text : ''
   const codeBlockMatch = text.match(/```json\s*([\s\S]*?)```/)
   const jsonStr = codeBlockMatch ? codeBlockMatch[1] : text
   const jsonMatch = jsonStr.match(/\{[\s\S]*\}/)

@@ -9,21 +9,30 @@ import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { PaginationControl } from '@/components/ui/pagination-control'
-import { FileText, Search } from 'lucide-react'
+import { FileText, Search, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 
-interface Report {
+interface ReportItem {
   id: string
   lesson_date: string
   unit_covered: string
-  student: { id: string; name: string }
-  subject: { id: string; name: string }
-  teacher: { display_name: string }
+  subject_name: string
+  teacher_name: string
+}
+
+interface StudentGroup {
+  student_id: string
+  student_name: string
+  grade: string | null
+  subjects: string[]
+  report_count: number
+  latest_date: string
+  latest_reports: ReportItem[]
 }
 
 const PER_PAGE = 20
 
 export default function AdminReportsPage() {
-  const [reports, setReports] = useState<Report[]>([])
+  const [groups, setGroups] = useState<StudentGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [inputValue, setInputValue] = useState('')
   const [search, setSearch] = useState('')
@@ -31,7 +40,10 @@ export default function AdminReportsPage() {
   const [totalCount, setTotalCount] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
 
-  // Debounce search input
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [fullReports, setFullReports] = useState<Record<string, ReportItem[]>>({})
+  const [loadingFull, setLoadingFull] = useState<Set<string>>(new Set())
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearch(inputValue)
@@ -40,7 +52,7 @@ export default function AdminReportsPage() {
     return () => clearTimeout(timer)
   }, [inputValue])
 
-  const fetchReports = useCallback(async () => {
+  const fetchGroups = useCallback(async () => {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -49,9 +61,9 @@ export default function AdminReportsPage() {
     if (search) params.set('search', search)
 
     try {
-      const res = await fetch(`/api/reports?${params}`, { signal: controller.signal })
+      const res = await fetch(`/api/reports/grouped?${params}`, { signal: controller.signal })
       const json = await res.json()
-      setReports(json.data || [])
+      setGroups(json.data || [])
       setTotalCount(json.count || 0)
     } catch (e) {
       if ((e as Error).name === 'AbortError') return
@@ -59,9 +71,42 @@ export default function AdminReportsPage() {
     setLoading(false)
   }, [page, search])
 
-  useEffect(() => { fetchReports() }, [fetchReports])
+  useEffect(() => { fetchGroups() }, [fetchGroups])
 
   const totalPages = Math.ceil(totalCount / PER_PAGE)
+
+  const toggleExpanded = async (studentId: string, reportCount: number) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(studentId)) next.delete(studentId)
+      else next.add(studentId)
+      return next
+    })
+
+    if (!expandedIds.has(studentId) && reportCount > 5 && !fullReports[studentId]) {
+      setLoadingFull(prev => new Set(prev).add(studentId))
+      try {
+        const res = await fetch(`/api/reports?student_id=${studentId}&limit=100`)
+        const json = await res.json()
+        const items: ReportItem[] = (json.data || []).map((r: { id: string; lesson_date: string; unit_covered: string; subject: { name: string }; teacher: { display_name: string } }) => ({
+          id: r.id,
+          lesson_date: r.lesson_date,
+          unit_covered: r.unit_covered,
+          subject_name: r.subject.name,
+          teacher_name: r.teacher.display_name,
+        }))
+        setFullReports(prev => ({ ...prev, [studentId]: items }))
+      } catch {
+        // fallback to latest_reports
+      } finally {
+        setLoadingFull(prev => {
+          const next = new Set(prev)
+          next.delete(studentId)
+          return next
+        })
+      }
+    }
+  }
 
   if (loading) {
     return <LoadingSpinner />
@@ -81,7 +126,7 @@ export default function AdminReportsPage() {
         />
       </div>
 
-      {reports.length === 0 ? (
+      {groups.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <FileText className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
@@ -93,29 +138,73 @@ export default function AdminReportsPage() {
         </Card>
       ) : (
         <>
-          <p className="text-sm text-muted-foreground">{totalCount}件</p>
+          <p className="text-sm text-muted-foreground">{totalCount}名の生徒</p>
           <div className="space-y-2">
-            {reports.map((report) => (
-              <Link key={report.id} href={`/admin/reports/${report.id}`}>
-                <Card className="hover:bg-gray-50 transition-colors">
-                  <CardContent className="py-3 px-4">
-                    <div className="flex items-center justify-between">
-                      <div>
+            {groups.map((group) => {
+              const isExpanded = expandedIds.has(group.student_id)
+              const reports = fullReports[group.student_id] || group.latest_reports
+              const isLoadingMore = loadingFull.has(group.student_id)
+
+              return (
+                <Card key={group.student_id}>
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => toggleExpanded(group.student_id, group.report_count)}
+                  >
+                    <CardContent className="py-3 px-4">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium">{report.student.name}</span>
-                          <Badge variant="secondary">{report.subject.name}</Badge>
-                          <span className="text-xs text-muted-foreground">{report.teacher.display_name}</span>
+                          {isExpanded
+                            ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                            : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                          }
+                          <span className="font-medium">{group.student_name}</span>
+                          {group.grade && <Badge variant="outline" className="text-xs">{group.grade}</Badge>}
+                          {group.subjects.map(s => (
+                            <Badge key={s} variant="secondary">{s}</Badge>
+                          ))}
                         </div>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {format(new Date(report.lesson_date), 'M月d日(E)', { locale: ja })}
-                          {' · '}{report.unit_covered}
-                        </p>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                          <span>{group.report_count}件</span>
+                          <span>{format(new Date(group.latest_date), 'M/d', { locale: ja })}</span>
+                        </div>
                       </div>
+                    </CardContent>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="border-t px-4 pb-3">
+                      {isLoadingMore ? (
+                        <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          読み込み中...
+                        </div>
+                      ) : (
+                        <div className="divide-y">
+                          {reports.map((r) => (
+                            <Link
+                              key={r.id}
+                              href={`/admin/reports/${r.id}`}
+                              className="flex items-center justify-between py-2 hover:bg-gray-50 -mx-2 px-2 rounded transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-muted-foreground w-16">
+                                  {format(new Date(r.lesson_date), 'M/d(E)', { locale: ja })}
+                                </span>
+                                <Badge variant="secondary" className="text-xs">{r.subject_name}</Badge>
+                                <span className="text-sm">{r.unit_covered}</span>
+                              </div>
+                              <span className="text-xs text-muted-foreground">{r.teacher_name}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </CardContent>
+                  )}
                 </Card>
-              </Link>
-            ))}
+              )
+            })}
           </div>
           <PaginationControl page={page} totalPages={totalPages} onPageChange={setPage} />
         </>

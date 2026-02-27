@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Pencil } from 'lucide-react'
+import { Pencil, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -46,6 +46,7 @@ export default function AdminReportDetailPage() {
   const [loading, setLoading] = useState(true)
   const [aiSummary, setAiSummary] = useState('')
   const [saving, setSaving] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -57,6 +58,23 @@ export default function AdminReportDetailPage() {
     }
     fetchReport()
   }, [params.id])
+
+  const handleRegenerate = async () => {
+    if (regenerating) return
+    setRegenerating(true)
+    try {
+      const res = await fetch(`/api/reports/${params.id}/regenerate-summary`, { method: 'POST' })
+      if (!res.ok) throw new Error('AI要約の再生成に失敗しました')
+      const json = await res.json()
+      setAiSummary(json.ai_summary)
+      setReport((prev) => prev ? { ...prev, ai_summary: json.ai_summary } : prev)
+      toast.success('AI要約を再生成しました')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'エラーが発生しました')
+    } finally {
+      setRegenerating(false)
+    }
+  }
 
   const handleSaveAiSummary = async () => {
     if (saving) return
@@ -213,9 +231,15 @@ export default function AdminReportDetailPage() {
               className="min-h-[400px] font-mono text-sm"
               placeholder="AI要約がまだ生成されていません"
             />
-            <Button onClick={handleSaveAiSummary} disabled={saving}>
-              {saving ? '保存中...' : 'AI要約を保存'}
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={handleSaveAiSummary} disabled={saving}>
+                {saving ? '保存中...' : 'AI要約を保存'}
+              </Button>
+              <Button variant="outline" onClick={handleRegenerate} disabled={regenerating}>
+                <RefreshCw className={`h-4 w-4 mr-1 ${regenerating ? 'animate-spin' : ''}`} />
+                {regenerating ? '生成中...' : '再生成'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

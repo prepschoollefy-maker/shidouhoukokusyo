@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { generateMonthlySummary } from '@/lib/gemini/summary'
+import { generateMonthlySummary } from '@/lib/claude/summary'
+import { getAiPromptSettings } from '@/lib/settings'
 import crypto from 'crypto'
 
 export async function GET(request: NextRequest) {
@@ -109,7 +110,8 @@ export async function POST(request: NextRequest) {
     const ed = new Date(end_date)
     const periodLabel = `${sd.getMonth() + 1}/${sd.getDate()}〜${ed.getMonth() + 1}/${ed.getDate()}`
 
-    const content = await generateMonthlySummary(reports, student.name, student.grade, periodLabel)
+    const { ai_monthly_prompt } = await getAiPromptSettings()
+    const content = await generateMonthlySummary(reports, student.name, student.grade, periodLabel, ai_monthly_prompt)
 
     const periodStart = reports[0].lesson_date
     const periodEnd = reports[reports.length - 1].lesson_date

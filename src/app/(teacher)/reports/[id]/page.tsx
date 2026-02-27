@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, RefreshCw } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -44,6 +44,7 @@ export default function ReportDetailPage() {
   const [report, setReport] = useState<ReportDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -54,6 +55,22 @@ export default function ReportDetailPage() {
     }
     fetchReport()
   }, [params.id])
+
+  const handleRegenerate = async () => {
+    if (regenerating) return
+    setRegenerating(true)
+    try {
+      const res = await fetch(`/api/reports/${params.id}/regenerate-summary`, { method: 'POST' })
+      if (!res.ok) throw new Error('AI要約の再生成に失敗しました')
+      const json = await res.json()
+      setReport((prev) => prev ? { ...prev, ai_summary: json.ai_summary } : prev)
+      toast.success('AI要約を再生成しました')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'エラーが発生しました')
+    } finally {
+      setRegenerating(false)
+    }
+  }
 
   const handleDelete = async () => {
     try {
@@ -198,12 +215,25 @@ export default function ReportDetailPage() {
             </div>
           )}
 
-          {report.ai_summary && (
-            <div>
+          <div>
+            <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium text-muted-foreground">AI授業レポート</h4>
-              <p className="mt-1 text-sm whitespace-pre-wrap bg-blue-50 p-3 rounded">{report.ai_summary}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRegenerate}
+                disabled={regenerating}
+              >
+                <RefreshCw className={`h-3 w-3 mr-1 ${regenerating ? 'animate-spin' : ''}`} />
+                {regenerating ? '生成中...' : report.ai_summary ? '再生成' : 'AI要約を生成'}
+              </Button>
             </div>
-          )}
+            {report.ai_summary ? (
+              <p className="mt-1 text-sm whitespace-pre-wrap bg-blue-50 p-3 rounded">{report.ai_summary}</p>
+            ) : (
+              <p className="mt-1 text-sm text-muted-foreground">AI要約がまだ生成されていません</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { toast } from 'sonner'
-import { FileText, Loader2 } from 'lucide-react'
+import { FileText, Loader2, Send } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 interface SummaryItem {
@@ -66,6 +66,12 @@ function SummariesContent() {
   const [generating, setGenerating] = useState(false)
   const [progress, setProgress] = useState({ current: 0, total: 0, currentName: '' })
 
+  // Bulk send
+  const [selectedSendIds, setSelectedSendIds] = useState<Set<string>>(new Set())
+  const [sendDialogOpen, setSendDialogOpen] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [sendProgress, setSendProgress] = useState({ current: 0, total: 0, currentName: '' })
+
   // Date range (default: first of current month to today)
   const now = new Date()
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -88,6 +94,9 @@ function SummariesContent() {
   }
 
   useEffect(() => { fetchSummaries() }, [statusFilter])
+
+  // Clear bulk selection when filter changes
+  useEffect(() => { setSelectedSendIds(new Set()) }, [statusFilter])
 
   // Fetch target students when date range changes
   const fetchStudents = async () => {
@@ -178,6 +187,79 @@ function SummariesContent() {
 
     setDialogOpen(false)
     setGenerating(false)
+    fetchSummaries()
+  }
+
+  // Bulk send helpers
+  const sendableSummaries = summaries.filter(s => s.status !== 'sent')
+
+  const toggleSendItem = (id: string) => {
+    setSelectedSendIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAllSend = () => {
+    if (selectedSendIds.size === sendableSummaries.length) {
+      setSelectedSendIds(new Set())
+    } else {
+      setSelectedSendIds(new Set(sendableSummaries.map(s => s.id)))
+    }
+  }
+
+  const handleBulkSend = async () => {
+    if (sending || selectedSendIds.size === 0) return
+    setSending(true)
+
+    const targets = summaries.filter(s => selectedSendIds.has(s.id))
+    setSendProgress({ current: 0, total: targets.length, currentName: '' })
+
+    let successCount = 0
+    const errors: string[] = []
+
+    for (let i = 0; i < targets.length; i++) {
+      const s = targets[i]
+      setSendProgress({ current: i, total: targets.length, currentName: s.student.name })
+
+      try {
+        // Step 1: Approve if not already approved
+        if (s.status !== 'approved') {
+          const approveRes = await fetch(`/api/summaries/${s.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'approved' }),
+          })
+          if (!approveRes.ok) throw new Error('承認に失敗')
+        }
+
+        // Step 2: Send email
+        const sendRes = await fetch('/api/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ summary_id: s.id }),
+        })
+        if (!sendRes.ok) {
+          const err = await sendRes.json()
+          throw new Error(err.error || '送信に失敗')
+        }
+        successCount++
+      } catch (e) {
+        errors.push(`${s.student.name}: ${e instanceof Error ? e.message : '失敗'}`)
+      }
+    }
+
+    setSendProgress({ current: targets.length, total: targets.length, currentName: '' })
+    toast.success(`${successCount}/${targets.length}件を送信しました`)
+    if (errors.length) {
+      toast.error(`エラー: ${errors.join(', ')}`)
+    }
+
+    setSendDialogOpen(false)
+    setSending(false)
+    setSelectedSendIds(new Set())
     fetchSummaries()
   }
 
@@ -303,6 +385,54 @@ function SummariesContent() {
         </div>
       </div>
 
+      {/* Bulk send action bar */}
+      {selectedSendIds.size > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border bg-blue-50 border-blue-200 p-3">
+          <span className="text-sm font-medium">{selectedSendIds.size}件選択中</span>
+          <button
+            type="button"
+            className="text-xs text-blue-600 hover:underline"
+            onClick={toggleAllSend}
+          >
+            {selectedSendIds.size === sendableSummaries.length ? 'すべて解除' : 'すべて選択'}
+          </button>
+          <div className="flex-1" />
+          <Dialog open={sendDialogOpen} onOpenChange={(open) => { if (!sending) setSendDialogOpen(open) }}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1">
+                <Send className="h-3.5 w-3.5" />
+                一斉送信
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>一斉送信確認</DialogTitle>
+                <DialogDescription>
+                  選択した{selectedSendIds.size}件の定期レポートを保護者へメール送信します。未承認のレポートは自動的に承認されます。
+                </DialogDescription>
+              </DialogHeader>
+
+              {sending ? (
+                <div className="space-y-3 py-2">
+                  <div className="flex justify-between text-sm">
+                    <span>{sendProgress.currentName ? `送信中: ${sendProgress.currentName}` : '準備中...'}</span>
+                    <span>{sendProgress.current}/{sendProgress.total}</span>
+                  </div>
+                  <Progress value={sendProgress.total ? (sendProgress.current / sendProgress.total) * 100 : 0} />
+                </div>
+              ) : (
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setSendDialogOpen(false)}>キャンセル</Button>
+                  <Button onClick={handleBulkSend}>
+                    {selectedSendIds.size}件を送信する
+                  </Button>
+                </DialogFooter>
+              )}
+            </DialogContent>
+          </Dialog>
+        </div>
+      )}
+
       {summaries.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
@@ -314,26 +444,35 @@ function SummariesContent() {
       ) : (
         <div className="space-y-2">
           {summaries.map((s) => (
-            <Link key={s.id} href={`/admin/summaries/${s.id}`}>
-              <Card className="hover:bg-gray-50 transition-colors">
-                <CardContent className="py-3 px-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{s.student.name}</span>
-                        {s.subject && <Badge variant="secondary">{s.subject.name}</Badge>}
-                        <Badge className={statusColors[s.status]}>{statusLabels[s.status]}</Badge>
+            <div key={s.id} className="flex items-center gap-2">
+              {s.status !== 'sent' && (
+                <Checkbox
+                  checked={selectedSendIds.has(s.id)}
+                  onCheckedChange={() => toggleSendItem(s.id)}
+                />
+              )}
+              {s.status === 'sent' && <div className="w-4" />}
+              <Link href={`/admin/summaries/${s.id}`} className="flex-1">
+                <Card className="hover:bg-gray-50 transition-colors">
+                  <CardContent className="py-3 px-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{s.student.name}</span>
+                          {s.subject && <Badge variant="secondary">{s.subject.name}</Badge>}
+                          <Badge className={statusColors[s.status]}>{statusLabels[s.status]}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {format(new Date(s.period_start), 'M/d', { locale: ja })} - {format(new Date(s.period_end), 'M/d', { locale: ja })}
+                          {' · '}{s.report_count}件のレポート
+                        </p>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {format(new Date(s.period_start), 'M/d', { locale: ja })} - {format(new Date(s.period_end), 'M/d', { locale: ja })}
-                        {' · '}{s.report_count}件のレポート
-                      </p>
+                      <span className="text-muted-foreground">›</span>
                     </div>
-                    <span className="text-muted-foreground">›</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+                  </CardContent>
+                </Card>
+              </Link>
+            </div>
           ))}
         </div>
       )}
