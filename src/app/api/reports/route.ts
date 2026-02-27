@@ -15,11 +15,23 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(searchParams.get('limit') || '20')
   const offset = (page - 1) * limit
 
+  // When searching by student name, first resolve matching student IDs
+  // to avoid unreliable PostgREST embedded resource filtering
+  let studentIdFilter: string[] | null = null
+  if (search) {
+    const admin = createAdminClient()
+    const { data: matchedStudents } = await admin
+      .from('students')
+      .select('id')
+      .ilike('name', `%${search}%`)
+    studentIdFilter = matchedStudents?.map(s => s.id) || []
+  }
+
   let query = supabase
     .from('lesson_reports')
     .select(`
       *,
-      student:students!inner(id, name, grade),
+      student:students(id, name, grade),
       subject:subjects(id, name),
       teacher:profiles(id, display_name),
       report_textbooks(id, textbook_name, pages, sort_order),
@@ -32,8 +44,11 @@ export async function GET(request: NextRequest) {
     query = query.eq('student_id', studentId)
   }
 
-  if (search) {
-    query = query.ilike('student.name', `%${search}%`)
+  if (studentIdFilter !== null) {
+    if (studentIdFilter.length === 0) {
+      return NextResponse.json({ data: [], count: 0, page, limit })
+    }
+    query = query.in('student_id', studentIdFilter)
   }
 
   // RLSが講師のアクセス制御を行う（自分のレポート + 担当生徒のレポート）

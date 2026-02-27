@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -25,30 +25,41 @@ const PER_PAGE = 20
 export default function AdminReportsPage() {
   const [reports, setReports] = useState<Report[]>([])
   const [loading, setLoading] = useState(true)
+  const [inputValue, setInputValue] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+  const abortRef = useRef<AbortController | null>(null)
 
-  const fetchReports = useCallback(() => {
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(inputValue)
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [inputValue])
+
+  const fetchReports = useCallback(async () => {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     const params = new URLSearchParams({ page: String(page), limit: String(PER_PAGE) })
     if (search) params.set('search', search)
 
-    fetch(`/api/reports?${params}`)
-      .then(res => res.json())
-      .then(json => {
-        setReports(json.data || [])
-        setTotalCount(json.count || 0)
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
+    try {
+      const res = await fetch(`/api/reports?${params}`, { signal: controller.signal })
+      const json = await res.json()
+      setReports(json.data || [])
+      setTotalCount(json.count || 0)
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return
+    }
+    setLoading(false)
   }, [page, search])
 
   useEffect(() => { fetchReports() }, [fetchReports])
-
-  const handleSearch = (value: string) => {
-    setSearch(value)
-    setPage(1)
-  }
 
   const totalPages = Math.ceil(totalCount / PER_PAGE)
 
@@ -64,8 +75,8 @@ export default function AdminReportsPage() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder="生徒名で検索..."
-          value={search}
-          onChange={(e) => handleSearch(e.target.value)}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
           className="pl-9"
         />
       </div>
