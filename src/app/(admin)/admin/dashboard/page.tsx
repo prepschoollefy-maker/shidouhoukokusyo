@@ -4,13 +4,12 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
-import { FileText, AlertTriangle, Users } from 'lucide-react'
+import { FileText, Users } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 interface DashboardData {
   unchecked_summaries: number
   teacher_report_counts: { name: string; count: number }[]
-  missing_report_alerts: { student_id: string; student_name: string; expected: number; actual: number }[]
 }
 
 export default function DashboardPage() {
@@ -32,7 +31,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">ダッシュボード</h2>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <Link href="/admin/summaries?status=unchecked">
           <Card className="hover:bg-gray-50 transition-colors">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -71,25 +70,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">未入力アラート</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {data?.missing_report_alerts?.length ? (
-              <ul className="space-y-1">
-                {data.missing_report_alerts.map((a, i) => (
-                  <li key={i} className="text-sm text-orange-700">
-                    {a.student_name}: {a.actual}/{a.expected}コマ
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-green-600">アラートなし</p>
-            )}
-          </CardContent>
-        </Card>
       </div>
     </div>
   )
