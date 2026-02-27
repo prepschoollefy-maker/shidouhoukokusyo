@@ -3,6 +3,22 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/resend/client'
 
+// セクションタイトルに応じたテーマカラー
+const sectionColorMap: [RegExp, string, string][] = [
+  [/学習(内容|進捗)/, '#3b82f6', '#eff6ff'],  // blue
+  [/理解度|理解/, '#10b981', '#ecfdf5'],        // emerald
+  [/様子/, '#f59e0b', '#fffbeb'],              // amber
+  [/方針|家庭|お願い/, '#8b5cf6', '#f5f3ff'],  // purple
+  [/宿題|次回/, '#6366f1', '#eef2ff'],         // indigo
+]
+
+function getSectionColors(title: string): { accent: string; bg: string } {
+  for (const [pattern, accent, bg] of sectionColorMap) {
+    if (pattern.test(title)) return { accent, bg }
+  }
+  return { accent: '#64748b', bg: '#f8fafc' }
+}
+
 function buildHtmlEmail(
   studentName: string,
   content: string,
@@ -10,40 +26,66 @@ function buildHtmlEmail(
   schoolName: string,
   signature: string
 ): string {
-  // Convert 【section】 headers and newlines to HTML
-  const htmlContent = content
-    .replace(/【([^】]+)】/g, '<h2 style="font-size:16px;font-weight:bold;color:#1a1a2e;margin:24px 0 8px 0;padding-bottom:6px;border-bottom:2px solid #e8eaf0;">$1</h2>')
-    .replace(/\n/g, '<br>')
+  // Clean markdown artifacts and convert to HTML
+  let cleaned = content
+    .replace(/^#{1,6}\s*/gm, '')     // strip ## headings
+    .replace(/^---+$/gm, '')          // strip ---
+    .replace(/^\*{3,}$/gm, '')        // strip ***
+    .replace(/\n{3,}/g, '\n\n')       // collapse excess newlines
+
+  // Convert 【section】 to styled blocks with color coding
+  cleaned = cleaned.replace(/【([^】]+)】([\s\S]*?)(?=【|$)/g, (_match, title: string, body: string) => {
+    const { accent, bg } = getSectionColors(title)
+    const bodyHtml = body.trim()
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/「([^」]+)」/g, '<strong style="color:#1e293b;">「$1」</strong>')
+      .replace(/\n/g, '<br>')
+    return `
+      <div style="margin:20px 0;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0;">
+        <div style="background:${bg};padding:10px 16px;border-left:4px solid ${accent};">
+          <h2 style="margin:0;font-size:15px;font-weight:bold;color:${accent};">${title}</h2>
+        </div>
+        <div style="padding:14px 16px;font-size:14px;line-height:1.9;color:#374151;">
+          ${bodyHtml}
+        </div>
+      </div>`
+  })
+
+  // Handle any remaining content not inside sections
+  if (!cleaned.includes('<div style="margin:20px')) {
+    cleaned = cleaned
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/「([^」]+)」/g, '<strong style="color:#1e293b;">「$1」</strong>')
+      .replace(/\n/g, '<br>')
+  }
 
   return `<!DOCTYPE html>
 <html lang="ja">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background-color:#f5f7fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans',sans-serif;">
+<body style="margin:0;padding:0;background-color:#f0f4f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans','Hiragino Kaku Gothic ProN',sans-serif;">
   <div style="max-width:600px;margin:0 auto;padding:20px;">
     <!-- Header -->
-    <div style="background:linear-gradient(135deg,#4f46e5,#3b82f6);border-radius:12px 12px 0 0;padding:24px 28px;">
-      <p style="margin:0;font-size:13px;color:rgba(255,255,255,0.8);">${schoolName}</p>
-      <h1 style="margin:6px 0 0;font-size:20px;color:#fff;font-weight:bold;">${studentName}さんの学習レポート</h1>
+    <div style="background:linear-gradient(135deg,#4f46e5,#3b82f6);border-radius:16px 16px 0 0;padding:28px 28px 24px;">
+      <p style="margin:0;font-size:13px;color:rgba(255,255,255,0.75);letter-spacing:0.5px;">${schoolName}</p>
+      <h1 style="margin:8px 0 0;font-size:20px;color:#fff;font-weight:bold;line-height:1.4;">${studentName}さんの学習レポート</h1>
     </div>
 
     <!-- Body -->
-    <div style="background:#fff;padding:28px;border-radius:0 0 12px 12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
-      <div style="font-size:14px;line-height:1.8;color:#333;">
-        ${htmlContent}
-      </div>
+    <div style="background:#fff;padding:24px 20px;border-radius:0 0 16px 16px;box-shadow:0 4px 12px rgba(0,0,0,0.05);">
+      ${cleaned}
 
       <!-- CTA Button -->
       <div style="text-align:center;margin:32px 0 16px;">
-        <a href="${viewUrl}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:bold;">
+        <a href="${viewUrl}" style="display:inline-block;background:linear-gradient(135deg,#4f46e5,#3b82f6);color:#fff;text-decoration:none;padding:14px 36px;border-radius:10px;font-size:14px;font-weight:bold;box-shadow:0 2px 8px rgba(79,70,229,0.3);">
           Webでレポートを見る
         </a>
       </div>
-      <p style="text-align:center;font-size:12px;color:#999;margin:0;">上のボタンが表示されない場合: <a href="${viewUrl}" style="color:#4f46e5;">${viewUrl}</a></p>
+      <p style="text-align:center;font-size:11px;color:#9ca3af;margin:0;">上のボタンが表示されない場合: <a href="${viewUrl}" style="color:#4f46e5;text-decoration:none;">${viewUrl}</a></p>
     </div>
 
     <!-- Footer -->
-    <div style="padding:20px;text-align:center;">
-      <p style="font-size:12px;color:#999;white-space:pre-wrap;margin:0;">${signature}</p>
+    <div style="padding:24px 20px;text-align:center;">
+      <p style="font-size:12px;color:#9ca3af;white-space:pre-wrap;margin:0;line-height:1.6;">${signature}</p>
     </div>
   </div>
 </body>

@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ReportContent } from '@/components/ui/report-content'
+import { GraduationCap } from 'lucide-react'
 
 interface SummaryView {
   content: string
@@ -35,7 +37,7 @@ export default function SummaryViewPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-blue-50">
         <LoadingSpinner />
       </div>
     )
@@ -43,102 +45,53 @@ export default function SummaryViewPage() {
 
   if (notFound || !summary) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-blue-50 px-4">
         <div className="text-center max-w-sm">
-          <div className="text-5xl mb-4">📄</div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">ページが見つかりません</h1>
-          <p className="text-gray-500 mb-6">このリンクは無効か、レポートが削除された可能性があります。</p>
-          <div className="bg-white rounded-lg border p-4 text-sm text-gray-600">
+          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+            <GraduationCap className="h-8 w-8 text-gray-400" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-800 mb-2">ページが見つかりません</h1>
+          <p className="text-gray-500 mb-6 text-sm">このリンクは無効か、レポートが削除された可能性があります。</p>
+          <div className="bg-white rounded-xl border p-4 text-sm text-gray-600 shadow-sm">
             <p className="font-medium mb-1">お問い合わせ</p>
-            <p>レポートについてご不明な点がございましたら、塾までお気軽にお問い合わせください。</p>
+            <p>ご不明な点がございましたら、塾までお気軽にお問い合わせください。</p>
           </div>
         </div>
       </div>
     )
   }
 
-  // Parse content into sections
-  const sections = parseSections(summary.content)
+  const periodStr = `${format(new Date(summary.period_start), 'yyyy年M月d日', { locale: ja })} 〜 ${format(new Date(summary.period_end), 'M月d日', { locale: ja })}`
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-blue-50">
       {/* Header */}
-      <header className="bg-white border-b shadow-sm">
-        <div className="max-w-2xl mx-auto px-4 py-6">
-          <p className="text-sm text-blue-600 font-medium">{summary.school_name}</p>
-          <h1 className="text-xl font-bold text-gray-900 mt-1">
+      <header className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-blue-500" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
+        <div className="relative max-w-2xl mx-auto px-5 py-8">
+          <p className="text-indigo-200 text-sm font-medium">{summary.school_name}</p>
+          <h1 className="text-xl font-bold text-white mt-2">
             {summary.student.name}さんの学習レポート
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {format(new Date(summary.period_start), 'yyyy年M月d日', { locale: ja })}
-            {' 〜 '}
-            {format(new Date(summary.period_end), 'M月d日', { locale: ja })}
-          </p>
+          <p className="text-indigo-200 text-sm mt-1.5">{periodStr}</p>
         </div>
       </header>
 
       {/* Content */}
-      <main className="max-w-2xl mx-auto px-4 py-6">
-        {sections.length > 0 ? (
-          <div className="space-y-4">
-            {sections.map((section, i) => (
-              <div key={i} className="bg-white rounded-lg shadow-sm border p-5">
-                {section.title && (
-                  <h2 className="text-base font-bold text-gray-800 mb-3 pb-2 border-b border-blue-100">
-                    {section.title}
-                  </h2>
-                )}
-                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {section.body}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow-sm border p-5">
-            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-              {summary.content}
-            </div>
-          </div>
-        )}
+      <main className="max-w-2xl mx-auto px-4 -mt-2">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-5 md:p-7">
+          <ReportContent content={summary.content} />
+        </div>
       </main>
 
       {/* Footer */}
       <footer className="max-w-2xl mx-auto px-4 py-8 text-center">
-        <p className="text-xs text-gray-400">
-          {summary.school_name} 学習レポート
-        </p>
+        <div className="flex items-center justify-center gap-2 text-gray-400">
+          <GraduationCap className="h-4 w-4" />
+          <p className="text-xs">{summary.school_name}</p>
+        </div>
       </footer>
     </div>
   )
-}
-
-function parseSections(content: string): { title: string; body: string }[] {
-  // Match 【...】 section headers
-  const regex = /【([^】]+)】/g
-  const parts: { title: string; body: string }[] = []
-  let lastIndex = 0
-  let match
-
-  const matches: { title: string; index: number }[] = []
-  while ((match = regex.exec(content)) !== null) {
-    matches.push({ title: match[1], index: match.index })
-  }
-
-  if (matches.length === 0) return []
-
-  // Text before first section
-  const preamble = content.slice(0, matches[0].index).trim()
-  if (preamble) {
-    parts.push({ title: '', body: preamble })
-  }
-
-  for (let i = 0; i < matches.length; i++) {
-    const start = matches[i].index + matches[i].title.length + 2 // skip 【title】
-    const end = i + 1 < matches.length ? matches[i + 1].index : content.length
-    const body = content.slice(start, end).trim()
-    parts.push({ title: matches[i].title, body })
-  }
-
-  return parts
 }

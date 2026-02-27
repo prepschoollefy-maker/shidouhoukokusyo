@@ -8,11 +8,13 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, Check, RefreshCw, Pause } from 'lucide-react'
+import { MoreHorizontal, Check, RefreshCw, Pause, Eye, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ReportContent } from '@/components/ui/report-content'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
+import { cn } from '@/lib/utils'
 
 const homeworkLabels: Record<string, string> = {
   done: 'やってきた',
@@ -28,6 +30,7 @@ export default function SummaryDetailPage() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [sendDialogOpen, setSendDialogOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('preview')
 
   useEffect(() => {
     fetch(`/api/summaries/${params.id}`)
@@ -59,7 +62,6 @@ export default function SummaryDetailPage() {
         return
       }
 
-      // Save content changes and update status
       const newStatus = action === 'approve' ? 'approved' : 'on_hold'
       const res = await fetch(`/api/summaries/${params.id}`, {
         method: 'PUT',
@@ -79,14 +81,12 @@ export default function SummaryDetailPage() {
   const handleSend = async () => {
     setActionLoading(true)
     try {
-      // First save and approve
       await fetch(`/api/summaries/${params.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'approved', content }),
       })
 
-      // Then send email
       const res = await fetch('/api/email/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -124,20 +124,52 @@ export default function SummaryDetailPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Left: Summary content */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              {summary.student.name}
-              <Badge variant="secondary">
-                {format(new Date(summary.period_start), 'M/d')} - {format(new Date(summary.period_end), 'M/d')}
-              </Badge>
-            </CardTitle>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                {summary.student.name}
+                <Badge variant="secondary">
+                  {format(new Date(summary.period_start), 'M/d')} - {format(new Date(summary.period_end), 'M/d')}
+                </Badge>
+              </CardTitle>
+              <div className="flex rounded-lg border overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('preview')}
+                  className={cn(
+                    'flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors',
+                    viewMode === 'preview' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                  )}
+                >
+                  <Eye className="h-3 w-3" />
+                  プレビュー
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('edit')}
+                  className={cn(
+                    'flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors border-l',
+                    viewMode === 'edit' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                  )}
+                >
+                  <Pencil className="h-3 w-3" />
+                  編集
+                </button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="min-h-[400px] font-mono text-sm"
-            />
+            {viewMode === 'edit' ? (
+              <Textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                className="min-h-[400px] font-mono text-sm"
+              />
+            ) : (
+              <div className="min-h-[400px] rounded-lg border bg-gradient-to-br from-slate-50 to-white p-4 overflow-y-auto">
+                <ReportContent content={content} />
+              </div>
+            )}
 
             <div className="flex gap-2">
               <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
