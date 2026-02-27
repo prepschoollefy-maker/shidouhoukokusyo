@@ -112,7 +112,30 @@ export async function GET(request: NextRequest) {
   }
 
   const lectureTotal = lectureData.reduce((sum, l) => sum + l.total_amount, 0)
-  const total = contractTotal + lectureTotal
 
-  return NextResponse.json({ data: billing, lectureData, total, contractTotal, lectureTotal })
+  // 教材販売データ: 当月の billing_year/month に該当するもの
+  const { data: materialRows, error: materialError } = await supabase
+    .from('material_sales')
+    .select('*, student:students(id, name, student_number, payment_method)')
+    .eq('billing_year', year)
+    .eq('billing_month', month)
+    .order('sale_date', { ascending: true })
+
+  if (materialError) return NextResponse.json({ error: materialError.message }, { status: 500 })
+
+  const materialData = (materialRows || []).map((m) => ({
+    id: m.id,
+    student: m.student,
+    item_name: m.item_name,
+    unit_price: m.unit_price,
+    quantity: m.quantity,
+    total_amount: m.total_amount,
+    sale_date: m.sale_date,
+    notes: m.notes,
+  }))
+
+  const materialTotal = materialData.reduce((sum, m) => sum + m.total_amount, 0)
+  const total = contractTotal + lectureTotal + materialTotal
+
+  return NextResponse.json({ data: billing, lectureData, materialData, total, contractTotal, lectureTotal, materialTotal })
 }

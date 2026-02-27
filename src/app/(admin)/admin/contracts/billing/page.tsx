@@ -23,9 +23,10 @@ import { useDashboardAuth } from '@/hooks/use-dashboard-auth'
 
 interface Payment {
   id: string
-  billing_type: 'contract' | 'lecture'
+  billing_type: 'contract' | 'lecture' | 'material'
   contract_id: string | null
   lecture_id: string | null
+  material_sale_id: string | null
   year: number
   month: number
   billed_amount: number
@@ -65,9 +66,21 @@ interface LectureBillingItem {
 
 type StatusFilter = 'all' | '未入金' | '入金済み' | '過不足あり'
 
+interface MaterialBillingItem {
+  id: string
+  student: { id: string; name: string; student_number: string | null; payment_method: string }
+  item_name: string
+  unit_price: number
+  quantity: number
+  total_amount: number
+  sale_date: string
+  notes: string
+}
+
 type ItemKey = string
 const contractKey = (id: string): ItemKey => `contract:${id}`
 const lectureKey = (id: string): ItemKey => `lecture:${id}`
+const materialKey = (id: string): ItemKey => `material:${id}`
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -94,10 +107,12 @@ function BillingPageInner() {
   })
   const [billing, setBilling] = useState<BillingItem[]>([])
   const [lectureBilling, setLectureBilling] = useState<LectureBillingItem[]>([])
+  const [materialBilling, setMaterialBilling] = useState<MaterialBillingItem[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [total, setTotal] = useState(0)
   const [contractTotal, setContractTotal] = useState(0)
   const [lectureTotal, setLectureTotal] = useState(0)
+  const [materialTotal, setMaterialTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
 
@@ -114,7 +129,7 @@ function BillingPageInner() {
   // 詳細ダイアログ
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogTarget, setDialogTarget] = useState<{
-    billingType: 'contract' | 'lecture'
+    billingType: 'contract' | 'lecture' | 'material'
     refId: string
     studentName: string
     billedAmount: number
@@ -143,9 +158,11 @@ function BillingPageInner() {
       const json = await billingRes.json()
       setBilling(json.data || [])
       setLectureBilling(json.lectureData || [])
+      setMaterialBilling(json.materialData || [])
       setTotal(json.total || 0)
       setContractTotal(json.contractTotal || 0)
       setLectureTotal(json.lectureTotal || 0)
+      setMaterialTotal(json.materialTotal || 0)
     }
     if (paymentsRes.ok) {
       const json = await paymentsRes.json()
@@ -164,9 +181,11 @@ function BillingPageInner() {
 
   /* ---- payment lookup ---- */
 
-  const getPayment = (type: 'contract' | 'lecture', id: string): Payment | undefined =>
+  const getPayment = (type: 'contract' | 'lecture' | 'material', id: string): Payment | undefined =>
     payments.find(p =>
-      type === 'contract' ? p.contract_id === id : p.lecture_id === id
+      type === 'contract' ? p.contract_id === id
+        : type === 'lecture' ? p.lecture_id === id
+        : p.material_sale_id === id
     )
 
   const getStatus = (payment: Payment | undefined): '未入金' | '入金済み' | '過不足あり' =>
@@ -180,12 +199,14 @@ function BillingPageInner() {
   }
   const filteredBilling = filterByStatus(billing, b => getPayment('contract', b.id))
   const filteredLectures = filterByStatus(lectureBilling, l => getPayment('lecture', l.id))
+  const filteredMaterials = filterByStatus(materialBilling, m => getPayment('material', m.id))
 
   /* ---- stats ---- */
 
   const allItems = [
     ...billing.map(b => ({ amount: b.total_amount, payment: getPayment('contract', b.id) })),
     ...lectureBilling.map(l => ({ amount: l.total_amount, payment: getPayment('lecture', l.id) })),
+    ...materialBilling.map(m => ({ amount: m.total_amount, payment: getPayment('material', m.id) })),
   ]
   const paidCount = allItems.filter(i => getStatus(i.payment) === '入金済み').length
   const paidAmount = allItems.filter(i => getStatus(i.payment) === '入金済み').reduce((s, i) => s + (i.payment?.paid_amount || 0), 0)
@@ -205,6 +226,7 @@ function BillingPageInner() {
   const allUnpaidKeys: ItemKey[] = [
     ...filteredBilling.filter(b => !getPayment('contract', b.id)).map(b => contractKey(b.id)),
     ...filteredLectures.filter(l => !getPayment('lecture', l.id)).map(l => lectureKey(l.id)),
+    ...filteredMaterials.filter(m => !getPayment('material', m.id)).map(m => materialKey(m.id)),
   ]
   const allUnpaidSelected = allUnpaidKeys.length > 0 && allUnpaidKeys.every(k => selected.has(k))
 
@@ -214,7 +236,7 @@ function BillingPageInner() {
 
   /* ---- quick confirm (1-click) ---- */
 
-  const quickConfirmApi = async (billingType: 'contract' | 'lecture', refId: string, billedAmount: number, method: string) => {
+  const quickConfirmApi = async (billingType: 'contract' | 'lecture' | 'material', refId: string, billedAmount: number, method: string) => {
     const params = `pw=${encodeURIComponent(storedPw)}`
     const res = await fetch(`/api/payments?${params}`, {
       method: 'POST',
@@ -223,6 +245,7 @@ function BillingPageInner() {
         billing_type: billingType,
         contract_id: billingType === 'contract' ? refId : null,
         lecture_id: billingType === 'lecture' ? refId : null,
+        material_sale_id: billingType === 'material' ? refId : null,
         year,
         month,
         billed_amount: billedAmount,
@@ -238,7 +261,7 @@ function BillingPageInner() {
     }
   }
 
-  const handleQuickConfirm = async (key: ItemKey, billingType: 'contract' | 'lecture', refId: string, billedAmount: number, method: string) => {
+  const handleQuickConfirm = async (key: ItemKey, billingType: 'contract' | 'lecture' | 'material', refId: string, billedAmount: number, method: string) => {
     setConfirmingKeys(prev => new Set(prev).add(key))
     try {
       await quickConfirmApi(billingType, refId, billedAmount, method)
@@ -264,16 +287,21 @@ function BillingPageInner() {
     try {
       const promises: Promise<void>[] = []
       for (const key of selected) {
-        const [type, id] = key.split(':') as ['contract' | 'lecture', string]
+        const [type, id] = key.split(':') as ['contract' | 'lecture' | 'material', string]
         if (type === 'contract') {
           const b = billing.find(x => x.id === id)
           if (b && !getPayment('contract', id)) {
             promises.push(quickConfirmApi('contract', id, b.total_amount, b.student?.payment_method || '振込'))
           }
-        } else {
+        } else if (type === 'lecture') {
           const l = lectureBilling.find(x => x.id === id)
           if (l && !getPayment('lecture', id)) {
             promises.push(quickConfirmApi('lecture', id, l.total_amount, l.student?.payment_method || '振込'))
+          }
+        } else if (type === 'material') {
+          const m = materialBilling.find(x => x.id === id)
+          if (m && !getPayment('material', id)) {
+            promises.push(quickConfirmApi('material', id, m.total_amount, m.student?.payment_method || '振込'))
           }
         }
       }
@@ -291,7 +319,7 @@ function BillingPageInner() {
   /* ---- detail dialog ---- */
 
   const openDetailDialog = (
-    billingType: 'contract' | 'lecture',
+    billingType: 'contract' | 'lecture' | 'material',
     refId: string,
     studentName: string,
     billedAmount: number,
@@ -341,6 +369,7 @@ function BillingPageInner() {
             billing_type: dialogTarget.billingType,
             contract_id: dialogTarget.billingType === 'contract' ? dialogTarget.refId : null,
             lecture_id: dialogTarget.billingType === 'lecture' ? dialogTarget.refId : null,
+            material_sale_id: dialogTarget.billingType === 'material' ? dialogTarget.refId : null,
             year,
             month,
             billed_amount: dialogTarget.billedAmount,
@@ -435,7 +464,7 @@ function BillingPageInner() {
 
   const actionCell = (
     key: ItemKey,
-    billingType: 'contract' | 'lecture',
+    billingType: 'contract' | 'lecture' | 'material',
     refId: string,
     studentName: string,
     billedAmount: number,
@@ -550,9 +579,10 @@ function BillingPageInner() {
         <CardContent className="p-4">
           <div className="text-sm text-muted-foreground">当月合計請求額</div>
           <div className="text-3xl font-bold">{formatYen(total)}</div>
-          <div className="flex gap-4 text-sm text-muted-foreground mt-1">
+          <div className="flex gap-4 text-sm text-muted-foreground mt-1 flex-wrap">
             <span>通常コース: {formatYen(contractTotal)}（{billing.length}件）</span>
             {lectureTotal > 0 && <span>講習: {formatYen(lectureTotal)}（{lectureBilling.length}件）</span>}
+            {materialTotal > 0 && <span>教材販売: {formatYen(materialTotal)}（{materialBilling.length}件）</span>}
           </div>
           <div className="flex gap-4 text-sm mt-2">
             <span className="text-green-600">入金済: {paidCount}件 {formatYen(paidAmount)}</span>
@@ -696,6 +726,59 @@ function BillingPageInner() {
                     <TableRow>
                       <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                         {statusFilter !== 'all' ? '該当するデータがありません' : '該当月の講習請求データがありません'}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* 教材販売 */}
+          <h3 className="text-lg font-semibold">教材販売</h3>
+          <Card>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10" />
+                    <TableHead>塾生番号</TableHead>
+                    <TableHead>生徒名</TableHead>
+                    <TableHead>品名</TableHead>
+                    <TableHead className="text-center">数量</TableHead>
+                    <TableHead className="text-right">単価</TableHead>
+                    <TableHead className="text-right">請求額</TableHead>
+                    <TableHead className="text-center">入金状況</TableHead>
+                    <TableHead className="text-center">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredMaterials.map(m => {
+                    const payment = getPayment('material', m.id)
+                    const isUnpaid = !payment
+                    const key = materialKey(m.id)
+                    return (
+                      <TableRow key={m.id} className={confirmingKeys.has(key) ? 'opacity-60' : ''}>
+                        <TableCell className="text-center">
+                          {isUnpaid && <Checkbox checked={selected.has(key)} onCheckedChange={() => toggle(key)} />}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{m.student?.student_number || '-'}</TableCell>
+                        <TableCell className="font-medium">{m.student?.name}</TableCell>
+                        <TableCell className="text-sm">{m.item_name}</TableCell>
+                        <TableCell className="text-center">{m.quantity}</TableCell>
+                        <TableCell className="text-right font-mono">{formatYen(m.unit_price)}</TableCell>
+                        <TableCell className="text-right font-mono font-bold">{formatYen(m.total_amount)}</TableCell>
+                        <TableCell className="text-center">{paymentStatusCell(payment)}</TableCell>
+                        <TableCell className="text-center">
+                          {actionCell(key, 'material', m.id, m.student?.name || '', m.total_amount, m.student?.payment_method || '振込', payment)}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                  {filteredMaterials.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                        {statusFilter !== 'all' ? '該当するデータがありません' : '該当月の教材販売データがありません'}
                       </TableCell>
                     </TableRow>
                   )}

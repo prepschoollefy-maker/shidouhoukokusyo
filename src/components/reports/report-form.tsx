@@ -62,17 +62,29 @@ function findBestMatch(ocrText: string, items: { id: string; name: string }[]): 
   return null
 }
 
-function SectionCard({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+const sectionThemes = {
+  blue: { border: 'border-l-blue-500', bg: 'bg-blue-50/50', icon: 'text-blue-600', dot: 'bg-blue-500' },
+  emerald: { border: 'border-l-emerald-500', bg: 'bg-emerald-50/50', icon: 'text-emerald-600', dot: 'bg-emerald-500' },
+  amber: { border: 'border-l-amber-500', bg: 'bg-amber-50/50', icon: 'text-amber-600', dot: 'bg-amber-500' },
+} as const
+
+type ThemeKey = keyof typeof sectionThemes
+
+function SectionCard({ title, children, defaultOpen = true, theme = 'blue' }: { title: string; children: React.ReactNode; defaultOpen?: boolean; theme?: ThemeKey }) {
   const [open, setOpen] = useState(defaultOpen)
+  const t = sectionThemes[theme]
   return (
-    <Card>
-      <CardHeader className="cursor-pointer select-none py-3 px-4" onClick={() => setOpen(!open)}>
+    <Card className={`border-l-4 ${t.border} overflow-hidden`}>
+      <CardHeader className={`cursor-pointer select-none py-3 px-4 ${t.bg}`} onClick={() => setOpen(!open)}>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">{title}</CardTitle>
-          {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${t.dot}`} />
+            <CardTitle className="text-base">{title}</CardTitle>
+          </div>
+          {open ? <ChevronUp className={`h-4 w-4 ${t.icon}`} /> : <ChevronDown className={`h-4 w-4 ${t.icon}`} />}
         </div>
       </CardHeader>
-      {open && <CardContent className="space-y-4 pt-0">{children}</CardContent>}
+      {open && <CardContent className="space-y-4 pt-4">{children}</CardContent>}
     </Card>
   )
 }
@@ -222,7 +234,7 @@ export function ReportForm({ initialData, reportId, ocrHighlights }: ReportFormP
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       {/* Section 1: 基本情報 */}
-      <SectionCard title="基本情報">
+      <SectionCard title="基本情報" theme="blue">
         {/* Student */}
         <div className="space-y-2">
           <Label>生徒名 *</Label>
@@ -342,7 +354,7 @@ export function ReportForm({ initialData, reportId, ocrHighlights }: ReportFormP
       </SectionCard>
 
       {/* Section 2: 授業内容・生徒の様子 */}
-      <SectionCard title="授業内容・生徒の様子">
+      <SectionCard title="授業内容・生徒の様子" theme="emerald">
         {/* Positive attitudes */}
         <div className="space-y-2">
           <Label>生徒の様子（ポジティブ）* 最低1つ</Label>
@@ -417,7 +429,7 @@ export function ReportForm({ initialData, reportId, ocrHighlights }: ReportFormP
       </SectionCard>
 
       {/* Section 3: 宿題・次回・申し送り */}
-      <SectionCard title="宿題・次回・申し送り">
+      <SectionCard title="宿題・次回・申し送り" theme="amber">
         {/* Homework assigned */}
         <div className="space-y-2">
           <Label>宿題内容 *</Label>
@@ -454,7 +466,7 @@ export function ReportForm({ initialData, reportId, ocrHighlights }: ReportFormP
         </div>
       </SectionCard>
 
-      <div className="flex gap-2">
+      <div className="flex gap-3 pt-2">
         <Button
           type="button"
           variant="outline"
@@ -463,7 +475,7 @@ export function ReportForm({ initialData, reportId, ocrHighlights }: ReportFormP
         >
           キャンセル
         </Button>
-        <Button type="submit" className="flex-1" disabled={submitting}>
+        <Button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700" disabled={submitting}>
           {submitting ? '送信中...' : reportId ? '更新する' : '送信する'}
         </Button>
       </div>

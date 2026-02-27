@@ -14,12 +14,13 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { toast } from 'sonner'
-import { FileText, Loader2, Send } from 'lucide-react'
+import { FileText, Loader2, Send, ChevronDown, ChevronRight } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { groupByGrade, getGradeColor, getGradeSectionBorder, getGradeSectionLabel, getGradeDot } from '@/lib/grade-utils'
 
 interface SummaryItem {
   id: string
-  student: { id: string; name: string }
+  student: { id: string; name: string; grade: string | null }
   subject: { name: string } | null
   status: string
   period_start: string
@@ -32,6 +33,13 @@ interface StudentTarget {
   id: string
   name: string
   report_count: number
+}
+
+interface StudentSummaryGroup {
+  student_id: string
+  student_name: string
+  grade: string | null
+  summaries: SummaryItem[]
 }
 
 const statusLabels: Record<string, string> = {
@@ -72,6 +80,9 @@ function SummariesContent() {
   const [sending, setSending] = useState(false)
   const [sendProgress, setSendProgress] = useState({ current: 0, total: 0, currentName: '' })
 
+  // Accordion
+  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
+
   // Date range (default: first of current month to today)
   const now = new Date()
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -94,9 +105,37 @@ function SummariesContent() {
   }
 
   useEffect(() => { fetchSummaries() }, [statusFilter])
-
-  // Clear bulk selection when filter changes
   useEffect(() => { setSelectedSendIds(new Set()) }, [statusFilter])
+
+  // Group summaries by student
+  const studentGroups: StudentSummaryGroup[] = (() => {
+    const map = new Map<string, StudentSummaryGroup>()
+    for (const s of summaries) {
+      let group = map.get(s.student.id)
+      if (!group) {
+        group = {
+          student_id: s.student.id,
+          student_name: s.student.name,
+          grade: s.student.grade,
+          summaries: [],
+        }
+        map.set(s.student.id, group)
+      }
+      group.summaries.push(s)
+    }
+    return Array.from(map.values())
+  })()
+
+  const gradeGroups = groupByGrade(studentGroups, g => g.grade)
+
+  const toggleStudentExpanded = (studentId: string) => {
+    setExpandedStudents(prev => {
+      const next = new Set(prev)
+      if (next.has(studentId)) next.delete(studentId)
+      else next.add(studentId)
+      return next
+    })
+  }
 
   // Fetch target students when date range changes
   const fetchStudents = async () => {
@@ -225,7 +264,6 @@ function SummariesContent() {
       setSendProgress({ current: i, total: targets.length, currentName: s.student.name })
 
       try {
-        // Step 1: Approve if not already approved
         if (s.status !== 'approved') {
           const approveRes = await fetch(`/api/summaries/${s.id}`, {
             method: 'PUT',
@@ -235,7 +273,6 @@ function SummariesContent() {
           if (!approveRes.ok) throw new Error('承認に失敗')
         }
 
-        // Step 2: Send email
         const sendRes = await fetch('/api/email/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -442,37 +479,86 @@ function SummariesContent() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-2">
-          {summaries.map((s) => (
-            <div key={s.id} className="flex items-center gap-2">
-              {s.status !== 'sent' && (
-                <Checkbox
-                  checked={selectedSendIds.has(s.id)}
-                  onCheckedChange={() => toggleSendItem(s.id)}
-                />
-              )}
-              {s.status === 'sent' && <div className="w-4" />}
-              <Link href={`/admin/summaries/${s.id}`} className="flex-1">
-                <Card className="hover:bg-gray-50 transition-colors">
-                  <CardContent className="py-3 px-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{s.student.name}</span>
-                          {s.subject && <Badge variant="secondary">{s.subject.name}</Badge>}
-                          <Badge className={statusColors[s.status]}>{statusLabels[s.status]}</Badge>
+        <div className="space-y-8">
+          {gradeGroups.map((gradeGroup) => (
+            <section key={gradeGroup.category}>
+              <div className="flex items-center gap-3 mb-3">
+                <span className={`w-2 h-2 rounded-full ${getGradeDot(gradeGroup.category)}`} />
+                <h3 className={`text-sm font-semibold tracking-wide ${getGradeSectionLabel(gradeGroup.category)}`}>
+                  {gradeGroup.label}
+                </h3>
+                <span className="text-xs text-muted-foreground">{gradeGroup.items.length}名</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+
+              <div className={`space-y-1.5 border-l-2 ${getGradeSectionBorder(gradeGroup.category)} pl-4`}>
+                {gradeGroup.items.map((group) => {
+                  const isExpanded = expandedStudents.has(group.student_id)
+
+                  return (
+                    <Card key={group.student_id} className="shadow-sm hover:shadow transition-shadow">
+                      <button
+                        type="button"
+                        className="w-full text-left"
+                        onClick={() => toggleStudentExpanded(group.student_id)}
+                      >
+                        <CardContent className="py-3 px-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              {isExpanded
+                                ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                                : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                              }
+                              <span className="font-medium">{group.student_name}</span>
+                              {group.grade && (
+                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${getGradeColor(group.grade)}`}>
+                                  {group.grade}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                              <span className="tabular-nums">{group.summaries.length}件</span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="border-t bg-muted/20 px-4 pb-3">
+                          <div className="divide-y divide-border/50">
+                            {group.summaries.map((s) => (
+                              <div key={s.id} className="flex items-center gap-2 py-2.5">
+                                {s.status !== 'sent' && (
+                                  <Checkbox
+                                    checked={selectedSendIds.has(s.id)}
+                                    onCheckedChange={() => toggleSendItem(s.id)}
+                                  />
+                                )}
+                                {s.status === 'sent' && <div className="w-4" />}
+                                <Link
+                                  href={`/admin/summaries/${s.id}`}
+                                  className="flex-1 flex items-center justify-between hover:bg-background -mx-2 px-2 rounded transition-colors"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm text-muted-foreground tabular-nums w-24">
+                                      {format(new Date(s.period_start), 'M/d', { locale: ja })} - {format(new Date(s.period_end), 'M/d', { locale: ja })}
+                                    </span>
+                                    {s.subject && <Badge variant="secondary" className="text-xs font-normal">{s.subject.name}</Badge>}
+                                    <Badge className={`text-xs ${statusColors[s.status]}`}>{statusLabels[s.status]}</Badge>
+                                    <span className="text-xs text-muted-foreground">{s.report_count}件</span>
+                                  </div>
+                                  <span className="text-muted-foreground text-xs">›</span>
+                                </Link>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {format(new Date(s.period_start), 'M/d', { locale: ja })} - {format(new Date(s.period_end), 'M/d', { locale: ja })}
-                          {' · '}{s.report_count}件のレポート
-                        </p>
-                      </div>
-                      <span className="text-muted-foreground">›</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            </div>
+                      )}
+                    </Card>
+                  )
+                })}
+              </div>
+            </section>
           ))}
         </div>
       )}

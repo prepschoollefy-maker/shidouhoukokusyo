@@ -5,20 +5,20 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { PaginationControl } from '@/components/ui/pagination-control'
-import { Mail, Search } from 'lucide-react'
+import { Mail, Search, ChevronDown, ChevronRight } from 'lucide-react'
 
 interface EmailLogEntry {
   id: string
   summary_id: string | null
   to_email: string
   subject: string
+  body: string
   status: string
   sent_at: string | null
   error_message: string | null
@@ -36,6 +36,7 @@ export default function EmailHistoryPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [typeFilter, setTypeFilter] = useState<EmailType>('all')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -125,11 +126,16 @@ export default function EmailHistoryPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>送信日時</TableHead>
-                <TableHead className="w-20">種別</TableHead>
-                <TableHead>宛先</TableHead>
-                <TableHead>件名</TableHead>
-                <TableHead>ステータス</TableHead>
+                <TableHead>
+                  <div className="flex items-center gap-4 px-4">
+                    <span className="w-4" />
+                    <span className="w-16">日時</span>
+                    <span className="w-20">種別</span>
+                    <span className="w-44">宛先</span>
+                    <span className="flex-1">件名</span>
+                    <span>状態</span>
+                  </div>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -144,39 +150,56 @@ export default function EmailHistoryPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginated.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="text-sm whitespace-nowrap">
-                      {log.sent_at ? format(new Date(log.sent_at), 'M/d HH:mm', { locale: ja }) : '-'}
-                    </TableCell>
-                    <TableCell>
-                      {log.summary_id ? (
-                        <Badge variant="outline" className="text-xs">レポート</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-xs border-blue-300 text-blue-700">面談</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm">{log.to_email}</TableCell>
-                    <TableCell className="text-sm max-w-xs">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="block truncate">{log.subject}</span>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-sm">
-                          <p>{log.subject}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={log.status === 'sent' ? 'default' : 'destructive'} className={log.status === 'sent' ? 'bg-green-100 text-green-800' : ''}>
-                        {log.status === 'sent' ? '送信済み' : '失敗'}
-                      </Badge>
-                      {log.error_message && (
-                        <p className="text-xs text-red-500 mt-1">{log.error_message}</p>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
+                paginated.map((log) => {
+                  const isExpanded = expandedId === log.id
+                  return (
+                    <TableRow
+                      key={log.id}
+                      className="group"
+                    >
+                      <TableCell colSpan={5} className="p-0">
+                        <button
+                          type="button"
+                          className="w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors"
+                          onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                        >
+                          <div className="flex items-center gap-4">
+                            {isExpanded
+                              ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                              : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                            }
+                            <span className="text-sm whitespace-nowrap text-muted-foreground w-16">
+                              {log.sent_at ? format(new Date(log.sent_at), 'M/d HH:mm', { locale: ja }) : '-'}
+                            </span>
+                            <span className="w-20 shrink-0">
+                              {log.summary_id ? (
+                                <Badge variant="outline" className="text-xs">レポート</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-xs border-blue-300 text-blue-700">面談</Badge>
+                              )}
+                            </span>
+                            <span className="text-sm text-muted-foreground w-44 shrink-0 truncate">{log.to_email}</span>
+                            <span className="text-sm flex-1 truncate">{log.subject}</span>
+                            <Badge variant={log.status === 'sent' ? 'default' : 'destructive'} className={`shrink-0 ${log.status === 'sent' ? 'bg-green-100 text-green-800' : ''}`}>
+                              {log.status === 'sent' ? '送信済み' : '失敗'}
+                            </Badge>
+                          </div>
+                          {log.error_message && (
+                            <p className="text-xs text-red-500 mt-1 ml-8">{log.error_message}</p>
+                          )}
+                        </button>
+                        {isExpanded && (
+                          <div className="border-t bg-muted/30 px-4 py-4 ml-8">
+                            <div className="text-xs text-muted-foreground mb-2 font-medium">メール本文</div>
+                            <div className="bg-white border rounded-md p-4 text-sm whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
+                              {log.body}
+                            </div>
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
               )}
             </TableBody>
           </Table>

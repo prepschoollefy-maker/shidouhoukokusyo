@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,14 +8,15 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Search, Lock, ChevronsUpDown, Check } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, Lock, ChevronsUpDown, Check, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { COURSES, CAMPAIGN_OPTIONS, GRADES } from '@/lib/contracts/pricing'
 import { useDashboardAuth } from '@/hooks/use-dashboard-auth'
+import { groupByGrade, getGradeColor, getGradeDot, getGradeSectionLabel, getGradeSectionBorder } from '@/lib/grade-utils'
+import Link from 'next/link'
 
 interface Student {
   id: string
@@ -43,6 +44,15 @@ interface Contract {
   student: Student
 }
 
+interface StudentContractGroup {
+  student_id: string
+  student_name: string
+  student_number: string | null
+  grade: string | null
+  contracts: Contract[]
+  activeContract: Contract | null
+}
+
 type FilterMode = 'active' | 'all' | 'expired'
 
 export default function ContractsPage() {
@@ -59,6 +69,7 @@ export default function ContractsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterMode, setFilterMode] = useState<FilterMode>('active')
   const [sortBy, setSortBy] = useState<'student_number' | 'grade'>('student_number')
+  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
 
   // Form state
   const [formStudentId, setFormStudentId] = useState('')
@@ -192,6 +203,86 @@ export default function ContractsPage() {
     setFormCourses(prev => prev.map((c, i) => i === index ? { ...c, [field]: value } : c))
   }
 
+  const toggleExpand = (studentId: string) => {
+    setExpandedStudents(prev => {
+      const next = new Set(prev)
+      next.has(studentId) ? next.delete(studentId) : next.add(studentId)
+      return next
+    })
+  }
+
+  // 生徒別グルーピング
+  const today = new Date().toISOString().split('T')[0]
+
+  const studentGroups = useMemo(() => {
+    // フィルタ適用
+    const filtered = contracts.filter(c => {
+      if (filterMode === 'active' && c.end_date < today) return false
+      if (filterMode === 'expired' && c.end_date >= today) return false
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase()
+        const name = c.student?.name?.toLowerCase() || ''
+        const num = c.student?.student_number?.toLowerCase() || ''
+        return name.includes(q) || num.includes(q)
+      }
+      return true
+    })
+
+    // 生徒別にグルーピング
+    const groupMap = new Map<string, StudentContractGroup>()
+    for (const c of filtered) {
+      const sid = c.student_id
+      if (!groupMap.has(sid)) {
+        groupMap.set(sid, {
+          student_id: sid,
+          student_name: c.student?.name || '',
+          student_number: c.student?.student_number || null,
+          grade: c.student?.grade || c.grade || null,
+          contracts: [],
+          activeContract: null,
+        })
+      }
+      const g = groupMap.get(sid)!
+      g.contracts.push(c)
+      // 有効な契約のうち最新のものを activeContract に
+      if (c.end_date >= today && (!g.activeContract || c.start_date > g.activeContract.start_date)) {
+        g.activeContract = c
+      }
+    }
+
+    // 各グループ内の契約を開始日降順（新しい順）にソート
+    for (const g of groupMap.values()) {
+      g.contracts.sort((a, b) => b.start_date.localeCompare(a.start_date))
+    }
+
+    const groups = Array.from(groupMap.values())
+
+    // ソート
+    const gradeOrder = GRADES as readonly string[]
+    if (sortBy === 'student_number') {
+      groups.sort((a, b) => (a.student_number || '').localeCompare(b.student_number || '', 'ja', { numeric: true }))
+    } else {
+      groups.sort((a, b) => {
+        const ga = gradeOrder.indexOf(a.grade || '')
+        const gb = gradeOrder.indexOf(b.grade || '')
+        if (ga !== gb) return (ga === -1 ? 999 : ga) - (gb === -1 ? 999 : gb)
+        return (a.student_number || '').localeCompare(b.student_number || '', 'ja', { numeric: true })
+      })
+    }
+
+    return groups
+  }, [contracts, filterMode, searchQuery, sortBy, today])
+
+  // 学年カテゴリでグルーピング（学年順表示時のみ）
+  const gradeGrouped = useMemo(() => {
+    if (sortBy !== 'grade') return null
+    return groupByGrade(studentGroups, g => g.grade)
+  }, [studentGroups, sortBy])
+
+  const formatYen = (n: number) => `¥${n.toLocaleString()}`
+  const formatCourses = (courses: CourseEntry[]) =>
+    courses.map(c => `${c.course}(週${c.lessons})`).join(', ')
+
   // 初期化中またはパスワード入力画面
   if (initializing) return <LoadingSpinner />
   if (!authenticated) {
@@ -225,34 +316,92 @@ export default function ContractsPage() {
 
   if (loading) return <LoadingSpinner />
 
-  const today = new Date().toISOString().split('T')[0]
-  const gradeOrder = GRADES as readonly string[]
-  const filteredContracts = contracts
-    .filter(c => {
-      if (filterMode === 'active' && c.end_date < today) return false
-      if (filterMode === 'expired' && c.end_date >= today) return false
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase()
-        const name = c.student?.name?.toLowerCase() || ''
-        const num = c.student?.student_number?.toLowerCase() || ''
-        return name.includes(q) || num.includes(q)
-      }
-      return true
-    })
-    .sort((a, b) => {
-      if (sortBy === 'student_number') {
-        return (a.student?.student_number || '').localeCompare(b.student?.student_number || '', 'ja', { numeric: true })
-      }
-      // 学年順: GRADES配列のインデックスで比較、同学年は塾生番号順
-      const ga = gradeOrder.indexOf(a.grade)
-      const gb = gradeOrder.indexOf(b.grade)
-      if (ga !== gb) return (ga === -1 ? 999 : ga) - (gb === -1 ? 999 : gb)
-      return (a.student?.student_number || '').localeCompare(b.student?.student_number || '', 'ja', { numeric: true })
-    })
+  const renderStudentCard = (group: StudentContractGroup) => {
+    const isExpanded = expandedStudents.has(group.student_id)
+    const active = group.activeContract
 
-  const formatYen = (n: number) => `¥${n.toLocaleString()}`
-  const formatCourses = (courses: CourseEntry[]) =>
-    courses.map(c => `${c.course}(週${c.lessons})`).join(', ')
+    return (
+      <Card key={group.student_id} className="overflow-hidden">
+        <button
+          className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-muted/50 transition-colors"
+          onClick={() => toggleExpand(group.student_id)}
+        >
+          {isExpanded
+            ? <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            : <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          }
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="font-medium truncate">{group.student_name}</span>
+            {group.student_number && (
+              <span className="text-xs text-muted-foreground">{group.student_number}</span>
+            )}
+            {group.grade && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${getGradeColor(group.grade)}`}>
+                {group.grade}
+              </span>
+            )}
+          </div>
+          {active && (
+            <div className="flex items-center gap-3 text-sm text-muted-foreground flex-shrink-0">
+              <span>{formatCourses(active.courses)}</span>
+              <span className="font-mono">{formatYen(active.monthly_amount)}</span>
+            </div>
+          )}
+          <span className="text-xs text-muted-foreground flex-shrink-0">
+            {group.contracts.length}件
+          </span>
+          <Link
+            href={`/admin/contracts/students/${group.student_id}`}
+            className="text-muted-foreground hover:text-foreground flex-shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ExternalLink className="h-4 w-4" />
+          </Link>
+        </button>
+        {isExpanded && (
+          <CardContent className="px-4 pb-3 pt-0 border-t">
+            <div className="space-y-2 mt-3">
+              {group.contracts.map((c) => (
+                <div
+                  key={c.id}
+                  className={`flex items-center gap-3 p-2 rounded-md text-sm ${
+                    c.end_date < today ? 'opacity-50 bg-muted/30' : 'bg-muted/50'
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-muted-foreground">
+                        {c.start_date} ~ {c.end_date}
+                      </span>
+                      {c.end_date >= today && (
+                        <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">有効</span>
+                      )}
+                      {c.campaign && (
+                        <span className="text-xs bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded">{c.campaign}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span>{formatCourses(c.courses)}</span>
+                      <span className="font-mono font-medium">{formatYen(c.monthly_amount)}</span>
+                      {c.notes && <span className="text-muted-foreground truncate">({c.notes})</span>}
+                    </div>
+                  </div>
+                  <div className="flex gap-1 flex-shrink-0">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="編集" onClick={() => openEdit(c)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="削除" onClick={() => setDeleteTarget(c)}>
+                      <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        )}
+      </Card>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -429,59 +578,43 @@ export default function ContractsPage() {
             className="pl-9"
           />
         </div>
+        <div className="text-sm text-muted-foreground">
+          {studentGroups.length}名 / {studentGroups.reduce((s, g) => s + g.contracts.length, 0)}件
+        </div>
       </div>
 
-      <Card>
-        <CardContent className="p-0 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>生徒</TableHead>
-                <TableHead>学年</TableHead>
-                <TableHead>コース</TableHead>
-                <TableHead className="text-right">月謝</TableHead>
-                <TableHead>契約期間</TableHead>
-                <TableHead className="w-20"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredContracts.map((c) => (
-                <TableRow key={c.id} className={c.end_date < today ? 'opacity-50' : ''}>
-                  <TableCell className="font-medium">
-                    <div>{c.student?.name}</div>
-                    {c.student?.student_number && (
-                      <div className="text-xs text-muted-foreground">{c.student.student_number}</div>
-                    )}
-                  </TableCell>
-                  <TableCell>{c.grade}</TableCell>
-                  <TableCell className="text-sm">{formatCourses(c.courses)}</TableCell>
-                  <TableCell className="text-right font-mono">{formatYen(c.monthly_amount)}</TableCell>
-                  <TableCell className="text-sm">
-                    {c.start_date} ~ {c.end_date}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(c)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(c)}>
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filteredContracts.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    通常コースデータがありません
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* 学年順: カテゴリヘッダー付き */}
+      {gradeGrouped ? (
+        <div className="space-y-6">
+          {gradeGrouped.map(section => (
+            <div key={section.category}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className={`w-2.5 h-2.5 rounded-full ${getGradeDot(section.category)}`} />
+                <h3 className={`text-sm font-semibold ${getGradeSectionLabel(section.category)}`}>
+                  {section.label}
+                </h3>
+                <span className="text-xs text-muted-foreground">({section.items.length}名)</span>
+                <div className="flex-1 border-t" />
+              </div>
+              <div className="space-y-2">
+                {section.items.map(renderStudentCard)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {studentGroups.map(renderStudentCard)}
+        </div>
+      )}
+
+      {studentGroups.length === 0 && (
+        <Card>
+          <CardContent className="py-8 text-center text-muted-foreground">
+            通常コースデータがありません
+          </CardContent>
+        </Card>
+      )}
 
       <ConfirmDialog
         open={!!deleteTarget}

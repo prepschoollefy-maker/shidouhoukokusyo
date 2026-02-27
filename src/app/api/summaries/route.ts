@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     .from('summaries')
     .select(`
       *,
-      student:students!inner(id, name),
+      student:students!inner(id, name, grade),
       subject:subjects(id, name),
       summary_reports(id)
     `)

@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json()
   const {
-    billing_type, contract_id, lecture_id,
+    billing_type, contract_id, lecture_id, material_sale_id,
     year, month, billed_amount, paid_amount,
     payment_date, payment_method, notes,
   } = body
@@ -62,8 +62,10 @@ export async function POST(request: NextRequest) {
   let query = admin.from('payments').select('id').eq('year', year).eq('month', month)
   if (billing_type === 'contract') {
     query = query.eq('contract_id', contract_id)
-  } else {
+  } else if (billing_type === 'lecture') {
     query = query.eq('lecture_id', lecture_id)
+  } else if (billing_type === 'material') {
+    query = query.eq('material_sale_id', material_sale_id)
   }
   const { data: existing } = await query.maybeSingle()
 
@@ -71,6 +73,7 @@ export async function POST(request: NextRequest) {
     billing_type,
     contract_id: billing_type === 'contract' ? contract_id : null,
     lecture_id: billing_type === 'lecture' ? lecture_id : null,
+    material_sale_id: billing_type === 'material' ? material_sale_id : null,
     year,
     month,
     billed_amount: billedAmt,

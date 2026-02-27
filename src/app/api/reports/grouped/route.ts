@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const search = searchParams.get('search')
+  const subjectId = searchParams.get('subject_id')
   const page = parseInt(searchParams.get('page') || '1')
   const limit = parseInt(searchParams.get('limit') || '20')
 
@@ -60,6 +61,10 @@ export async function GET(request: NextRequest) {
 
   if (studentIdFilter !== null) {
     query = query.in('student_id', studentIdFilter)
+  }
+
+  if (subjectId) {
+    query = query.eq('subject_id', subjectId)
   }
 
   const { data: reports, error } = await query
