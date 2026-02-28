@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
 
   const schoolName = settings?.school_name || 'レフィー'
   const signature = settings?.email_signature || ''
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://shidouhoukokusyo.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://lefy-platform.vercel.app'
   const viewUrl = `${appUrl}/view/${summary.view_token}`
 
   const emailSubject = `【${schoolName}】${summary.student.name}さんの学習レポート`

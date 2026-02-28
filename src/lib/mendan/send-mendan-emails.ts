@@ -14,7 +14,7 @@ export async function sendMendanEmails(periodLabel: string, customBody?: string,
 
   const schoolName = settings?.school_name || 'レフィー'
   const signature = settings?.email_signature || ''
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://shidouhoukokusyo.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://lefy-platform.vercel.app'
 
   // Get students with parent emails
   let studentQuery = admin

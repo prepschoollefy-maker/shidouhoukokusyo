@@ -40,6 +40,7 @@ export async function PUT(
   const body = await request.json()
   const {
     name, grade, send_mode, weekly_lesson_count, status, student_number,
+    direct_debit_start_ym,
     parent_emails, subject_ids, teacher_assignments
   } = body
 
@@ -52,6 +53,7 @@ export async function PUT(
   if (weekly_lesson_count !== undefined) updateData.weekly_lesson_count = weekly_lesson_count || null
   if (status !== undefined) updateData.status = status
   if (student_number !== undefined) updateData.student_number = student_number || null
+  if (direct_debit_start_ym !== undefined) updateData.direct_debit_start_ym = direct_debit_start_ym || null
 
   const { data: student, error } = await admin
     .from('students')

@@ -20,6 +20,7 @@ interface Student {
   name: string
   grade: string | null
   student_number: string | null
+  direct_debit_start_ym: string | null
   send_mode: string
   status: 'active' | 'withdrawn'
   parent_emails: { id: string; email: string; label: string | null }[]
@@ -57,6 +58,7 @@ export default function StudentsPage() {
   const [name, setName] = useState('')
   const [grade, setGrade] = useState('')
   const [emails, setEmails] = useState<{ email: string; label: string }[]>([{ email: '', label: '' }])
+  const [directDebitStartYm, setDirectDebitStartYm] = useState('')
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([])
   const [selectedTeachers, setSelectedTeachers] = useState<string[]>([])
 
@@ -76,7 +78,7 @@ export default function StudentsPage() {
   useEffect(() => { fetchData() }, [statusFilter])
 
   const resetForm = () => {
-    setStudentNumber(''); setName(''); setGrade('')
+    setStudentNumber(''); setName(''); setGrade(''); setDirectDebitStartYm('')
     setEmails([{ email: '', label: '' }])
     setSelectedSubjects([]); setSelectedTeachers([]); setEditing(null)
   }
@@ -86,6 +88,7 @@ export default function StudentsPage() {
     setStudentNumber(s.student_number || '')
     setName(s.name)
     setGrade(s.grade || '')
+    setDirectDebitStartYm(s.direct_debit_start_ym || '')
     setEmails(s.parent_emails.length ? s.parent_emails.map(e => ({ email: e.email, label: e.label || '' })) : [{ email: '', label: '' }])
     setSelectedSubjects(s.student_subjects.map(ss => ss.subject.id))
     setSelectedTeachers([...new Set(s.teacher_student_assignments.map(ta => ta.teacher_id))])
@@ -100,6 +103,7 @@ export default function StudentsPage() {
       name,
       grade: grade || null,
       student_number: studentNumber || null,
+      direct_debit_start_ym: directDebitStartYm || null,
       parent_emails: emails.filter(e => e.email).map(e => ({ email: e.email, label: e.label || null })),
       subject_ids: selectedSubjects,
       teacher_assignments: selectedTeachers.map(tid => ({ teacher_id: tid })),
@@ -276,6 +280,16 @@ export default function StudentsPage() {
                     </div>
                   </div>
                   <div className="space-y-2">
+                    <Label>口座振替開始年月</Label>
+                    <Input
+                      type="month"
+                      value={directDebitStartYm}
+                      onChange={(e) => setDirectDebitStartYm(e.target.value)}
+                      placeholder="例: 2026-05"
+                    />
+                    <p className="text-xs text-muted-foreground">設定するとその月以降は口座振替扱いになります</p>
+                  </div>
+                  <div className="space-y-2">
                     <Label>担当講師</Label>
                     <div className="flex flex-wrap gap-2">
                       {teachers.map(t => (
@@ -332,6 +346,7 @@ export default function StudentsPage() {
                 <TableHead>塾生番号</TableHead>
                 <TableHead>氏名</TableHead>
                 <TableHead>学年</TableHead>
+                <TableHead>振替開始</TableHead>
                 <TableHead>メール</TableHead>
                 <TableHead>科目</TableHead>
                 <TableHead>担当</TableHead>
@@ -344,6 +359,7 @@ export default function StudentsPage() {
                   <TableCell className="text-muted-foreground text-sm">{s.student_number || '-'}</TableCell>
                   <TableCell className="font-medium">{s.name}</TableCell>
                   <TableCell>{s.grade || '-'}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{s.direct_debit_start_ym || '-'}</TableCell>
                   <TableCell>
                     <div className="text-xs text-muted-foreground space-y-0.5">
                       {s.parent_emails.length > 0
@@ -392,7 +408,7 @@ export default function StudentsPage() {
               ))}
               {filteredStudents.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                     {statusFilter === 'active' ? '通塾生がいません' : '退塾済の生徒はいません'}
                   </TableCell>
                 </TableRow>

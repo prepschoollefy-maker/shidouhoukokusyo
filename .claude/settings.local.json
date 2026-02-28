@@ -36,7 +36,24 @@
       "Bash(npx supabase:*)",
       "Bash(wc:*)",
       "Bash(grep RESEND:*)",
-      "Bash(cmd:*)"
+      "Bash(cmd:*)",
+      "Bash(cd \"C:\\\\Users\\\\koji0\\\\dev\\\\shidouhoukokusyo\" && printf \"Eszedcrdxrfvtgtgt5739\" | npx vercel env add DASHBOARD_PASSWORD production 2>&1)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(cd /c/Users/koji0/dev/shidouhoukokusyo && node -e \"const { GoogleGenerativeAI } = require\\('@google/generative-ai'\\); console.log\\('SDK loaded OK'\\); const g = new GoogleGenerativeAI\\('AIzaSyBeMWWSweNEMplU9hDcHClSpPXfboL-p1I'\\); const m = g.getGenerativeModel\\({model:'gemini-2.5-pro'}\\); m.generateContent\\('Say hello'\\).then\\(r => console.log\\('Response:', r.response.text\\(\\).substring\\(0,100\\)\\)\\).catch\\(e => console.error\\('ERROR:', e.message\\)\\)\" 2>&1)",
+      "Bash(cd /c/Users/koji0/dev/shidouhoukokusyo && node -e \"const { GoogleGenerativeAI } = require\\('@google/generative-ai'\\); const g = new GoogleGenerativeAI\\('AIzaSyBeMWWSweNEMplU9hDcHClSpPXfboL-p1I'\\); const m = g.getGenerativeModel\\({model:'gemini-2.5-flash'}\\); m.generateContent\\('Say hello in Japanese'\\).then\\(r => console.log\\('2.5-flash OK:', r.response.text\\(\\).substring\\(0,100\\)\\)\\).catch\\(e => console.error\\('2.5-flash ERROR:', e.message.substring\\(0,200\\)\\)\\)\" 2>&1)",
+      "Bash(cd:*)",
+      "Bash(cd /c/Users/koji0/dev/shidouhoukokusyo && source .env.local && node -e \"\nconst { createClient } = require\\('@supabase/supabase-js'\\);\nconst admin = createClient\\(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY\\);\nadmin.rpc\\('exec_sql', { query: \\\\\"ALTER TABLE public.school_settings ADD COLUMN IF NOT EXISTS ai_prompt_extra text NOT NULL DEFAULT '';\\\\\" }\\).then\\(r => console.log\\(JSON.stringify\\(r\\)\\)\\);\n\" 2>&1)",
+      "Bash(cd /c/Users/koji0/dev/shidouhoukokusyo && node -e \"\nrequire\\('dotenv'\\).config\\({ path: '.env.local' }\\);\nconst { createClient } = require\\('@supabase/supabase-js'\\);\nconst url = process.env.NEXT_PUBLIC_SUPABASE_URL;\nconst key = process.env.SUPABASE_SERVICE_ROLE_KEY;\nconsole.log\\('URL:', url ? 'set' : 'missing'\\);\nconsole.log\\('KEY:', key ? 'set' : 'missing'\\);\n\" 2>&1)",
+      "Bash(cd /c/Users/koji0/dev/shidouhoukokusyo && node -e \"\nrequire\\('dotenv'\\).config\\({ path: '.env.local' }\\);\nconst { createClient } = require\\('@supabase/supabase-js'\\);\nconst admin = createClient\\(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY\\);\n// Try to select first, then see if column already exists\nadmin.from\\('school_settings'\\).select\\('ai_prompt_extra'\\).limit\\(1\\).then\\(r => {\n  console.log\\(JSON.stringify\\(r\\)\\);\n}\\).catch\\(e => console.log\\('Error:', e.message\\)\\);\n\" 2>&1)",
+      "Bash(cd /c/Users/koji0/dev/shidouhoukokusyo && node -e \"\nrequire\\('dotenv'\\).config\\({ path: '.env.local' }\\);\nconst key = process.env.SUPABASE_SERVICE_ROLE_KEY;\n// Check if there are hidden characters\nconsole.log\\('length:', key.length\\);\nconsole.log\\('ends with:', JSON.stringify\\(key.slice\\(-5\\)\\)\\);\nconsole.log\\('starts with:', JSON.stringify\\(key.slice\\(0,10\\)\\)\\);\n\" 2>&1)",
+      "Bash(cat:*)",
+      "Bash(sed:*)",
+      "Bash(source:*)",
+      "Bash(where psql:*)",
+      "Bash(do basename:*)",
+      "Bash(vercel env:*)"
     ]
   }
 }

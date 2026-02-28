@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createAdminClient()
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://shidouhoukokusyo.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://lefy-platform.vercel.app'
 
   // Check if token already exists
   const { data: existing } = await admin

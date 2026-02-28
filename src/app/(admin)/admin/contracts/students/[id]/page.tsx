@@ -5,10 +5,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ArrowLeft, Lock } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { ArrowLeft, Lock, Loader2, Save, Printer } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useDashboardAuth } from '@/hooks/use-dashboard-auth'
 import { getGradeColor } from '@/lib/grade-utils'
+import { toast } from 'sonner'
 import Link from 'next/link'
 
 interface Student {
@@ -16,6 +18,8 @@ interface Student {
   name: string
   student_number: string | null
   grade: string | null
+  direct_debit_start_ym: string | null
+  payment_method: string | null
 }
 
 interface CourseEntry {
@@ -79,6 +83,10 @@ export default function StudentContractDetailPage({ params }: { params: Promise<
   const [materials, setMaterials] = useState<MaterialSale[]>([])
   const [loading, setLoading] = useState(true)
 
+  // 口座振替開始年月の編集
+  const [directDebitStartYm, setDirectDebitStartYm] = useState('')
+  const [savingDebit, setSavingDebit] = useState(false)
+
   const handleAuth = () => authHandler('/api/contracts')
 
   const fetchData = useCallback(async () => {
@@ -93,6 +101,7 @@ export default function StudentContractDetailPage({ params }: { params: Promise<
     if (studentRes.ok) {
       const json = await studentRes.json()
       setStudent(json.data || null)
+      setDirectDebitStartYm(json.data?.direct_debit_start_ym || '')
     }
     if (contractsRes.ok) {
       const json = await contractsRes.json()
@@ -113,6 +122,33 @@ export default function StudentContractDetailPage({ params }: { params: Promise<
     setLoading(true)
     fetchData().finally(() => setLoading(false))
   }, [authenticated, initializing, fetchData])
+
+  const handleSaveDirectDebit = async () => {
+    setSavingDebit(true)
+    try {
+      const res = await fetch(`/api/students/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ direct_debit_start_ym: directDebitStartYm || null }),
+      })
+      if (!res.ok) throw new Error('保存に失敗しました')
+      const json = await res.json()
+      setStudent(prev => prev ? { ...prev, direct_debit_start_ym: json.data?.direct_debit_start_ym || null } : prev)
+      toast.success('口座振替開始年月を保存しました')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存に失敗しました')
+    } finally {
+      setSavingDebit(false)
+    }
+  }
+
+  /** 現在の支払方法を表示用に算出 */
+  const getCurrentPaymentMethod = (): '振込' | '口座振替' => {
+    if (!student?.direct_debit_start_ym) return (student?.payment_method as '振込' | '口座振替') || '振込'
+    const now = new Date()
+    const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    return currentYm >= student.direct_debit_start_ym ? '口座振替' : '振込'
+  }
 
   const formatYen = (n: number) => `¥${n.toLocaleString()}`
   const formatCourses = (courses: CourseEntry[]) =>
@@ -185,6 +221,54 @@ export default function StudentContractDetailPage({ params }: { params: Promise<
         </div>
       </div>
 
+      {/* 支払方法設定 */}
+      <Card>
+        <CardContent className="py-4 px-4">
+          <h3 className="text-sm font-semibold text-muted-foreground mb-3">支払方法</h3>
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">現在:</span>
+              {getCurrentPaymentMethod() === '口座振替'
+                ? <Badge variant="outline" className="text-xs border-blue-300 text-blue-700 bg-blue-50">口座振替</Badge>
+                : <Badge variant="outline" className="text-xs border-orange-300 text-orange-700 bg-orange-50">振込</Badge>
+              }
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="debit-start" className="text-sm whitespace-nowrap">口座振替開始年月</Label>
+              <Input
+                id="debit-start"
+                type="month"
+                value={directDebitStartYm}
+                onChange={(e) => setDirectDebitStartYm(e.target.value)}
+                className="w-44"
+              />
+              <Button
+                size="sm"
+                onClick={handleSaveDirectDebit}
+                disabled={savingDebit || directDebitStartYm === (student?.direct_debit_start_ym || '')}
+              >
+                {savingDebit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              </Button>
+              {directDebitStartYm && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground"
+                  onClick={() => { setDirectDebitStartYm(''); }}
+                >
+                  解除
+                </Button>
+              )}
+            </div>
+          </div>
+          {directDebitStartYm && (
+            <p className="text-xs text-muted-foreground mt-2">
+              {directDebitStartYm} 以降の請求は口座振替、それより前は振込として扱われます
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* 通常コース */}
       <div>
         <h3 className="text-lg font-semibold mb-3">通常コース</h3>
@@ -214,6 +298,12 @@ export default function StudentContractDetailPage({ params }: { params: Promise<
                     <span className="font-medium">{formatCourses(c.courses)}</span>
                     <span className="font-mono font-bold">{formatYen(c.monthly_amount)}</span>
                     {c.notes && <span className="text-sm text-muted-foreground">({c.notes})</span>}
+                    <Link href={`/admin/contracts/print/${c.id}`} target="_blank">
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground">
+                        <Printer className="h-3.5 w-3.5 mr-1" />
+                        <span className="text-xs">印刷</span>
+                      </Button>
+                    </Link>
                   </div>
                 </CardContent>
               </Card>

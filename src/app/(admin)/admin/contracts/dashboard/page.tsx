@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -18,11 +19,22 @@ interface MonthData {
   count: number
 }
 
+interface GradeStat {
+  grade: string
+  student_count: number
+  monthly_revenue: number
+  weekly_lessons: number
+}
+
 export default function ContractDashboardPage() {
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [months, setMonths] = useState<MonthData[]>([])
+  const [gradeStats, setGradeStats] = useState<GradeStat[]>([])
+  const [totalGradeStudents, setTotalGradeStudents] = useState(0)
+  const [totalGradeRevenue, setTotalGradeRevenue] = useState(0)
+  const [totalGradeLessons, setTotalGradeLessons] = useState(0)
   const [loading, setLoading] = useState(false)
 
   // パスワード認証（共通フック）
@@ -38,6 +50,10 @@ export default function ContractDashboardPage() {
       if (res.ok) {
         const json = await res.json()
         setMonths(json.data || [])
+        setGradeStats(json.gradeStats || [])
+        setTotalGradeStudents(json.totalGradeStudents || 0)
+        setTotalGradeRevenue(json.totalGradeRevenue || 0)
+        setTotalGradeLessons(json.totalGradeLessons || 0)
       }
       setLoading(false)
     }
@@ -229,6 +245,50 @@ export default function ContractDashboardPage() {
                 )
               })}
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 学年別統計 */}
+      <Card>
+        <CardContent className="p-4">
+          <h3 className="text-sm font-medium text-muted-foreground mb-3">学年別統計（{year}年{month}月・通常コース）</h3>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>学年</TableHead>
+                  <TableHead className="text-right">生徒数</TableHead>
+                  <TableHead className="text-right">月額売上</TableHead>
+                  <TableHead className="text-right">週コマ数</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {gradeStats.map(g => (
+                  <TableRow key={g.grade}>
+                    <TableCell className="font-medium">{g.grade}</TableCell>
+                    <TableCell className="text-right">{g.student_count}人</TableCell>
+                    <TableCell className="text-right font-mono">{formatYen(g.monthly_revenue)}</TableCell>
+                    <TableCell className="text-right">{g.weekly_lessons}コマ</TableCell>
+                  </TableRow>
+                ))}
+                {gradeStats.length > 0 && (
+                  <TableRow className="bg-muted/50 font-bold">
+                    <TableCell>合計</TableCell>
+                    <TableCell className="text-right">{totalGradeStudents}人</TableCell>
+                    <TableCell className="text-right font-mono">{formatYen(totalGradeRevenue)}</TableCell>
+                    <TableCell className="text-right">{totalGradeLessons}コマ</TableCell>
+                  </TableRow>
+                )}
+                {gradeStats.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                      データなし
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </div>
         </CardContent>
       </Card>

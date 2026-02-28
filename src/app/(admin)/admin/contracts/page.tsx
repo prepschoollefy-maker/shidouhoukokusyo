@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Plus, Pencil, Trash2, Search, Lock, ChevronsUpDown, Check, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, Lock, ChevronsUpDown, Check, ChevronDown, ChevronRight, ExternalLink, Printer } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -387,6 +387,15 @@ export default function ContractsPage() {
                     </div>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
+                    <Link
+                      href={`/admin/contracts/print/${c.id}`}
+                      target="_blank"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="印刷">
+                        <Printer className="h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
                     <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="編集" onClick={() => openEdit(c)}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>

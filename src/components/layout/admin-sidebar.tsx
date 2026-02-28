@@ -17,6 +17,7 @@ import {
   Calendar,
   ClipboardCheck,
   Send,
+  Clock,
   FileSignature,
   Receipt,
   TrendingUp,
@@ -56,6 +57,12 @@ const navGroups: (NavItem | NavGroup)[] = [
       { href: '/admin/mendan', label: '面談一覧', icon: Calendar },
       { href: '/admin/mendan/requests', label: '希望申請', icon: ClipboardCheck },
       { href: '/admin/mendan/email', label: 'メール送信', icon: Send },
+    ],
+  },
+  {
+    label: '授業管理',
+    items: [
+      { href: '/admin/lessons/master', label: '授業マスタ', icon: Clock },
     ],
   },
   {

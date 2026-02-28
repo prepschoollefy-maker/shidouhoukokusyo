@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyContractPassword } from '@/lib/contracts/auth'
 import { FACILITY_FEE_MONTHLY_TAX_INCL, FACILITY_FEE_HALF_TAX_INCL } from '@/lib/contracts/pricing'
+
+function getEffectivePaymentMethod(
+  student: { payment_method: string; direct_debit_start_ym: string | null },
+  billingYear: number,
+  billingMonth: number
+): '振込' | '口座振替' {
+  if (!student.direct_debit_start_ym) return student.payment_method as '振込' | '口座振替'
+  const billingYm = `${billingYear}-${String(billingMonth).padStart(2, '0')}`
+  return billingYm >= student.direct_debit_start_ym ? '口座振替' : '振込'
+}
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
@@ -20,7 +31,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from('contracts')
-    .select('*, student:students(id, name, student_number, payment_method)')
+    .select('*, student:students(id, name, student_number, payment_method, direct_debit_start_ym)')
     .lte('start_date', lastDay)
     .gte('end_date', firstDay)
     .order('start_date', { ascending: true })
@@ -57,6 +68,7 @@ export async function GET(request: NextRequest) {
       facility_fee: facilityFee,
       campaign_discount_amount: campaignDiscount,
       total_amount: totalAmount,
+      effective_payment_method: c.student ? getEffectivePaymentMethod(c.student, year, month) : '振込',
     }
   })
 
@@ -65,7 +77,7 @@ export async function GET(request: NextRequest) {
   // 講習データ: 当月の allocation を含む講習を集計（lecture_id でグループ化）
   const { data: lectureRows, error: lectureError } = await supabase
     .from('lectures')
-    .select('*, student:students(id, name, student_number, payment_method)')
+    .select('*, student:students(id, name, student_number, payment_method, direct_debit_start_ym)')
 
   if (lectureError) return NextResponse.json({ error: lectureError.message }, { status: 500 })
 
@@ -79,6 +91,7 @@ export async function GET(request: NextRequest) {
     grade: string
     courses: { course: string; unit_price: number; lessons: number; amount: number }[]
     total_amount: number
+    effective_payment_method: '振込' | '口座振替'
   }[] = []
 
   for (const l of lectureRows || []) {
@@ -107,6 +120,7 @@ export async function GET(request: NextRequest) {
         grade: l.grade,
         courses: monthCourses,
         total_amount: monthCourses.reduce((sum, c) => sum + c.amount, 0),
+        effective_payment_method: '振込' as const, // 講習は常に振込
       })
     }
   }
@@ -114,7 +128,7 @@ export async function GET(request: NextRequest) {
   const lectureTotal = lectureData.reduce((sum, l) => sum + l.total_amount, 0)
 
   // 教材販売データ: 当月の billing_year/month に該当するもの
-  // テーブル未作成やRLS等でエラーの場合は空配列で続行（請求全体を壊さない）
+  // adminClient を使用（material_sales の RLS は admin only のため）
   let materialData: {
     id: string
     student: { id: string; name: string; student_number: string | null; payment_method: string }
@@ -124,11 +138,13 @@ export async function GET(request: NextRequest) {
     total_amount: number
     sale_date: string
     notes: string
+    effective_payment_method: '振込' | '口座振替'
   }[] = []
 
-  const { data: materialRows, error: materialError } = await supabase
+  const admin = createAdminClient()
+  const { data: materialRows, error: materialError } = await admin
     .from('material_sales')
-    .select('*, student:students(id, name, student_number, payment_method)')
+    .select('*, student:students(id, name, student_number, payment_method, direct_debit_start_ym)')
     .eq('billing_year', year)
     .eq('billing_month', month)
     .order('sale_date', { ascending: true })
@@ -143,6 +159,7 @@ export async function GET(request: NextRequest) {
       total_amount: m.total_amount,
       sale_date: m.sale_date,
       notes: m.notes,
+      effective_payment_method: m.student ? getEffectivePaymentMethod(m.student, year, month) : '振込' as const,
     }))
   }
 
