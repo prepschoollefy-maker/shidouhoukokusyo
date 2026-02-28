@@ -14,11 +14,13 @@ export async function sendEmail({
   subject,
   text,
   html,
+  bcc,
 }: {
   to: string | string[]
   subject: string
   text: string
   html?: string
+  bcc?: string | string[]
 }) {
   const resend = getResendClient()
   const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@example.com'
@@ -29,6 +31,7 @@ export async function sendEmail({
     subject,
     text,
     ...(html ? { html } : {}),
+    ...(bcc ? { bcc: Array.isArray(bcc) ? bcc : [bcc] } : {}),
   })
 
   if (error) {

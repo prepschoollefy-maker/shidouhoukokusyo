@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { period_label, custom_body, student_ids, deadline } = body
+  const { period_label, custom_body, student_ids, deadline, bcc } = body
 
   if (!period_label) {
     return NextResponse.json({ error: '期間ラベルを入力してください' }, { status: 400 })
@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
     custom_body || undefined,
     student_ids?.length ? student_ids : undefined,
     deadline || undefined,
+    bcc || undefined,
   )
   return NextResponse.json({ data: result })
 }

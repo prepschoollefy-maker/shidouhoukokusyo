@@ -34,6 +34,7 @@ export default function MendanEmailPage() {
 
   // Email config
   const [fromEmail, setFromEmail] = useState('')
+  const [bccEmail, setBccEmail] = useState('')
   const [defaultBody, setDefaultBody] = useState('')
   const [customBody, setCustomBody] = useState('')
   const [variables, setVariables] = useState<{ key: string; description: string }[]>([])
@@ -156,6 +157,7 @@ export default function MendanEmailPage() {
           student_ids: Array.from(selectedIds),
           ...(isCustom ? { custom_body: customBody } : {}),
           deadline,
+          ...(bccEmail.trim() ? { bcc: bccEmail.trim() } : {}),
         }),
       })
       const json = await res.json()
@@ -177,14 +179,25 @@ export default function MendanEmailPage() {
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">面談メール送信</h2>
 
-      {/* 送信元アドレス */}
+      {/* 送信元アドレス・BCC */}
       {!loadingConfig && (
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-4 space-y-3">
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">送信元:</span>
               <span className="text-sm font-medium">{fromEmail}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground ml-5">BCC:</span>
+              <Input
+                value={bccEmail}
+                onChange={(e) => setBccEmail(e.target.value)}
+                placeholder="例: info@example.com"
+                className="max-w-sm"
+                type="email"
+              />
+              <span className="text-xs text-muted-foreground">送信確認用</span>
             </div>
           </CardContent>
         </Card>
