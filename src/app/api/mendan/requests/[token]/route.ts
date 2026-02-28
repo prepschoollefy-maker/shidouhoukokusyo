@@ -26,7 +26,7 @@ export async function GET(
   // Check if already submitted
   const { data: existing } = await admin
     .from('mendan_requests')
-    .select('id')
+    .select('id, candidate1, candidate2, candidate3, candidate1_end, candidate2_end, candidate3_end, message')
     .eq('token_id', tokenRow.id)
     .limit(1)
 
@@ -42,6 +42,7 @@ export async function GET(
       period_label: tokenRow.period_label,
       school_name: settings?.school_name || 'レフィー',
       already_submitted: !!existing?.length,
+      existing_request: existing?.[0] || null,
     },
   })
 }
@@ -67,7 +68,14 @@ export async function POST(
     return NextResponse.json({ error: '回答期限が過ぎています' }, { status: 410 })
   }
 
-  // Check if already submitted
+  const body = await request.json()
+  const { candidate1, candidate2, candidate3, candidate1_end, candidate2_end, candidate3_end, message } = body
+
+  if (!candidate1 || !candidate2 || !candidate3) {
+    return NextResponse.json({ error: '3つの希望日時を入力してください' }, { status: 400 })
+  }
+
+  // Check if already submitted → update instead of reject
   const { data: existing } = await admin
     .from('mendan_requests')
     .select('id')
@@ -75,14 +83,23 @@ export async function POST(
     .limit(1)
 
   if (existing?.length) {
-    return NextResponse.json({ error: '既に回答済みです' }, { status: 409 })
-  }
+    const { error: updateError } = await admin
+      .from('mendan_requests')
+      .update({
+        candidate1,
+        candidate2,
+        candidate3,
+        candidate1_end: candidate1_end || null,
+        candidate2_end: candidate2_end || null,
+        candidate3_end: candidate3_end || null,
+        message: message || null,
+      })
+      .eq('id', existing[0].id)
 
-  const body = await request.json()
-  const { candidate1, candidate2, candidate3, candidate1_end, candidate2_end, candidate3_end, message } = body
-
-  if (!candidate1 || !candidate2 || !candidate3) {
-    return NextResponse.json({ error: '3つの希望日時を入力してください' }, { status: 400 })
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+    return NextResponse.json({ data: { success: true, updated: true } }, { status: 200 })
   }
 
   const { error: insertError } = await admin

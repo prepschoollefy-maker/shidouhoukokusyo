@@ -9,6 +9,15 @@ interface TokenInfo {
   period_label: string
   school_name: string
   already_submitted: boolean
+  existing_request?: {
+    candidate1: string
+    candidate2: string
+    candidate3: string
+    candidate1_end: string | null
+    candidate2_end: string | null
+    candidate3_end: string | null
+    message: string | null
+  }
 }
 
 // 曜日に応じた時間帯オプションを返す
@@ -147,6 +156,8 @@ export default function MendanRequestPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false)
+  const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   const [date1, setDate1] = useState('')
@@ -172,7 +183,7 @@ export default function MendanRequestPage() {
         const json = await res.json()
         setInfo(json.data)
         if (json.data.already_submitted) {
-          setSubmitted(true)
+          setAlreadySubmitted(true)
         }
         setLoading(false)
       })
@@ -257,6 +268,58 @@ export default function MendanRequestPage() {
             日程が確定しましたらご連絡いたします。
           </p>
           <div className="bg-white rounded-lg border p-4 text-sm text-gray-600">
+            <p>{info?.school_name}</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (alreadySubmitted && !showForm) {
+    const ex = info?.existing_request
+    const fmtDateTime = (iso: string | null | undefined) => {
+      if (!iso) return ''
+      const d = new Date(iso)
+      const mm = d.getMonth() + 1
+      const dd = d.getDate()
+      const dayNames = ['日', '月', '火', '水', '木', '金', '土']
+      const hh = String(d.getHours()).padStart(2, '0')
+      const min = String(d.getMinutes()).padStart(2, '0')
+      return `${mm}/${dd}（${dayNames[d.getDay()]}）${hh}:${min}`
+    }
+    const fmtRange = (start: string | null | undefined, end: string | null | undefined) => {
+      if (!start) return '—'
+      const s = fmtDateTime(start)
+      const e = end ? new Date(end) : null
+      if (e) {
+        return `${s}〜${String(e.getHours()).padStart(2, '0')}:${String(e.getMinutes()).padStart(2, '0')}`
+      }
+      return s
+    }
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-50 to-white px-4">
+        <div className="text-center max-w-sm">
+          <div className="text-5xl mb-4">📅</div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">既にご回答いただいています</h1>
+          <p className="text-gray-500 mb-4">
+            {info?.student_name}さんの面談希望日は受付済みです。
+          </p>
+          {ex && (
+            <div className="bg-white rounded-lg border p-4 text-sm text-left mb-4 space-y-1">
+              <p><span className="font-medium text-gray-700">第1希望:</span> {fmtRange(ex.candidate1, ex.candidate1_end)}</p>
+              <p><span className="font-medium text-gray-700">第2希望:</span> {fmtRange(ex.candidate2, ex.candidate2_end)}</p>
+              <p><span className="font-medium text-gray-700">第3希望:</span> {fmtRange(ex.candidate3, ex.candidate3_end)}</p>
+              {ex.message && <p className="text-gray-500 mt-2 text-xs">メッセージ: {ex.message}</p>}
+            </div>
+          )}
+          <button
+            onClick={() => setShowForm(true)}
+            className="w-full bg-gray-600 text-white py-3 rounded-lg font-medium text-sm hover:bg-gray-700 transition-colors"
+          >
+            回答を修正する
+          </button>
+          <div className="bg-white rounded-lg border p-4 text-sm text-gray-600 mt-4">
             <p>{info?.school_name}</p>
           </div>
         </div>
