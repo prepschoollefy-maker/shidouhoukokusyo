@@ -3,15 +3,15 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ClipboardList, PlusCircle, Camera, Users, HelpCircle, LogOut } from 'lucide-react'
+import { ClipboardList, PlusCircle, Camera, Users, HelpCircle, LogOut, CalendarDays } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/reports', label: 'レポート', icon: ClipboardList },
   { href: '/reports/new', label: '新規入力', icon: PlusCircle },
   { href: '/ocr', label: '写真入力', icon: Camera },
+  { href: '/schedule', label: '時間割', icon: CalendarDays },
   { href: '/students', label: '生徒カルテ', icon: Users },
-  { href: '/guide', label: '使い方', icon: HelpCircle },
 ]
 
 export function TeacherNav() {

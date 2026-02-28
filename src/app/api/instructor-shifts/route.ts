@@ -1,19 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('regular_lesson_templates')
+  const teacherId = new URL(request.url).searchParams.get('teacher_id')
+
+  let query = supabase
+    .from('instructor_shifts')
     .select(`
       *,
-      student:students ( id, name ),
       teacher:profiles ( id, display_name ),
-      subject:subjects ( id, name ),
-      time_slot:time_slots ( id, slot_number, label, start_time, end_time, sort_order ),
-      booth:booths ( id, booth_number, label )
+      time_slot:time_slots ( id, slot_number, label, start_time, end_time, sort_order )
     `)
     .order('day_of_week')
+
+  if (teacherId) query = query.eq('teacher_id', teacherId)
+
+  const { data, error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ data })
@@ -27,17 +30,24 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { student_id, teacher_id, subject_id, day_of_week, time_slot_id, booth_id, notes } = body
+  const { teacher_id, time_slot_id, shift_type, day_of_week, specific_date, is_available } = body
 
   const { data, error } = await supabase
-    .from('regular_lesson_templates')
-    .insert({ student_id, teacher_id, subject_id, day_of_week, time_slot_id, booth_id, notes: notes || '' })
+    .from('instructor_shifts')
+    .insert({
+      teacher_id,
+      time_slot_id,
+      shift_type: shift_type || 'regular',
+      day_of_week: shift_type === 'regular' ? day_of_week : null,
+      specific_date: shift_type === 'specific' ? specific_date : null,
+      is_available: is_available ?? true,
+    })
     .select()
     .single()
 
   if (error) {
     if (error.code === '23505') {
-      return NextResponse.json({ error: '同じ曜日・時間帯に重複する登録があります' }, { status: 409 })
+      return NextResponse.json({ error: '同じ時間帯に重複するシフトがあります' }, { status: 409 })
     }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

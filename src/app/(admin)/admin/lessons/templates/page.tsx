@@ -58,11 +58,11 @@ interface Template {
   booth_id: string | null
   is_active: boolean
   notes: string
-  students: StudentOption
-  profiles: TeacherOption
-  subjects: SubjectOption | null
-  time_slots: TimeSlot
-  booths: Booth | null
+  student: StudentOption
+  teacher: TeacherOption
+  subject: SubjectOption | null
+  time_slot: TimeSlot
+  booth: Booth | null
 }
 
 interface FormData {
@@ -472,15 +472,15 @@ function TemplateCard({
     >
       <div className="flex items-start justify-between gap-1">
         <div className="min-w-0 flex-1">
-          <div className="font-medium truncate">{t.students.name}</div>
-          <div className="text-muted-foreground truncate">{t.profiles.display_name}</div>
-          {t.subjects && (
+          <div className="font-medium truncate">{t.student.name}</div>
+          <div className="text-muted-foreground truncate">{t.teacher.display_name}</div>
+          {t.subject && (
             <Badge variant="secondary" className="mt-0.5 text-[10px] px-1 py-0">
-              {t.subjects.name}
+              {t.subject.name}
             </Badge>
           )}
-          {t.booths && (
-            <div className="text-muted-foreground mt-0.5">{t.booths.label}</div>
+          {t.booth && (
+            <div className="text-muted-foreground mt-0.5">{t.booth.label}</div>
           )}
         </div>
         <div className="flex flex-col gap-0.5 shrink-0">

@@ -11,11 +11,11 @@ export async function GET(request: NextRequest) {
     .from('lessons')
     .select(`
       *,
-      students ( id, name ),
-      profiles!lessons_teacher_id_fkey ( id, display_name ),
-      subjects ( id, name ),
-      time_slots ( id, slot_number, label, start_time, end_time, sort_order ),
-      booths ( id, booth_number, label )
+      student:students ( id, name ),
+      teacher:profiles ( id, display_name ),
+      subject:subjects ( id, name ),
+      time_slot:time_slots ( id, slot_number, label, start_time, end_time, sort_order ),
+      booth:booths ( id, booth_number, label )
     `)
     .order('lesson_date')
 

@@ -20,6 +20,7 @@ import {
   Send,
   Clock,
   LayoutGrid,
+  ArrowLeftRight,
   FileSignature,
   Receipt,
   TrendingUp,
@@ -66,6 +67,7 @@ const navGroups: (NavItem | NavGroup)[] = [
     items: [
       { href: '/admin/lessons', label: '時間割', icon: CalendarDays },
       { href: '/admin/lessons/templates', label: 'テンプレート', icon: LayoutGrid },
+      { href: '/admin/lessons/reschedule', label: '振替管理', icon: ArrowLeftRight },
       { href: '/admin/lessons/master', label: '授業マスタ', icon: Clock },
     ],
   },

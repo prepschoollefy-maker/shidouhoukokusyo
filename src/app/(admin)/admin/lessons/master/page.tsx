@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
 import { Plus, Trash2 } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -51,10 +52,12 @@ export default function LessonMasterPage() {
           <TabsTrigger value="time-slots">時間枠</TabsTrigger>
           <TabsTrigger value="availability">開講パターン</TabsTrigger>
           <TabsTrigger value="booths">ブース</TabsTrigger>
+          <TabsTrigger value="shifts">講師シフト</TabsTrigger>
         </TabsList>
         <TabsContent value="time-slots"><TimeSlotsTab /></TabsContent>
         <TabsContent value="availability"><AvailabilityTab /></TabsContent>
         <TabsContent value="booths"><BoothsTab /></TabsContent>
+        <TabsContent value="shifts"><InstructorShiftsTab /></TabsContent>
       </Tabs>
     </div>
   )
@@ -493,6 +496,184 @@ function BoothsTab() {
         description="このブースを削除しますか？"
         onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget); setDeleteTarget(null) }}
       />
+    </div>
+  )
+}
+
+// ─── 講師シフトタブ ───────────────────────────
+
+const SHIFT_DAYS = ['日', '月', '火', '水', '木', '金', '土'] as const
+const SHIFT_DAY_INDICES = [1, 2, 3, 4, 5, 6, 0] // 月〜日
+
+interface TeacherOption {
+  id: string
+  display_name: string
+}
+
+interface ShiftRecord {
+  id: string
+  teacher_id: string
+  time_slot_id: string
+  shift_type: string
+  day_of_week: number | null
+  specific_date: string | null
+  is_available: boolean
+  teacher: TeacherOption
+  time_slot: TimeSlot
+}
+
+function InstructorShiftsTab() {
+  const [teachers, setTeachers] = useState<TeacherOption[]>([])
+  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
+  const [shifts, setShifts] = useState<ShiftRecord[]>([])
+  const [selectedTeacher, setSelectedTeacher] = useState<string>('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const fetchMasters = useCallback(async () => {
+    const [teachersRes, slotsRes] = await Promise.all([
+      fetch('/api/teachers'),
+      fetch('/api/master/time-slots'),
+    ])
+    const [teachersJson, slotsJson] = await Promise.all([
+      teachersRes.json(), slotsRes.json(),
+    ])
+    setTeachers(teachersJson.data || [])
+    setTimeSlots(slotsJson.data || [])
+    setLoading(false)
+  }, [])
+
+  const fetchShifts = useCallback(async () => {
+    if (!selectedTeacher) { setShifts([]); return }
+    const res = await fetch(`/api/instructor-shifts?teacher_id=${selectedTeacher}`)
+    const json = await res.json()
+    setShifts((json.data || []).filter((s: ShiftRecord) => s.shift_type === 'regular'))
+  }, [selectedTeacher])
+
+  useEffect(() => { fetchMasters() }, [fetchMasters])
+  useEffect(() => { fetchShifts() }, [fetchShifts])
+
+  // マトリクス: shiftMap[day_of_week][time_slot_id] = ShiftRecord | null
+  const shiftMap: Record<number, Record<string, ShiftRecord | null>> = {}
+  for (const d of SHIFT_DAY_INDICES) {
+    shiftMap[d] = {}
+    for (const s of timeSlots) {
+      shiftMap[d][s.id] = null
+    }
+  }
+  for (const s of shifts) {
+    if (s.day_of_week !== null && shiftMap[s.day_of_week]) {
+      shiftMap[s.day_of_week][s.time_slot_id] = s
+    }
+  }
+
+  const toggleShift = async (dayOfWeek: number, timeSlotId: string) => {
+    if (!selectedTeacher) return
+    setSaving(true)
+    const existing = shiftMap[dayOfWeek]?.[timeSlotId]
+    try {
+      if (existing) {
+        // 削除
+        await fetch(`/api/instructor-shifts/${existing.id}`, { method: 'DELETE' })
+      } else {
+        // 作成
+        const res = await fetch('/api/instructor-shifts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            teacher_id: selectedTeacher,
+            time_slot_id: timeSlotId,
+            shift_type: 'regular',
+            day_of_week: dayOfWeek,
+            is_available: true,
+          }),
+        })
+        const json = await res.json()
+        if (!res.ok) {
+          toast.error(json.error || '登録に失敗しました')
+          setSaving(false)
+          return
+        }
+      }
+      fetchShifts()
+    } catch {
+      toast.error('操作に失敗しました')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <LoadingSpinner />
+
+  return (
+    <div className="space-y-4 mt-4">
+      <Card>
+        <CardContent className="p-4 space-y-4">
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-medium whitespace-nowrap">講師を選択:</span>
+            <Select value={selectedTeacher} onValueChange={setSelectedTeacher}>
+              <SelectTrigger className="w-60">
+                <SelectValue placeholder="講師を選択してください" />
+              </SelectTrigger>
+              <SelectContent>
+                {teachers.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.display_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {selectedTeacher && (
+            <>
+              <p className="text-sm text-muted-foreground">
+                セルをクリックしてシフトのON/OFFを切り替えます
+              </p>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-24">コマ</TableHead>
+                      {SHIFT_DAY_INDICES.map((d) => (
+                        <TableHead key={d} className="w-20 text-center">{SHIFT_DAYS[d]}曜</TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {timeSlots.map((slot) => (
+                      <TableRow key={slot.id}>
+                        <TableCell className="font-medium">
+                          {slot.label}
+                          <span className="text-xs text-muted-foreground ml-1">
+                            ({slot.start_time.slice(0, 5)})
+                          </span>
+                        </TableCell>
+                        {SHIFT_DAY_INDICES.map((d) => {
+                          const shift = shiftMap[d]?.[slot.id]
+                          return (
+                            <TableCell
+                              key={d}
+                              className={`text-center cursor-pointer transition-colors ${
+                                shift ? 'bg-green-100 hover:bg-green-200' : 'hover:bg-muted'
+                              } ${saving ? 'pointer-events-none opacity-50' : ''}`}
+                              onClick={() => toggleShift(d, slot.id)}
+                            >
+                              {shift && (
+                                <Badge variant="default" className="bg-green-600 text-[11px]">
+                                  ○
+                                </Badge>
+                              )}
+                            </TableCell>
+                          )
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

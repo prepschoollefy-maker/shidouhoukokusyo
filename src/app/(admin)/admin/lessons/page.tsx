@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, ArrowLeftRight } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   startOfWeek, endOfWeek, addWeeks, eachDayOfInterval, format, isToday,
@@ -63,11 +63,11 @@ interface Lesson {
   status: string
   template_id: string | null
   notes: string
-  students: StudentOption
-  profiles: TeacherOption
-  subjects: SubjectOption | null
-  time_slots: TimeSlot
-  booths: Booth | null
+  student: StudentOption
+  teacher: TeacherOption
+  subject: SubjectOption | null
+  time_slot: TimeSlot
+  booth: Booth | null
 }
 
 interface FormData {
@@ -162,13 +162,14 @@ export default function WeeklySchedulePage() {
   }, [])
 
   const fetchLessons = useCallback(async () => {
+    const we = endOfWeek(weekStart, { weekStartsOn: 1 })
     const startDate = format(weekStart, 'yyyy-MM-dd')
-    const endDate = format(weekEnd, 'yyyy-MM-dd')
+    const endDate = format(we, 'yyyy-MM-dd')
     const res = await fetch(`/api/lessons?start_date=${startDate}&end_date=${endDate}`)
     const json = await res.json()
     setLessons(json.data || [])
     setLoading(false)
-  }, [weekStart, weekEnd])
+  }, [weekStart])
 
   useEffect(() => { fetchMasters() }, [fetchMasters])
   useEffect(() => { fetchLessons() }, [fetchLessons])
@@ -254,6 +255,31 @@ export default function WeeklySchedulePage() {
       fetchLessons()
     } catch {
       toast.error('削除に失敗しました')
+    }
+  }
+
+  const handleReschedule = async (lesson: Lesson) => {
+    const reason = window.prompt('振替理由を入力してください（任意）')
+    if (reason === null) return // キャンセル
+    try {
+      const res = await fetch('/api/reschedule-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lesson_id: lesson.id,
+          requested_by: '管理者',
+          reason,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error || '振替申請に失敗しました')
+        return
+      }
+      toast.success('振替申請を登録しました（振替管理ページで振替先を指定してください）')
+      fetchLessons()
+    } catch {
+      toast.error('振替申請に失敗しました')
     }
   }
 
@@ -349,6 +375,7 @@ export default function WeeklySchedulePage() {
                                 lesson={l}
                                 onEdit={() => openEdit(l)}
                                 onDelete={() => setDeleteTarget(l.id)}
+                                onReschedule={() => handleReschedule(l)}
                               />
                             ))}
                           </div>
@@ -498,10 +525,12 @@ function LessonCard({
   lesson: l,
   onEdit,
   onDelete,
+  onReschedule,
 }: {
   lesson: Lesson
   onEdit: () => void
   onDelete: () => void
+  onReschedule: () => void
 }) {
   const colorClass = LESSON_TYPE_COLORS[l.lesson_type] || LESSON_TYPE_COLORS.regular
   const isCancelled = l.status === 'cancelled' || l.status === 'rescheduled'
@@ -513,12 +542,12 @@ function LessonCard({
     >
       <div className="flex items-start justify-between gap-1">
         <div className="min-w-0 flex-1">
-          <div className="font-medium truncate">{l.students.name}</div>
-          <div className="text-muted-foreground truncate">{l.profiles.display_name}</div>
+          <div className="font-medium truncate">{l.student.name}</div>
+          <div className="text-muted-foreground truncate">{l.teacher.display_name}</div>
           <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-            {l.subjects && (
+            {l.subject && (
               <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                {l.subjects.name}
+                {l.subject.name}
               </Badge>
             )}
             {l.lesson_type !== 'regular' && (
@@ -527,14 +556,19 @@ function LessonCard({
               </Badge>
             )}
           </div>
-          {l.booths && (
-            <div className="text-muted-foreground mt-0.5">{l.booths.label}</div>
+          {l.booth && (
+            <div className="text-muted-foreground mt-0.5">{l.booth.label}</div>
           )}
         </div>
         <div className="flex flex-col gap-0.5 shrink-0">
           <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onEdit}>
             <Pencil className="h-3 w-3" />
           </Button>
+          {!isCancelled && (
+            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onReschedule}>
+              <ArrowLeftRight className="h-3 w-3 text-orange-500" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onDelete}>
             <Trash2 className="h-3 w-3 text-red-500" />
           </Button>
