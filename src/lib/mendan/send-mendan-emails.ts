@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/resend/client'
 import { buildMendanHtmlEmail } from './email-template'
 
-export async function sendMendanEmails(periodLabel: string, customBody?: string, studentIds?: string[], deadline?: string, bcc?: string) {
+export async function sendMendanEmails(periodLabel: string, customBody?: string, studentIds?: string[], deadline?: string, bcc?: string | string[]) {
   const admin = createAdminClient()
 
   // Get school settings

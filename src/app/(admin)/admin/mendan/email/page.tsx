@@ -34,7 +34,7 @@ export default function MendanEmailPage() {
 
   // Email config
   const [fromEmail, setFromEmail] = useState('')
-  const [bccEmail, setBccEmail] = useState('')
+  const [bccEmail, setBccEmail] = useState('koji.yamamoto@lefy.jp,takaya.hattori@lefy.jp,hiroyuki.yamamoto@lefy.jp')
   const [defaultBody, setDefaultBody] = useState('')
   const [customBody, setCustomBody] = useState('')
   const [variables, setVariables] = useState<{ key: string; description: string }[]>([])
@@ -157,7 +157,7 @@ export default function MendanEmailPage() {
           student_ids: Array.from(selectedIds),
           ...(isCustom ? { custom_body: customBody } : {}),
           deadline,
-          ...(bccEmail.trim() ? { bcc: bccEmail.trim() } : {}),
+          ...(bccEmail.trim() ? { bcc: bccEmail.split(',').map(e => e.trim()).filter(Boolean) } : {}),
         }),
       })
       const json = await res.json()
@@ -188,16 +188,17 @@ export default function MendanEmailPage() {
               <span className="text-sm text-muted-foreground">送信元:</span>
               <span className="text-sm font-medium">{fromEmail}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground ml-5">BCC:</span>
-              <Input
-                value={bccEmail}
-                onChange={(e) => setBccEmail(e.target.value)}
-                placeholder="例: info@example.com"
-                className="max-w-sm"
-                type="email"
-              />
-              <span className="text-xs text-muted-foreground">送信確認用</span>
+            <div className="flex items-start gap-2">
+              <span className="text-sm text-muted-foreground ml-5 mt-1">BCC:</span>
+              <div className="flex-1 max-w-md space-y-1">
+                <Input
+                  value={bccEmail}
+                  onChange={(e) => setBccEmail(e.target.value)}
+                  placeholder="例: info@example.com（カンマ区切りで複数可）"
+                  className="font-mono text-xs"
+                />
+                <span className="text-xs text-muted-foreground">カンマ区切りで複数指定可。不要な場合は空にしてください</span>
+              </div>
             </div>
           </CardContent>
         </Card>
