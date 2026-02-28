@@ -24,10 +24,20 @@ function defaultDeadline() {
   return d.toISOString().split('T')[0]
 }
 
-export default function MendanEmailPage() {
+// 直近12ヶ月分の期間ラベル選択肢を生成（当月〜11ヶ月先）
+function buildPeriodOptions(): string[] {
   const now = new Date()
-  const defaultLabel = `${now.getFullYear()}年${now.getMonth() + 1}月`
-  const [periodLabel, setPeriodLabel] = useState(defaultLabel)
+  const options: string[] = []
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
+    options.push(`${d.getFullYear()}年${d.getMonth() + 1}月`)
+  }
+  return options
+}
+
+export default function MendanEmailPage() {
+  const periodOptions = buildPeriodOptions()
+  const [periodLabel, setPeriodLabel] = useState(periodOptions[0])
   const [deadline, setDeadline] = useState(defaultDeadline)
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<{ sent: number; skipped: number; errors: string[] } | null>(null)
@@ -242,7 +252,14 @@ export default function MendanEmailPage() {
           <div className="flex flex-wrap gap-4">
             <div className="space-y-2">
               <Label>期間ラベル</Label>
-              <Input value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)} placeholder="例：2026年3月" className="w-48" />
+              <Select value={periodLabel} onValueChange={setPeriodLabel}>
+                <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {periodOptions.map(p => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>回答期限</Label>
