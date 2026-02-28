@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Trash2 } from 'lucide-react'
+import { CalendarOff, Plus, Trash2 } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -78,11 +78,13 @@ export default function LessonMasterPage() {
           <TabsTrigger value="availability">開講パターン</TabsTrigger>
           <TabsTrigger value="booths">ブース</TabsTrigger>
           <TabsTrigger value="shifts">講師シフト</TabsTrigger>
+          <TabsTrigger value="closed-days">休館日</TabsTrigger>
         </TabsList>
         <TabsContent value="time-slots"><TimeSlotsTab /></TabsContent>
         <TabsContent value="availability"><AvailabilityTab /></TabsContent>
         <TabsContent value="booths"><BoothsTab /></TabsContent>
         <TabsContent value="shifts"><InstructorShiftsTab /></TabsContent>
+        <TabsContent value="closed-days"><ClosedDaysTab /></TabsContent>
       </Tabs>
     </div>
   )
@@ -699,6 +701,234 @@ function InstructorShiftsTab() {
           )}
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+// ─── 休館日タブ ───────────────────────────
+
+interface ClosedDay {
+  id: string
+  closed_date: string
+  reason: string
+  created_at: string
+}
+
+function ClosedDaysTab() {
+  const [closedDays, setClosedDays] = useState<ClosedDay[]>([])
+  const [loading, setLoading] = useState(true)
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [newReason, setNewReason] = useState('')
+  const [excludeSat, setExcludeSat] = useState(false)
+  const [excludeSun, setExcludeSun] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<ClosedDay | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const fetchClosedDays = async () => {
+    const res = await fetch('/api/closed-days')
+    const json = await res.json()
+    setClosedDays(json.data || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchClosedDays() }, [])
+
+  // 期間から日付配列を生成（曜日除外対応）
+  const buildDateList = (start: string, end: string): string[] => {
+    const s = new Date(start + 'T00:00:00')
+    const e = end ? new Date(end + 'T00:00:00') : s
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || s > e) return [start]
+
+    const dates: string[] = []
+    const current = new Date(s)
+    while (current <= e) {
+      const dow = current.getDay()
+      const skip = (excludeSat && dow === 6) || (excludeSun && dow === 0)
+      if (!skip) {
+        const y = current.getFullYear()
+        const m = String(current.getMonth() + 1).padStart(2, '0')
+        const d = String(current.getDate()).padStart(2, '0')
+        dates.push(`${y}-${m}-${d}`)
+      }
+      current.setDate(current.getDate() + 1)
+    }
+    return dates
+  }
+
+  const handleAdd = async () => {
+    if (!startDate) { toast.error('開始日を入力してください'); return }
+    setSaving(true)
+    try {
+      const dates = buildDateList(startDate, endDate)
+      const isBulk = dates.length > 1
+
+      const res = await fetch('/api/closed-days', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          isBulk
+            ? { closed_dates: dates, reason: newReason }
+            : { closed_date: dates[0], reason: newReason }
+        ),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || '追加に失敗しました')
+
+      if (isBulk) {
+        const insertedCount = json.data?.length || 0
+        const parts: string[] = [`${insertedCount}件の休館日を追加しました`]
+        if (json.skippedCount > 0) parts.push(`${json.skippedCount}件は既存のためスキップ`)
+        if (json.cancelledCount > 0) parts.push(`${json.cancelledCount}件の授業をキャンセル`)
+        toast.success(parts.join('（') + (parts.length > 1 ? '）' : ''))
+      } else {
+        const msg = json.cancelledCount > 0
+          ? `休館日を追加しました（${json.cancelledCount}件の授業を自動キャンセルしました）`
+          : '休館日を追加しました'
+        toast.success(msg)
+      }
+      setStartDate('')
+      setEndDate('')
+      setNewReason('')
+      fetchClosedDays()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '追加に失敗しました')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (cd: ClosedDay) => {
+    try {
+      const res = await fetch(`/api/closed-days/${cd.id}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || '削除に失敗しました')
+      const msg = json.generatedCount > 0
+        ? `休館日を削除しました（${json.generatedCount}件の授業を再生成しました）`
+        : '休館日を削除しました'
+      toast.success(msg)
+      fetchClosedDays()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '削除に失敗しました')
+    }
+  }
+
+  // プレビュー件数
+  const previewCount = startDate
+    ? buildDateList(startDate, endDate).length
+    : 0
+
+  if (loading) return <LoadingSpinner />
+
+  return (
+    <div className="space-y-4 mt-4">
+      <Card>
+        <CardContent className="p-4 space-y-4">
+          <p className="text-sm text-muted-foreground flex items-center gap-1">
+            <CalendarOff className="h-4 w-4" />
+            休館日に設定すると、その日の授業は自動的にキャンセルされます
+          </p>
+          <div className="flex gap-2 items-end flex-wrap">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">開始日</label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-44"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">終了日（任意）</label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-44"
+                min={startDate}
+              />
+            </div>
+            <div className="space-y-1 flex-1 min-w-[200px]">
+              <label className="text-sm font-medium">理由（任意）</label>
+              <Input
+                value={newReason}
+                onChange={(e) => setNewReason(e.target.value)}
+                placeholder="例: お盆休み、年末年始"
+              />
+            </div>
+            <Button onClick={handleAdd} disabled={saving}>
+              <Plus className="h-4 w-4 mr-1" />{saving ? '追加中...' : '追加'}
+              {previewCount > 1 && ` (${previewCount}日)`}
+            </Button>
+          </div>
+          {endDate && (
+            <div className="flex gap-4 items-center">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={excludeSat}
+                  onChange={(e) => setExcludeSat(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                土曜を除外
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={excludeSun}
+                  onChange={(e) => setExcludeSun(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                日曜を除外
+              </label>
+              {previewCount > 0 && (
+                <span className="text-sm text-muted-foreground">
+                  → {previewCount}日間を一括追加
+                </span>
+              )}
+            </div>
+          )}
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-40">日付</TableHead>
+                  <TableHead>理由</TableHead>
+                  <TableHead className="w-16"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {closedDays.map((cd) => (
+                  <TableRow key={cd.id}>
+                    <TableCell className="font-medium">{cd.closed_date}</TableCell>
+                    <TableCell className="text-muted-foreground">{cd.reason || '-'}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(cd)}>
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {closedDays.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                      休館日は設定されていません
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="休館日を削除"
+        description={`${deleteTarget?.closed_date} の休館日を削除しますか？この日の授業がテンプレートから再生成されます。`}
+        onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget); setDeleteTarget(null) }}
+      />
     </div>
   )
 }

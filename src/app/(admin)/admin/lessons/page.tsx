@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,14 +12,17 @@ import {
 } from '@/components/ui/dialog'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, ArrowLeftRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Pencil, Trash2, ArrowLeftRight } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  startOfWeek, endOfWeek, addWeeks, eachDayOfInterval, format, isToday,
+  startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, addMonths, addDays,
+  eachDayOfInterval, format, isToday, isSameMonth, getDay,
 } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
 // ─── Types ───────────────────────────
+
+type ViewMode = 'day' | 'week' | 'month'
 
 interface TimeSlot {
   id: string
@@ -68,6 +71,12 @@ interface Lesson {
   subject: SubjectOption | null
   time_slot: TimeSlot
   booth: Booth | null
+}
+
+interface ClosedDay {
+  id: string
+  closed_date: string
+  reason: string
 }
 
 interface FormData {
@@ -121,26 +130,36 @@ const emptyForm: FormData = {
 
 // ─── Main Page ───────────────────────────
 
-export default function WeeklySchedulePage() {
+export default function SchedulePage() {
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
   const [booths, setBooths] = useState<Booth[]>([])
   const [students, setStudents] = useState<StudentOption[]>([])
   const [teachers, setTeachers] = useState<TeacherOption[]>([])
   const [subjects, setSubjects] = useState<SubjectOption[]>([])
+  const [closedDays, setClosedDays] = useState<ClosedDay[]>([])
   const [loading, setLoading] = useState(true)
 
-  const [weekStart, setWeekStart] = useState(() =>
-    startOfWeek(new Date(), { weekStartsOn: 1 })
-  )
+  const [viewMode, setViewMode] = useState<ViewMode>('week')
+  const [currentDate, setCurrentDate] = useState(() => new Date())
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<FormData>(emptyForm)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
-  const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
-  const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd })
+  // 各ビューの日付範囲
+  const dateRange = useMemo(() => {
+    if (viewMode === 'day') {
+      return { start: currentDate, end: currentDate }
+    } else if (viewMode === 'week') {
+      const ws = startOfWeek(currentDate, { weekStartsOn: 1 })
+      return { start: ws, end: endOfWeek(ws, { weekStartsOn: 1 }) }
+    } else {
+      const ms = startOfMonth(currentDate)
+      return { start: ms, end: endOfMonth(ms) }
+    }
+  }, [viewMode, currentDate])
 
   const fetchMasters = useCallback(async () => {
     const [slotsRes, boothsRes, studentsRes, teachersRes, subjectsRes] = await Promise.all([
@@ -162,28 +181,76 @@ export default function WeeklySchedulePage() {
   }, [])
 
   const fetchLessons = useCallback(async () => {
-    const we = endOfWeek(weekStart, { weekStartsOn: 1 })
-    const startDate = format(weekStart, 'yyyy-MM-dd')
-    const endDate = format(we, 'yyyy-MM-dd')
+    const startDate = format(dateRange.start, 'yyyy-MM-dd')
+    const endDate = format(dateRange.end, 'yyyy-MM-dd')
     const res = await fetch(`/api/lessons?start_date=${startDate}&end_date=${endDate}`)
     const json = await res.json()
     setLessons(json.data || [])
     setLoading(false)
-  }, [weekStart])
+  }, [dateRange])
+
+  const fetchClosedDays = useCallback(async () => {
+    if (viewMode !== 'month') { setClosedDays([]); return }
+    const startDate = format(dateRange.start, 'yyyy-MM-dd')
+    const endDate = format(dateRange.end, 'yyyy-MM-dd')
+    const res = await fetch(`/api/closed-days?start_date=${startDate}&end_date=${endDate}`)
+    const json = await res.json()
+    setClosedDays(json.data || [])
+  }, [viewMode, dateRange])
 
   useEffect(() => { fetchMasters() }, [fetchMasters])
   useEffect(() => { fetchLessons() }, [fetchLessons])
+  useEffect(() => { fetchClosedDays() }, [fetchClosedDays])
 
-  const goToWeek = (offset: number) => {
+  // ナビゲーション
+  const navigate = (offset: number) => {
     setLoading(true)
-    setWeekStart((prev) => addWeeks(prev, offset))
+    setCurrentDate((prev) => {
+      if (viewMode === 'day') return addDays(prev, offset)
+      if (viewMode === 'week') return addWeeks(prev, offset)
+      return addMonths(prev, offset)
+    })
   }
 
-  const goToThisWeek = () => {
+  const goToToday = () => {
     setLoading(true)
-    setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))
+    setCurrentDate(new Date())
   }
 
+  const switchView = (mode: ViewMode) => {
+    if (mode !== viewMode) {
+      setLoading(true)
+      setViewMode(mode)
+    }
+  }
+
+  const goToDay = (date: Date) => {
+    setLoading(true)
+    setCurrentDate(date)
+    setViewMode('day')
+  }
+
+  const handleMonthJump = (value: string) => {
+    if (!value) return
+    const [y, m] = value.split('-').map(Number)
+    setLoading(true)
+    setCurrentDate(new Date(y, m - 1, 1))
+  }
+
+  // ヘッダーラベル
+  const headerLabel = useMemo(() => {
+    if (viewMode === 'day') {
+      return format(currentDate, 'yyyy年M月d日（E）', { locale: ja })
+    } else if (viewMode === 'week') {
+      const ws = startOfWeek(currentDate, { weekStartsOn: 1 })
+      const we = endOfWeek(ws, { weekStartsOn: 1 })
+      return `${format(ws, 'yyyy年M月d日', { locale: ja })} 〜 ${format(we, 'M月d日', { locale: ja })}`
+    } else {
+      return format(currentDate, 'yyyy年M月', { locale: ja })
+    }
+  }, [viewMode, currentDate])
+
+  // CRUD
   const openCreate = (date: Date, timeSlotId?: string) => {
     setEditingId(null)
     setForm({
@@ -260,7 +327,7 @@ export default function WeeklySchedulePage() {
 
   const handleReschedule = async (lesson: Lesson) => {
     const reason = window.prompt('振替理由を入力してください（任意）')
-    if (reason === null) return // キャンセル
+    if (reason === null) return
     try {
       const res = await fetch('/api/reschedule-requests', {
         method: 'POST',
@@ -285,107 +352,86 @@ export default function WeeklySchedulePage() {
 
   if (loading && timeSlots.length === 0) return <LoadingSpinner />
 
-  // 授業をマトリクス化: matrix[dateStr][time_slot_id] = Lesson[]
-  const matrix: Record<string, Record<string, Lesson[]>> = {}
-  for (const day of weekDays) {
-    const dateStr = format(day, 'yyyy-MM-dd')
-    matrix[dateStr] = {}
-    for (const s of timeSlots) {
-      matrix[dateStr][s.id] = []
-    }
-  }
-  for (const l of lessons) {
-    if (matrix[l.lesson_date]?.[l.time_slot_id]) {
-      matrix[l.lesson_date][l.time_slot_id].push(l)
-    }
-  }
+  const todayButtonLabel = viewMode === 'day' ? '今日' : viewMode === 'week' ? '今週' : '今月'
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">週間時間割</h2>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => goToWeek(-1)}>
+      {/* ヘッダー */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-2xl font-bold">時間割</h2>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* ビュー切替 */}
+          <div className="inline-flex rounded-md border">
+            {(['day', 'week', 'month'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => switchView(mode)}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                  viewMode === mode
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-muted'
+                } ${mode === 'day' ? 'rounded-l-md' : ''} ${mode === 'month' ? 'rounded-r-md' : ''}`}
+              >
+                {{ day: '日', week: '週', month: '月' }[mode]}
+              </button>
+            ))}
+          </div>
+
+          {/* ナビゲーション */}
+          <Button variant="outline" size="icon" onClick={() => navigate(-1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={goToThisWeek}>
-            今週
+          <Button variant="outline" size="sm" onClick={goToToday}>
+            {todayButtonLabel}
           </Button>
-          <Button variant="outline" size="icon" onClick={() => goToWeek(1)}>
+          <Button variant="outline" size="icon" onClick={() => navigate(1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <span className="text-sm font-medium ml-2">
-            {format(weekStart, 'yyyy年M月d日', { locale: ja })} 〜 {format(weekEnd, 'M月d日', { locale: ja })}
-          </span>
+
+          {/* 月ジャンプ */}
+          <Input
+            type="month"
+            value={format(currentDate, 'yyyy-MM')}
+            onChange={(e) => handleMonthJump(e.target.value)}
+            className="w-40"
+          />
+
+          <span className="text-sm font-medium">{headerLabel}</span>
         </div>
       </div>
 
+      {/* ビュー本体 */}
       <Card>
         <CardContent className="p-4 overflow-x-auto">
           {loading ? (
             <div className="flex justify-center py-8"><LoadingSpinner /></div>
+          ) : viewMode === 'day' ? (
+            <DayView
+              date={currentDate}
+              lessons={lessons}
+              timeSlots={timeSlots}
+              onOpenCreate={openCreate}
+              onEdit={openEdit}
+              onDelete={(id) => setDeleteTarget(id)}
+              onReschedule={handleReschedule}
+            />
+          ) : viewMode === 'week' ? (
+            <WeekView
+              weekStart={startOfWeek(currentDate, { weekStartsOn: 1 })}
+              lessons={lessons}
+              timeSlots={timeSlots}
+              onOpenCreate={openCreate}
+              onEdit={openEdit}
+              onDelete={(id) => setDeleteTarget(id)}
+              onReschedule={handleReschedule}
+            />
           ) : (
-            <table className="w-full border-collapse min-w-[900px]">
-              <thead>
-                <tr>
-                  <th className="border p-2 bg-muted text-sm w-20">コマ</th>
-                  {weekDays.map((day) => {
-                    const dateStr = format(day, 'yyyy-MM-dd')
-                    const dayLabel = format(day, 'E', { locale: ja })
-                    const isSat = day.getDay() === 6
-                    const isSun = day.getDay() === 0
-                    return (
-                      <th
-                        key={dateStr}
-                        className={`border p-2 text-sm ${
-                          isToday(day) ? 'bg-blue-100' : 'bg-muted'
-                        } ${isSat ? 'text-blue-600' : ''} ${isSun ? 'text-red-600' : ''}`}
-                      >
-                        <div>{format(day, 'M/d')}</div>
-                        <div className="text-xs">({dayLabel})</div>
-                      </th>
-                    )
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {timeSlots.map((slot) => (
-                  <tr key={slot.id}>
-                    <td className="border p-2 text-center bg-muted/50">
-                      <div className="font-medium text-sm">{slot.label}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {slot.start_time.slice(0, 5)}
-                      </div>
-                    </td>
-                    {weekDays.map((day) => {
-                      const dateStr = format(day, 'yyyy-MM-dd')
-                      const cellLessons = matrix[dateStr]?.[slot.id] || []
-                      return (
-                        <td
-                          key={dateStr}
-                          className={`border p-1 align-top min-w-[120px] cursor-pointer hover:bg-muted/30 ${
-                            isToday(day) ? 'bg-blue-50/50' : ''
-                          }`}
-                          onClick={() => openCreate(day, slot.id)}
-                        >
-                          <div className="space-y-1">
-                            {cellLessons.map((l) => (
-                              <LessonCard
-                                key={l.id}
-                                lesson={l}
-                                onEdit={() => openEdit(l)}
-                                onDelete={() => setDeleteTarget(l.id)}
-                                onReschedule={() => handleReschedule(l)}
-                              />
-                            ))}
-                          </div>
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <MonthView
+              currentDate={currentDate}
+              lessons={lessons}
+              closedDays={closedDays}
+              onDayClick={goToDay}
+            />
           )}
         </CardContent>
       </Card>
@@ -515,6 +561,282 @@ export default function WeeklySchedulePage() {
         description="この授業を削除しますか？"
         onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget); setDeleteTarget(null) }}
       />
+    </div>
+  )
+}
+
+// ─── 日表示 ───────────────────────────
+
+function DayView({
+  date,
+  lessons,
+  timeSlots,
+  onOpenCreate,
+  onEdit,
+  onDelete,
+  onReschedule,
+}: {
+  date: Date
+  lessons: Lesson[]
+  timeSlots: TimeSlot[]
+  onOpenCreate: (date: Date, timeSlotId?: string) => void
+  onEdit: (lesson: Lesson) => void
+  onDelete: (id: string) => void
+  onReschedule: (lesson: Lesson) => void
+}) {
+  const dateStr = format(date, 'yyyy-MM-dd')
+  const dayLessons = lessons.filter((l) => l.lesson_date === dateStr)
+
+  // コマごとにグループ化
+  const bySlot: Record<string, Lesson[]> = {}
+  for (const s of timeSlots) {
+    bySlot[s.id] = []
+  }
+  for (const l of dayLessons) {
+    if (bySlot[l.time_slot_id]) {
+      bySlot[l.time_slot_id].push(l)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {timeSlots.map((slot) => {
+        const slotLessons = bySlot[slot.id] || []
+        return (
+          <div
+            key={slot.id}
+            className="border rounded-lg p-3 hover:bg-muted/30 cursor-pointer"
+            onClick={() => onOpenCreate(date, slot.id)}
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="font-medium text-sm w-16">{slot.label}</div>
+              <div className="text-xs text-muted-foreground">
+                {slot.start_time.slice(0, 5)} 〜 {slot.end_time.slice(0, 5)}
+              </div>
+              <Badge variant="secondary" className="text-xs">
+                {slotLessons.length}件
+              </Badge>
+            </div>
+            {slotLessons.length > 0 && (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" onClick={(e) => e.stopPropagation()}>
+                {slotLessons.map((l) => (
+                  <LessonCard
+                    key={l.id}
+                    lesson={l}
+                    onEdit={() => onEdit(l)}
+                    onDelete={() => onDelete(l.id)}
+                    onReschedule={() => onReschedule(l)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+      {dayLessons.length === 0 && (
+        <div className="text-center text-muted-foreground py-8">
+          この日の授業はありません
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── 週表示（既存と同等） ───────────────────────────
+
+function WeekView({
+  weekStart,
+  lessons,
+  timeSlots,
+  onOpenCreate,
+  onEdit,
+  onDelete,
+  onReschedule,
+}: {
+  weekStart: Date
+  lessons: Lesson[]
+  timeSlots: TimeSlot[]
+  onOpenCreate: (date: Date, timeSlotId?: string) => void
+  onEdit: (lesson: Lesson) => void
+  onDelete: (id: string) => void
+  onReschedule: (lesson: Lesson) => void
+}) {
+  const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
+  const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd })
+
+  // 授業をマトリクス化
+  const matrix: Record<string, Record<string, Lesson[]>> = {}
+  for (const day of weekDays) {
+    const dateStr = format(day, 'yyyy-MM-dd')
+    matrix[dateStr] = {}
+    for (const s of timeSlots) {
+      matrix[dateStr][s.id] = []
+    }
+  }
+  for (const l of lessons) {
+    if (matrix[l.lesson_date]?.[l.time_slot_id]) {
+      matrix[l.lesson_date][l.time_slot_id].push(l)
+    }
+  }
+
+  return (
+    <table className="w-full border-collapse min-w-[900px]">
+      <thead>
+        <tr>
+          <th className="border p-2 bg-muted text-sm w-20">コマ</th>
+          {weekDays.map((day) => {
+            const dateStr = format(day, 'yyyy-MM-dd')
+            const dayLabel = format(day, 'E', { locale: ja })
+            const isSat = day.getDay() === 6
+            const isSun = day.getDay() === 0
+            return (
+              <th
+                key={dateStr}
+                className={`border p-2 text-sm ${
+                  isToday(day) ? 'bg-blue-100' : 'bg-muted'
+                } ${isSat ? 'text-blue-600' : ''} ${isSun ? 'text-red-600' : ''}`}
+              >
+                <div>{format(day, 'M/d')}</div>
+                <div className="text-xs">({dayLabel})</div>
+              </th>
+            )
+          })}
+        </tr>
+      </thead>
+      <tbody>
+        {timeSlots.map((slot) => (
+          <tr key={slot.id}>
+            <td className="border p-2 text-center bg-muted/50">
+              <div className="font-medium text-sm">{slot.label}</div>
+              <div className="text-xs text-muted-foreground">
+                {slot.start_time.slice(0, 5)}
+              </div>
+            </td>
+            {weekDays.map((day) => {
+              const dateStr = format(day, 'yyyy-MM-dd')
+              const cellLessons = matrix[dateStr]?.[slot.id] || []
+              return (
+                <td
+                  key={dateStr}
+                  className={`border p-1 align-top min-w-[120px] cursor-pointer hover:bg-muted/30 ${
+                    isToday(day) ? 'bg-blue-50/50' : ''
+                  }`}
+                  onClick={() => onOpenCreate(day, slot.id)}
+                >
+                  <div className="space-y-1">
+                    {cellLessons.map((l) => (
+                      <LessonCard
+                        key={l.id}
+                        lesson={l}
+                        onEdit={() => onEdit(l)}
+                        onDelete={() => onDelete(l.id)}
+                        onReschedule={() => onReschedule(l)}
+                      />
+                    ))}
+                  </div>
+                </td>
+              )
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+// ─── 月表示 ───────────────────────────
+
+function MonthView({
+  currentDate,
+  lessons,
+  closedDays,
+  onDayClick,
+}: {
+  currentDate: Date
+  lessons: Lesson[]
+  closedDays: ClosedDay[]
+  onDayClick: (date: Date) => void
+}) {
+  const monthStart = startOfMonth(currentDate)
+  const monthEnd = endOfMonth(currentDate)
+
+  // カレンダーグリッド用: 月曜始まりで前後を埋める
+  const calStart = startOfWeek(monthStart, { weekStartsOn: 1 })
+  const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
+  const calDays = eachDayOfInterval({ start: calStart, end: calEnd })
+
+  // 日別授業件数
+  const countByDate: Record<string, number> = {}
+  for (const l of lessons) {
+    countByDate[l.lesson_date] = (countByDate[l.lesson_date] || 0) + 1
+  }
+
+  // 休館日セット
+  const closedSet = new Set(closedDays.map((cd) => cd.closed_date))
+  const closedReasons: Record<string, string> = {}
+  for (const cd of closedDays) {
+    closedReasons[cd.closed_date] = cd.reason
+  }
+
+  const dayHeaders = ['月', '火', '水', '木', '金', '土', '日']
+
+  return (
+    <div>
+      {/* 曜日ヘッダー */}
+      <div className="grid grid-cols-7 gap-px mb-px">
+        {dayHeaders.map((d, i) => (
+          <div
+            key={d}
+            className={`text-center text-sm font-medium py-2 bg-muted ${
+              i === 5 ? 'text-blue-600' : ''
+            } ${i === 6 ? 'text-red-600' : ''}`}
+          >
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* カレンダーグリッド */}
+      <div className="grid grid-cols-7 gap-px">
+        {calDays.map((day) => {
+          const dateStr = format(day, 'yyyy-MM-dd')
+          const inMonth = isSameMonth(day, currentDate)
+          const today = isToday(day)
+          const isClosed = closedSet.has(dateStr)
+          const count = countByDate[dateStr] || 0
+          const isSat = getDay(day) === 6
+          const isSun = getDay(day) === 0
+
+          return (
+            <div
+              key={dateStr}
+              onClick={() => onDayClick(day)}
+              className={`
+                border p-2 min-h-[80px] cursor-pointer transition-colors hover:bg-muted/50
+                ${!inMonth ? 'opacity-30' : ''}
+                ${today ? 'bg-blue-50 border-blue-300' : ''}
+                ${isClosed && inMonth ? 'bg-red-50' : ''}
+              `}
+            >
+              <div className={`text-sm font-medium ${
+                today ? 'text-blue-700' : ''
+              } ${isSat ? 'text-blue-600' : ''} ${isSun ? 'text-red-600' : ''}`}>
+                {format(day, 'd')}
+              </div>
+              {isClosed && inMonth && (
+                <div className="text-[10px] text-red-600 mt-1" title={closedReasons[dateStr]}>
+                  休館{closedReasons[dateStr] ? `(${closedReasons[dateStr]})` : ''}
+                </div>
+              )}
+              {count > 0 && inMonth && (
+                <Badge variant="secondary" className="text-[10px] mt-1 px-1.5 py-0">
+                  {count}件
+                </Badge>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
