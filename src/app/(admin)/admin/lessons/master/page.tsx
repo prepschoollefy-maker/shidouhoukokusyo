@@ -44,9 +44,34 @@ interface Booth {
 // ─── Main Page ───────────────────────────
 
 export default function LessonMasterPage() {
+  const [seeding, setSeeding] = useState(false)
+
+  const handleSeed = async () => {
+    setSeeding(true)
+    try {
+      const res = await fetch('/api/master/seed', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error || '初期データ投入に失敗しました')
+        return
+      }
+      toast.success(json.message)
+      window.location.reload()
+    } catch {
+      toast.error('初期データ投入に失敗しました')
+    } finally {
+      setSeeding(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-bold">授業マスタ管理</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">授業マスタ管理</h2>
+        <Button variant="outline" size="sm" onClick={handleSeed} disabled={seeding}>
+          {seeding ? '投入中...' : '初期データ投入'}
+        </Button>
+      </div>
       <Tabs defaultValue="time-slots">
         <TabsList>
           <TabsTrigger value="time-slots">時間枠</TabsTrigger>
