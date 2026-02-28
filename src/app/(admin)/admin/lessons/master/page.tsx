@@ -52,13 +52,13 @@ export default function LessonMasterPage() {
       const res = await fetch('/api/master/seed', { method: 'POST' })
       const json = await res.json()
       if (!res.ok) {
-        toast.error(json.error || '初期データ投入に失敗しました')
+        toast.error(json.error || '初期設定に失敗しました')
         return
       }
       toast.success(json.message)
       window.location.reload()
     } catch {
-      toast.error('初期データ投入に失敗しました')
+      toast.error('初期設定に失敗しました')
     } finally {
       setSeeding(false)
     }
@@ -67,9 +67,9 @@ export default function LessonMasterPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">授業マスタ管理</h2>
+        <h2 className="text-2xl font-bold">授業の基本設定</h2>
         <Button variant="outline" size="sm" onClick={handleSeed} disabled={seeding}>
-          {seeding ? '投入中...' : '初期データ投入'}
+          {seeding ? '実行中...' : '初期設定を実行'}
         </Button>
       </div>
       <Tabs defaultValue="time-slots">
@@ -446,7 +446,7 @@ function BoothsTab() {
             <Input
               value={newBooth.label}
               onChange={(e) => setNewBooth({ ...newBooth, label: e.target.value })}
-              placeholder="ラベル（例: ブース16）"
+              placeholder="表示名（例: ブース16）"
               className="flex-1"
             />
             <Button onClick={handleAdd}><Plus className="h-4 w-4 mr-1" />追加</Button>
@@ -456,7 +456,7 @@ function BoothsTab() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-24">番号</TableHead>
-                  <TableHead>ラベル</TableHead>
+                  <TableHead>表示名</TableHead>
                   <TableHead className="w-24">有効</TableHead>
                   <TableHead className="w-20">順序</TableHead>
                   <TableHead className="w-16"></TableHead>
@@ -651,7 +651,7 @@ function InstructorShiftsTab() {
           {selectedTeacher && (
             <>
               <p className="text-sm text-muted-foreground">
-                セルをクリックしてシフトのON/OFFを切り替えます
+                出勤できるコマをクリックしてください（もう一度クリックで解除）
               </p>
               <div className="overflow-x-auto">
                 <Table>

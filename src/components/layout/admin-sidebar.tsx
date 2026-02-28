@@ -66,9 +66,9 @@ const navGroups: (NavItem | NavGroup)[] = [
     label: '授業管理',
     items: [
       { href: '/admin/lessons', label: '時間割', icon: CalendarDays },
-      { href: '/admin/lessons/templates', label: 'テンプレート', icon: LayoutGrid },
+      { href: '/admin/lessons/templates', label: '授業登録', icon: LayoutGrid },
       { href: '/admin/lessons/reschedule', label: '振替管理', icon: ArrowLeftRight },
-      { href: '/admin/lessons/master', label: '授業マスタ', icon: Clock },
+      { href: '/admin/lessons/master', label: '基本設定', icon: Clock },
     ],
   },
   {
