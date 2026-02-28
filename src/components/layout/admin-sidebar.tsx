@@ -15,9 +15,11 @@ import {
   ClipboardList,
   Printer,
   Calendar,
+  CalendarDays,
   ClipboardCheck,
   Send,
   Clock,
+  LayoutGrid,
   FileSignature,
   Receipt,
   TrendingUp,
@@ -62,6 +64,8 @@ const navGroups: (NavItem | NavGroup)[] = [
   {
     label: '授業管理',
     items: [
+      { href: '/admin/lessons', label: '時間割', icon: CalendarDays },
+      { href: '/admin/lessons/templates', label: 'テンプレート', icon: LayoutGrid },
       { href: '/admin/lessons/master', label: '授業マスタ', icon: Clock },
     ],
   },
@@ -111,7 +115,7 @@ export function AdminSidebar() {
 
   const renderLink = (item: NavItem) => {
     const Icon = item.icon
-    const isActive = ['/admin/mendan', '/admin/contracts/billing'].includes(item.href)
+    const isActive = ['/admin/mendan', '/admin/contracts/billing', '/admin/lessons'].includes(item.href)
       ? pathname === item.href
       : pathname.startsWith(item.href)
     return (

@@ -175,3 +175,58 @@ export interface MendanRecord {
   created_at: string
   updated_at: string
 }
+
+// ─── 授業管理 ───────────────────────────
+
+export type LessonType = 'regular' | 'intensive' | 'makeup'
+
+export type LessonStatus = 'scheduled' | 'completed' | 'cancelled' | 'rescheduled'
+
+export interface TimeSlot {
+  id: string
+  slot_number: number
+  label: string
+  start_time: string
+  end_time: string
+  sort_order: number
+  created_at: string
+}
+
+export interface Booth {
+  id: string
+  booth_number: number
+  label: string
+  is_active: boolean
+  sort_order: number
+  created_at: string
+}
+
+export interface RegularLessonTemplate {
+  id: string
+  student_id: string
+  teacher_id: string
+  subject_id: string | null
+  day_of_week: number
+  time_slot_id: string
+  booth_id: string | null
+  is_active: boolean
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Lesson {
+  id: string
+  student_id: string
+  teacher_id: string
+  subject_id: string | null
+  lesson_date: string
+  time_slot_id: string
+  booth_id: string | null
+  lesson_type: LessonType
+  status: LessonStatus
+  template_id: string | null
+  notes: string
+  created_at: string
+  updated_at: string
+}
