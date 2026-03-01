@@ -28,7 +28,6 @@ import {
   BookOpenCheck,
   History,
   ShoppingBag,
-  ClipboardPen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -81,7 +80,6 @@ const navGroups: (NavItem | NavGroup)[] = [
       { href: '/admin/contracts/billing', label: '請求・入金', icon: Receipt },
       { href: '/admin/contracts/billing/history', label: '入金履歴', icon: History },
       { href: '/admin/contracts/dashboard', label: '経営ダッシュボード', icon: TrendingUp },
-      { href: '/admin/contracts/lecture-print', label: '講習申込書作成', icon: ClipboardPen },
       { href: 'https://contract.lefy.jp', label: '契約書作成', icon: ExternalLink, external: true },
     ],
   },
