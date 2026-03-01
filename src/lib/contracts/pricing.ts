@@ -21,6 +21,13 @@ export const GRADE_CATEGORY_MAP: Record<Grade, string> = {
   '高3': '高2/高3',
 }
 
+/** 学年 → 翌学年マッピング（進級用） */
+export const GRADE_NEXT: Record<string, string> = {
+  '小3': '小4', '小4': '小5', '小5': '小6',
+  '小6': '中1', '中1': '中2', '中2': '中3',
+  '中3': '高1', '高1': '高2', '高2': '高3',
+}
+
 /** コース×学年区分 → 税抜単価（1コマ/週あたり月額） */
 export const COURSE_PRICES: Record<string, number> = {
   'ハイ_小3-小5': 35000,

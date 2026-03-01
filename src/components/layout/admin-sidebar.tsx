@@ -28,6 +28,7 @@ import {
   BookOpenCheck,
   History,
   ShoppingBag,
+  RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -75,6 +76,7 @@ const navGroups: (NavItem | NavGroup)[] = [
     label: '契約',
     items: [
       { href: '/admin/contracts', label: '通常コース管理', icon: FileSignature },
+      { href: '/admin/contracts/renew', label: '一括更新', icon: RefreshCw },
       { href: '/admin/contracts/lectures', label: '講習管理', icon: BookOpenCheck },
       { href: '/admin/contracts/materials', label: '教材販売', icon: ShoppingBag },
       { href: '/admin/contracts/billing', label: '請求・入金', icon: Receipt },
@@ -117,7 +119,7 @@ export function AdminSidebar() {
 
   const renderLink = (item: NavItem) => {
     const Icon = item.icon
-    const isActive = ['/admin/mendan', '/admin/contracts/billing', '/admin/lessons'].includes(item.href)
+    const isActive = ['/admin/mendan', '/admin/contracts/billing', '/admin/lessons', '/admin/contracts'].includes(item.href)
       ? pathname === item.href
       : pathname.startsWith(item.href)
     return (
