@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Search, Check } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Search, Check, MessageSquare } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -54,6 +55,7 @@ export default function MendanRequestsPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [handledFilter, setHandledFilter] = useState<'all' | 'unhandled' | 'handled'>('unhandled')
+  const [selectedRequest, setSelectedRequest] = useState<MendanRequestRow | null>(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -139,10 +141,10 @@ export default function MendanRequestsPage() {
                 </TableRow>
               ) : (
                 filtered.map(r => (
-                  <TableRow key={r.id} className={r.handled ? 'opacity-60' : ''}>
+                  <TableRow key={r.id} className={`${r.handled ? 'opacity-60' : ''} cursor-pointer hover:bg-muted/50`} onClick={() => setSelectedRequest(r)}>
                     <TableCell className="text-center">
                       <button
-                        onClick={() => toggleHandled(r.id, r.handled)}
+                        onClick={(e) => { e.stopPropagation(); toggleHandled(r.id, r.handled) }}
                         className={`inline-flex items-center justify-center w-7 h-7 rounded-md border transition-colors ${
                           r.handled ? 'bg-green-100 border-green-400 text-green-700' : 'bg-white border-gray-300 text-gray-400 hover:border-green-400 hover:text-green-600'
                         }`}
@@ -156,7 +158,14 @@ export default function MendanRequestsPage() {
                     <TableCell className="whitespace-nowrap text-sm">{formatTimeRange(r.candidate1, r.candidate1_end)}</TableCell>
                     <TableCell className="whitespace-nowrap text-sm">{formatTimeRange(r.candidate2, r.candidate2_end)}</TableCell>
                     <TableCell className="whitespace-nowrap text-sm">{formatTimeRange(r.candidate3, r.candidate3_end)}</TableCell>
-                    <TableCell className="max-w-[200px] truncate">{r.message || '-'}</TableCell>
+                    <TableCell className="max-w-[200px]">
+                      {r.message ? (
+                        <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{r.message}</span>
+                        </span>
+                      ) : '-'}
+                    </TableCell>
                     <TableCell className="whitespace-nowrap">{formatDateTime(r.submitted_at)}</TableCell>
                   </TableRow>
                 ))
@@ -165,6 +174,59 @@ export default function MendanRequestsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={!!selectedRequest} onOpenChange={(open) => { if (!open) setSelectedRequest(null) }}>
+        <DialogContent className="max-w-lg">
+          {selectedRequest && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center justify-between">
+                  <span>{selectedRequest.student.name} の面談希望</span>
+                  <Badge variant={selectedRequest.handled ? 'secondary' : 'destructive'} className="ml-2">
+                    {selectedRequest.handled ? '対応済' : '未対応'}
+                  </Badge>
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 text-sm">
+                <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
+                  <span className="font-medium text-muted-foreground">期間</span>
+                  <span>{(selectedRequest.token as unknown as { period_label: string }).period_label}</span>
+                  <span className="font-medium text-muted-foreground">第1希望</span>
+                  <span>{formatTimeRange(selectedRequest.candidate1, selectedRequest.candidate1_end)}</span>
+                  <span className="font-medium text-muted-foreground">第2希望</span>
+                  <span>{formatTimeRange(selectedRequest.candidate2, selectedRequest.candidate2_end)}</span>
+                  <span className="font-medium text-muted-foreground">第3希望</span>
+                  <span>{formatTimeRange(selectedRequest.candidate3, selectedRequest.candidate3_end)}</span>
+                  <span className="font-medium text-muted-foreground">申請日</span>
+                  <span>{formatDateTime(selectedRequest.submitted_at)}</span>
+                </div>
+                {selectedRequest.message && (
+                  <div className="space-y-1">
+                    <span className="font-medium text-muted-foreground">メッセージ</span>
+                    <p className="whitespace-pre-wrap rounded-md bg-muted p-3">{selectedRequest.message}</p>
+                  </div>
+                )}
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      toggleHandled(selectedRequest.id, selectedRequest.handled)
+                      setSelectedRequest(prev => prev ? { ...prev, handled: !prev.handled } : null)
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      selectedRequest.handled
+                        ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        : 'bg-green-600 text-white hover:bg-green-700'
+                    }`}
+                  >
+                    <Check className="h-4 w-4" />
+                    {selectedRequest.handled ? '未対応に戻す' : '対応済にする'}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
