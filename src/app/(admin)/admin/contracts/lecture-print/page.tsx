@@ -946,6 +946,11 @@ function LecturePrintStyles() {
     <style>{`
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { font-family: "Yu Gothic","YuGothic","Hiragino Sans","Meiryo",sans-serif; font-size: 14px; line-height: 1.6; color: #333; }
+      /* Hide admin layout (sidebar, header, main padding) */
+      aside { display: none !important; }
+      header { display: none !important; }
+      main { margin-left: 0 !important; }
+      main > div { padding: 0 !important; }
       .contract-page { background: #e0e0e0; }
       .action-bar { position: fixed; top: 0; left: 0; right: 0; background: #2c3e50; padding: 0.75rem 2rem; z-index: 100; text-align: center; }
       .btn-primary { background: linear-gradient(135deg,#2980b9,#1a5276); color: #fff; border: none; padding: 0.75rem 2rem; font-size: 1rem; border-radius: 4px; cursor: pointer; font-weight: bold; }
@@ -1019,7 +1024,9 @@ function LecturePrintStyles() {
       .term-article p { font-size: 7.5pt; line-height: 1.3; margin-bottom: 0.5mm; }
       @media print {
         body { background: #fff; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        .no-print { display: none !important; }
+        aside, header, .no-print { display: none !important; }
+        main { margin-left: 0 !important; }
+        main > div { padding: 0 !important; }
         .contract-sheet { width: 100%; height: auto; max-height: 410mm; margin: 0; padding: 8mm 12mm; box-shadow: none; page-break-after: always; overflow: hidden; }
         .contract-sheet:last-child { page-break-after: auto; }
         @page { size: A3 portrait; margin: 5mm; }
