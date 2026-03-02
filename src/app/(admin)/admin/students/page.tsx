@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Download, Search, RotateCcw, UserMinus } from 'lucide-react'
+import { Plus, Pencil, Trash2, Download, Search, RotateCcw, UserMinus, List, LayoutGrid } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -52,6 +52,7 @@ export default function StudentsPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'active' | 'withdrawn'>('active')
+  const [groupByGrade, setGroupByGrade] = useState(false)
 
   // Form state
   const [studentNumber, setStudentNumber] = useState('')
@@ -209,9 +210,20 @@ export default function StudentsPage() {
 
   if (loading) return <LoadingSpinner />
 
-  const filteredStudents = students.filter(s =>
-    !searchQuery || s.name.includes(searchQuery) || s.grade?.includes(searchQuery) || s.student_number?.includes(searchQuery)
-  )
+  const GRADE_ORDER = ['小3','小4','小5','小6','中1','中2','中3','高1','高2','高3','浪人']
+
+  const filteredStudents = students
+    .filter(s => !searchQuery || s.name.includes(searchQuery) || s.grade?.includes(searchQuery) || s.student_number?.includes(searchQuery))
+    .sort((a, b) => {
+      if (groupByGrade) {
+        const ag = GRADE_ORDER.indexOf(a.grade || '')
+        const bg = GRADE_ORDER.indexOf(b.grade || '')
+        const ai = ag === -1 ? 999 : ag
+        const bi = bg === -1 ? 999 : bg
+        if (ai !== bi) return ai - bi
+      }
+      return (a.student_number || '').localeCompare(b.student_number || '', 'ja', { numeric: true })
+    })
 
   return (
     <div className="space-y-4">
@@ -344,6 +356,14 @@ export default function StudentsPage() {
             className="pl-9"
           />
         </div>
+        <Button
+          variant={groupByGrade ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setGroupByGrade(!groupByGrade)}
+          title={groupByGrade ? '塾生No順' : '学年別グループ'}
+        >
+          {groupByGrade ? <><LayoutGrid className="h-4 w-4 mr-1" />学年別</> : <><List className="h-4 w-4 mr-1" />No順</>}
+        </Button>
       </div>
 
       <Card>
@@ -354,69 +374,72 @@ export default function StudentsPage() {
                 <TableHead>塾生番号</TableHead>
                 <TableHead>氏名</TableHead>
                 <TableHead>学年</TableHead>
-                <TableHead>振替開始</TableHead>
+                <TableHead>口座振替開始</TableHead>
                 <TableHead>メール</TableHead>
-                <TableHead>科目</TableHead>
-                <TableHead>担当</TableHead>
                 <TableHead className="w-24"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredStudents.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="text-muted-foreground text-sm">{s.student_number || '-'}</TableCell>
-                  <TableCell className="font-medium">{s.name}</TableCell>
-                  <TableCell>{s.grade || '-'}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{s.direct_debit_start_ym || '-'}</TableCell>
-                  <TableCell>
-                    <div className="text-xs text-muted-foreground space-y-0.5">
-                      {s.parent_emails.length > 0
-                        ? s.parent_emails.map(pe => (
-                            <div key={pe.id}>{pe.email}{pe.label ? ` (${pe.label})` : ''}</div>
-                          ))
-                        : '-'}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {s.student_subjects.map(ss => (
-                        <Badge key={ss.subject.id} variant="secondary" className="text-xs">{ss.subject.name}</Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {[...new Map(s.teacher_student_assignments.map(ta => [ta.teacher_id, ta.teacher.display_name])).values()].map((name, i) => (
-                        <Badge key={i} variant="outline" className="text-xs">{name}</Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      {statusFilter === 'active' ? (
-                        <>
-                          <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="sm" aria-label="退塾" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50" onClick={() => setWithdrawTarget(s)}>
-                            <UserMinus className="h-4 w-4 mr-1" />退塾
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button variant="ghost" size="sm" aria-label="復帰" onClick={() => setRestoreTarget(s)}>
-                            <RotateCcw className="h-4 w-4 mr-1" />復帰
-                          </Button>
-                          <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(s)}>
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {(() => {
+                let lastGrade = ''
+                return filteredStudents.map((s) => {
+                  const rows: React.ReactNode[] = []
+                  if (groupByGrade && s.grade !== lastGrade) {
+                    lastGrade = s.grade || ''
+                    const gradeLabel = s.grade || '未設定'
+                    const count = filteredStudents.filter(st => (st.grade || '') === (s.grade || '')).length
+                    rows.push(
+                      <TableRow key={`grade-${gradeLabel}`} className="bg-muted/60">
+                        <TableCell colSpan={6} className="font-semibold text-sm py-2">
+                          {gradeLabel}（{count}名）
+                        </TableCell>
+                      </TableRow>
+                    )
+                  }
+                  rows.push(
+                    <TableRow key={s.id}>
+                      <TableCell className="text-muted-foreground text-sm">{s.student_number || '-'}</TableCell>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell>{s.grade || '-'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{s.direct_debit_start_ym || '-'}</TableCell>
+                      <TableCell>
+                        <div className="text-xs text-muted-foreground space-y-0.5">
+                          {s.parent_emails.length > 0
+                            ? s.parent_emails.map(pe => (
+                                <div key={pe.id}>{pe.email}{pe.label ? ` (${pe.label})` : ''}</div>
+                              ))
+                            : '-'}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {statusFilter === 'active' ? (
+                            <>
+                              <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="sm" aria-label="退塾" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50" onClick={() => setWithdrawTarget(s)}>
+                                <UserMinus className="h-4 w-4 mr-1" />退塾
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="sm" aria-label="復帰" onClick={() => setRestoreTarget(s)}>
+                                <RotateCcw className="h-4 w-4 mr-1" />復帰
+                              </Button>
+                              <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(s)}>
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                  return rows
+                })
+              })()}
               {filteredStudents.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     {statusFilter === 'active' ? '通塾生がいません' : '退塾済の生徒はいません'}
                   </TableCell>
                 </TableRow>
