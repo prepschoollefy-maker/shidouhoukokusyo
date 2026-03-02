@@ -7,12 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Pencil, RefreshCw } from 'lucide-react'
+import { Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface ReportDetail {
   id: string
@@ -47,6 +48,7 @@ export default function AdminReportDetailPage() {
   const [aiSummary, setAiSummary] = useState('')
   const [saving, setSaving] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -94,6 +96,17 @@ export default function AdminReportDetailPage() {
     }
   }
 
+  const handleDelete = async () => {
+    try {
+      const res = await fetch(`/api/reports/${params.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('削除に失敗しました')
+      toast.success('レポートを削除しました')
+      router.push('/admin/reports')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '削除に失敗しました')
+    }
+  }
+
   if (loading) {
     return <LoadingSpinner />
   }
@@ -115,6 +128,9 @@ export default function AdminReportDetailPage() {
             <Link href={`/admin/reports/${params.id}/edit`}>
               <Pencil className="h-4 w-4 mr-1" />編集
             </Link>
+          </Button>
+          <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={() => setDeleteOpen(true)}>
+            <Trash2 className="h-4 w-4 mr-1" />削除
           </Button>
         </div>
       </div>
@@ -243,6 +259,15 @@ export default function AdminReportDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="レポートを削除"
+        description={`${report.student.name}さんの${format(new Date(report.lesson_date), 'M/d', { locale: ja })}のレポートを削除しますか？この操作は取り消せません。`}
+        onConfirm={handleDelete}
+        confirmLabel="削除する"
+      />
     </div>
   )
 }
