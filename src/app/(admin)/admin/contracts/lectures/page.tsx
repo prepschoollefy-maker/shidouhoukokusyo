@@ -199,11 +199,14 @@ export default function LecturesPage() {
       if (i !== index) return c
       if (field === 'total_lessons') {
         const newLessons = value as number
-        // allocation を自動調整（最初の配分行に全コマ数を設定）
-        const alloc = c.allocation.length > 0
-          ? [{ ...c.allocation[0], lessons: newLessons }, ...c.allocation.slice(1)]
-          : [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1, lessons: newLessons }]
-        return { ...c, total_lessons: newLessons, allocation: alloc }
+        // 配分が1行だけの場合のみ自動連動（複数行ある場合は手動調整に任せる）
+        if (c.allocation.length <= 1) {
+          const alloc = c.allocation.length === 1
+            ? [{ ...c.allocation[0], lessons: newLessons }]
+            : [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1, lessons: newLessons }]
+          return { ...c, total_lessons: newLessons, allocation: alloc }
+        }
+        return { ...c, total_lessons: newLessons }
       }
       return { ...c, [field]: value }
     }))
