@@ -27,16 +27,16 @@ interface GradeStat {
   weekly_lessons: number
 }
 
-interface LectureStat {
-  label: string
+interface LectureGradeStat {
+  grade: string
   student_count: number
   total_lessons: number
   revenue: number
 }
 
-interface MaterialStat {
-  item_name: string
-  unit_price: number
+interface MaterialGradeStat {
+  grade: string
+  student_count: number
   quantity: number
   revenue: number
 }
@@ -50,11 +50,12 @@ export default function ContractDashboardPage() {
   const [totalGradeStudents, setTotalGradeStudents] = useState(0)
   const [totalGradeRevenue, setTotalGradeRevenue] = useState(0)
   const [totalGradeLessons, setTotalGradeLessons] = useState(0)
-  const [lectureStats, setLectureStats] = useState<LectureStat[]>([])
+  const [lectureGradeStats, setLectureGradeStats] = useState<LectureGradeStat[]>([])
   const [totalLectureStudents, setTotalLectureStudents] = useState(0)
   const [totalLectureLessons, setTotalLectureLessons] = useState(0)
   const [totalLectureRevenue, setTotalLectureRevenue] = useState(0)
-  const [materialStats, setMaterialStats] = useState<MaterialStat[]>([])
+  const [materialGradeStats, setMaterialGradeStats] = useState<MaterialGradeStat[]>([])
+  const [totalMaterialStudents, setTotalMaterialStudents] = useState(0)
   const [totalMaterialQuantity, setTotalMaterialQuantity] = useState(0)
   const [totalMaterialRevenue, setTotalMaterialRevenue] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -73,11 +74,12 @@ export default function ContractDashboardPage() {
         setTotalGradeStudents(json.totalGradeStudents || 0)
         setTotalGradeRevenue(json.totalGradeRevenue || 0)
         setTotalGradeLessons(json.totalGradeLessons || 0)
-        setLectureStats(json.lectureStats || [])
+        setLectureGradeStats(json.lectureGradeStats || [])
         setTotalLectureStudents(json.totalLectureStudents || 0)
         setTotalLectureLessons(json.totalLectureLessons || 0)
         setTotalLectureRevenue(json.totalLectureRevenue || 0)
-        setMaterialStats(json.materialStats || [])
+        setMaterialGradeStats(json.materialGradeStats || [])
+        setTotalMaterialStudents(json.totalMaterialStudents || 0)
         setTotalMaterialQuantity(json.totalMaterialQuantity || 0)
         setTotalMaterialRevenue(json.totalMaterialRevenue || 0)
       }
@@ -104,14 +106,14 @@ export default function ContractDashboardPage() {
       rows.push([csvCell('合計'), totalGradeStudents, totalGradeRevenue, totalGradeLessons].join(','))
       filename = `${prefix}_通常コース統計.csv`
     } else if (tab === 'lecture') {
-      header = 'ラベル,生徒数,コマ数,売上'
-      rows = lectureStats.map(l => [csvCell(l.label), l.student_count, l.total_lessons, l.revenue].join(','))
+      header = '学年,生徒数,コマ数,売上'
+      rows = lectureGradeStats.map(g => [csvCell(g.grade), g.student_count, g.total_lessons, g.revenue].join(','))
       rows.push([csvCell('合計'), totalLectureStudents, totalLectureLessons, totalLectureRevenue].join(','))
       filename = `${prefix}_講習統計.csv`
     } else {
-      header = '商品名,単価,数量,売上'
-      rows = materialStats.map(m => [csvCell(m.item_name), m.unit_price, m.quantity, m.revenue].join(','))
-      rows.push([csvCell('合計'), '', totalMaterialQuantity, totalMaterialRevenue].join(','))
+      header = '学年,生徒数,数量,売上'
+      rows = materialGradeStats.map(g => [csvCell(g.grade), g.student_count, g.quantity, g.revenue].join(','))
+      rows.push([csvCell('合計'), totalMaterialStudents, totalMaterialQuantity, totalMaterialRevenue].join(','))
       filename = `${prefix}_教材販売統計.csv`
     }
 
@@ -342,8 +344,8 @@ export default function ContractDashboardPage() {
             {/* 講習 */}
             <TabsContent value="lecture">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-muted-foreground">ラベル別統計（{year}年{month}月）</h3>
-                <Button variant="outline" size="sm" onClick={() => exportCsv('lecture')} disabled={lectureStats.length === 0}>
+                <h3 className="text-sm font-medium text-muted-foreground">学年別統計（{year}年{month}月）</h3>
+                <Button variant="outline" size="sm" onClick={() => exportCsv('lecture')} disabled={lectureGradeStats.length === 0}>
                   <Download className="size-4 mr-1" />CSV
                 </Button>
               </div>
@@ -351,22 +353,22 @@ export default function ContractDashboardPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ラベル</TableHead>
+                      <TableHead>学年</TableHead>
                       <TableHead className="text-right">生徒数</TableHead>
                       <TableHead className="text-right">コマ数</TableHead>
                       <TableHead className="text-right">売上</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {lectureStats.map(l => (
-                      <TableRow key={l.label}>
-                        <TableCell className="font-medium">{l.label}</TableCell>
-                        <TableCell className="text-right">{l.student_count}人</TableCell>
-                        <TableCell className="text-right">{l.total_lessons}コマ</TableCell>
-                        <TableCell className="text-right font-mono">{formatYen(l.revenue)}</TableCell>
+                    {lectureGradeStats.map(g => (
+                      <TableRow key={g.grade}>
+                        <TableCell className="font-medium">{g.grade}</TableCell>
+                        <TableCell className="text-right">{g.student_count}人</TableCell>
+                        <TableCell className="text-right">{g.total_lessons}コマ</TableCell>
+                        <TableCell className="text-right font-mono">{formatYen(g.revenue)}</TableCell>
                       </TableRow>
                     ))}
-                    {lectureStats.length > 0 && (
+                    {lectureGradeStats.length > 0 && (
                       <TableRow className="bg-muted/50 font-bold">
                         <TableCell>合計</TableCell>
                         <TableCell className="text-right">{totalLectureStudents}人</TableCell>
@@ -374,7 +376,7 @@ export default function ContractDashboardPage() {
                         <TableCell className="text-right font-mono">{formatYen(totalLectureRevenue)}</TableCell>
                       </TableRow>
                     )}
-                    {lectureStats.length === 0 && (
+                    {lectureGradeStats.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={4} className="text-center text-muted-foreground py-8">データなし</TableCell>
                       </TableRow>
@@ -387,8 +389,8 @@ export default function ContractDashboardPage() {
             {/* 教材販売 */}
             <TabsContent value="material">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-muted-foreground">商品別統計（{year}年{month}月）</h3>
-                <Button variant="outline" size="sm" onClick={() => exportCsv('material')} disabled={materialStats.length === 0}>
+                <h3 className="text-sm font-medium text-muted-foreground">学年別統計（{year}年{month}月）</h3>
+                <Button variant="outline" size="sm" onClick={() => exportCsv('material')} disabled={materialGradeStats.length === 0}>
                   <Download className="size-4 mr-1" />CSV
                 </Button>
               </div>
@@ -396,30 +398,30 @@ export default function ContractDashboardPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>商品名</TableHead>
-                      <TableHead className="text-right">単価</TableHead>
+                      <TableHead>学年</TableHead>
+                      <TableHead className="text-right">生徒数</TableHead>
                       <TableHead className="text-right">数量</TableHead>
                       <TableHead className="text-right">売上</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {materialStats.map(m => (
-                      <TableRow key={m.item_name}>
-                        <TableCell className="font-medium">{m.item_name}</TableCell>
-                        <TableCell className="text-right font-mono">{formatYen(m.unit_price)}</TableCell>
-                        <TableCell className="text-right">{m.quantity}</TableCell>
-                        <TableCell className="text-right font-mono">{formatYen(m.revenue)}</TableCell>
+                    {materialGradeStats.map(g => (
+                      <TableRow key={g.grade}>
+                        <TableCell className="font-medium">{g.grade}</TableCell>
+                        <TableCell className="text-right">{g.student_count}人</TableCell>
+                        <TableCell className="text-right">{g.quantity}</TableCell>
+                        <TableCell className="text-right font-mono">{formatYen(g.revenue)}</TableCell>
                       </TableRow>
                     ))}
-                    {materialStats.length > 0 && (
+                    {materialGradeStats.length > 0 && (
                       <TableRow className="bg-muted/50 font-bold">
                         <TableCell>合計</TableCell>
-                        <TableCell className="text-right" />
+                        <TableCell className="text-right">{totalMaterialStudents}人</TableCell>
                         <TableCell className="text-right">{totalMaterialQuantity}</TableCell>
                         <TableCell className="text-right font-mono">{formatYen(totalMaterialRevenue)}</TableCell>
                       </TableRow>
                     )}
-                    {materialStats.length === 0 && (
+                    {materialGradeStats.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={4} className="text-center text-muted-foreground py-8">データなし</TableCell>
                       </TableRow>

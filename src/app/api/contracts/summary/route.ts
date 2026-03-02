@@ -190,64 +190,96 @@ export async function GET(request: NextRequest) {
   const totalGradeRevenue = gradeStats.reduce((s, g) => s + g.monthly_revenue, 0)
   const totalGradeLessons = gradeStats.reduce((s, g) => s + g.weekly_lessons, 0)
 
-  // --- 講習統計（選択月・ラベル別） ---
-  const lectureLabelMap: Record<string, { studentIds: Set<string>; totalLessons: number; revenue: number }> = {}
+  // --- 講習統計（選択月・学年別） ---
+  const lectureGradeRevenue: Record<string, number> = {}
+  const lectureGradeLessons: Record<string, number> = {}
+  const lectureGradeStudentIds: Record<string, Set<string>> = {}
+
   for (const l of lectures) {
-    const label = (l as { label?: string }).label || '未設定'
+    const g = (l as { grade?: string }).grade || '未設定'
     const lCourses = (l.courses || []) as LectureCourse[]
     for (const c of lCourses) {
       for (const a of c.allocation || []) {
         if (a.year === targetY && a.month === targetM && a.lessons > 0) {
-          if (!lectureLabelMap[label]) lectureLabelMap[label] = { studentIds: new Set(), totalLessons: 0, revenue: 0 }
-          lectureLabelMap[label].studentIds.add(l.student_id)
-          lectureLabelMap[label].totalLessons += a.lessons
-          lectureLabelMap[label].revenue += c.unit_price * a.lessons
+          if (!lectureGradeStudentIds[g]) lectureGradeStudentIds[g] = new Set()
+          lectureGradeStudentIds[g].add(l.student_id)
+          lectureGradeLessons[g] = (lectureGradeLessons[g] || 0) + a.lessons
+          lectureGradeRevenue[g] = (lectureGradeRevenue[g] || 0) + c.unit_price * a.lessons
         }
       }
     }
   }
-  const LABEL_ORDER = ['春期','夏期','冬期','受験直前特訓','その他']
-  const lectureStats = Object.entries(lectureLabelMap)
-    .sort(([a], [b]) => {
-      const ai = LABEL_ORDER.indexOf(a)
-      const bi = LABEL_ORDER.indexOf(b)
+
+  const lectureGradeStats = [...new Set(Object.keys(lectureGradeRevenue))]
+    .sort((a, b) => {
+      const ai = GRADE_ORDER.indexOf(a)
+      const bi = GRADE_ORDER.indexOf(b)
       if (ai === -1 && bi === -1) return a.localeCompare(b)
       if (ai === -1) return 1
       if (bi === -1) return -1
       return ai - bi
     })
-    .map(([label, v]) => ({
-      label,
-      student_count: v.studentIds.size,
-      total_lessons: v.totalLessons,
-      revenue: v.revenue,
+    .map(grade => ({
+      grade,
+      student_count: lectureGradeStudentIds[grade]?.size || 0,
+      total_lessons: lectureGradeLessons[grade] || 0,
+      revenue: lectureGradeRevenue[grade] || 0,
     }))
-  const totalLectureStudents = lectureStats.reduce((s, l) => s + l.student_count, 0)
-  const totalLectureLessons = lectureStats.reduce((s, l) => s + l.total_lessons, 0)
-  const totalLectureRevenue = lectureStats.reduce((s, l) => s + l.revenue, 0)
 
-  // --- 教材統計（選択月・商品別） ---
-  const materialItemMap: Record<string, { unit_price: number; quantity: number; revenue: number }> = {}
-  for (const ms of materialSales) {
-    if (ms.billing_year === targetY && ms.billing_month === targetM) {
-      const name = (ms as { item_name?: string }).item_name || '不明'
-      const price = (ms as { unit_price?: number }).unit_price || 0
-      const qty = (ms as { quantity?: number }).quantity || 1
-      if (!materialItemMap[name]) materialItemMap[name] = { unit_price: price, quantity: 0, revenue: 0 }
-      materialItemMap[name].quantity += qty
-      materialItemMap[name].revenue += ms.total_amount
+  const totalLectureStudents = lectureGradeStats.reduce((s, g) => s + g.student_count, 0)
+  const totalLectureLessons = lectureGradeStats.reduce((s, g) => s + g.total_lessons, 0)
+  const totalLectureRevenue = lectureGradeStats.reduce((s, g) => s + g.revenue, 0)
+
+  // --- 教材統計（選択月・学年別） ---
+  // student_id → grade マップを構築（契約 + 講習から）
+  const studentGradeMap: Record<string, string> = {}
+  for (const c of contracts) {
+    const cStart = new Date(c.start_date)
+    const cEnd = new Date(c.end_date)
+    if (cStart <= targetLastDay && cEnd >= targetFirstDay) {
+      studentGradeMap[c.student_id] = c.grade || '未設定'
     }
   }
-  const materialStats = Object.entries(materialItemMap)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([item_name, v]) => ({
-      item_name,
-      unit_price: v.unit_price,
-      quantity: v.quantity,
-      revenue: v.revenue,
+  for (const l of lectures) {
+    if (!studentGradeMap[l.student_id]) {
+      studentGradeMap[l.student_id] = (l as { grade?: string }).grade || '未設定'
+    }
+  }
+
+  const materialGradeRevenue: Record<string, number> = {}
+  const materialGradeQuantity: Record<string, number> = {}
+  const materialGradeStudentIds: Record<string, Set<string>> = {}
+
+  for (const ms of materialSales) {
+    if (ms.billing_year === targetY && ms.billing_month === targetM) {
+      const g = studentGradeMap[ms.student_id] || '未設定'
+      const qty = (ms as { quantity?: number }).quantity || 1
+      if (!materialGradeStudentIds[g]) materialGradeStudentIds[g] = new Set()
+      materialGradeStudentIds[g].add(ms.student_id)
+      materialGradeQuantity[g] = (materialGradeQuantity[g] || 0) + qty
+      materialGradeRevenue[g] = (materialGradeRevenue[g] || 0) + ms.total_amount
+    }
+  }
+
+  const materialGradeStats = [...new Set(Object.keys(materialGradeRevenue))]
+    .sort((a, b) => {
+      const ai = GRADE_ORDER.indexOf(a)
+      const bi = GRADE_ORDER.indexOf(b)
+      if (ai === -1 && bi === -1) return a.localeCompare(b)
+      if (ai === -1) return 1
+      if (bi === -1) return -1
+      return ai - bi
+    })
+    .map(grade => ({
+      grade,
+      student_count: materialGradeStudentIds[grade]?.size || 0,
+      quantity: materialGradeQuantity[grade] || 0,
+      revenue: materialGradeRevenue[grade] || 0,
     }))
-  const totalMaterialQuantity = materialStats.reduce((s, m) => s + m.quantity, 0)
-  const totalMaterialRevenue = materialStats.reduce((s, m) => s + m.revenue, 0)
+
+  const totalMaterialStudents = materialGradeStats.reduce((s, g) => s + g.student_count, 0)
+  const totalMaterialQuantity = materialGradeStats.reduce((s, g) => s + g.quantity, 0)
+  const totalMaterialRevenue = materialGradeStats.reduce((s, g) => s + g.revenue, 0)
 
   return NextResponse.json({
     data: months,
@@ -255,11 +287,12 @@ export async function GET(request: NextRequest) {
     totalGradeStudents,
     totalGradeRevenue,
     totalGradeLessons,
-    lectureStats,
+    lectureGradeStats,
     totalLectureStudents,
     totalLectureLessons,
     totalLectureRevenue,
-    materialStats,
+    materialGradeStats,
+    totalMaterialStudents,
     totalMaterialQuantity,
     totalMaterialRevenue,
   })
