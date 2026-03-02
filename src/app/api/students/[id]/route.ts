@@ -64,6 +64,32 @@ export async function PUT(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // 退塾処理: テンプレート無効化 + 未来の授業キャンセル
+  let templatesDeactivated = 0
+  let lessonsCancelled = 0
+  if (status === 'withdrawn') {
+    const today = new Date().toISOString().slice(0, 10)
+
+    // テンプレートを無効化
+    const { data: deactivated } = await admin
+      .from('regular_lesson_templates')
+      .update({ is_active: false })
+      .eq('student_id', id)
+      .eq('is_active', true)
+      .select('id')
+    templatesDeactivated = deactivated?.length || 0
+
+    // 未来の scheduled 授業をキャンセル
+    const { data: cancelled } = await admin
+      .from('lessons')
+      .update({ status: 'cancelled' })
+      .eq('student_id', id)
+      .eq('status', 'scheduled')
+      .gte('lesson_date', today)
+      .select('id')
+    lessonsCancelled = cancelled?.length || 0
+  }
+
   // Replace parent emails
   if (parent_emails !== undefined) {
     await admin.from('parent_emails').delete().eq('student_id', id)
@@ -102,7 +128,7 @@ export async function PUT(
     }
   }
 
-  return NextResponse.json({ data: student })
+  return NextResponse.json({ data: student, templatesDeactivated, lessonsCancelled })
 }
 
 export async function DELETE(

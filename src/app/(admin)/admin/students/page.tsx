@@ -133,7 +133,15 @@ export default function StudentsPage() {
         body: JSON.stringify({ status: 'withdrawn' }),
       })
       if (!res.ok) throw new Error('退塾処理に失敗しました')
-      toast.success('退塾処理を行いました')
+      const json = await res.json()
+      const parts: string[] = ['退塾処理を行いました']
+      if (json.templatesDeactivated > 0 || json.lessonsCancelled > 0) {
+        const details: string[] = []
+        if (json.templatesDeactivated > 0) details.push(`テンプレート${json.templatesDeactivated}件無効化`)
+        if (json.lessonsCancelled > 0) details.push(`授業${json.lessonsCancelled}件キャンセル`)
+        parts.push(`（${details.join('、')}）`)
+      }
+      toast.success(parts.join(''))
       fetchData()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '退塾処理に失敗しました')

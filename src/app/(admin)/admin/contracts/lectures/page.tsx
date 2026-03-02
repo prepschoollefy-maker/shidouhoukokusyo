@@ -282,6 +282,27 @@ export default function LecturesPage() {
 
   const totalAmount = calcTotal()
 
+  // 月別の合計金額を集計
+  const monthlyMap = new Map<string, number>()
+  for (const l of filteredLectures) {
+    for (const c of l.courses) {
+      const unitPrice = c.unit_price || calcLectureUnitPrice(l.grade, c.course)
+      for (const a of (c.allocation || [])) {
+        if (a.lessons <= 0) continue
+        const key = `${a.year}-${String(a.month).padStart(2, '0')}`
+        monthlyMap.set(key, (monthlyMap.get(key) || 0) + unitPrice * a.lessons)
+      }
+    }
+  }
+  const monthlyBreakdown = Array.from(monthlyMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, amount]) => {
+      const [year, month] = key.split('-')
+      return { year: parseInt(year), month: parseInt(month), amount }
+    })
+
+  const grandTotal = filteredLectures.reduce((sum, l) => sum + l.total_amount, 0)
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -481,6 +502,25 @@ export default function LecturesPage() {
           className="pl-9"
         />
       </div>
+
+      {filteredLectures.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="text-sm font-medium text-muted-foreground">合計金額の月別内訳:</span>
+              {monthlyBreakdown.map(({ year, month, amount }) => (
+                <div key={`${year}-${month}`} className="text-sm">
+                  <span className="text-muted-foreground">{year}年{month}月</span>
+                  <span className="ml-1 font-mono font-medium">{formatYen(amount)}</span>
+                </div>
+              ))}
+              <div className="ml-auto text-sm font-medium">
+                合計: <span className="font-mono text-base">{formatYen(grandTotal)}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-0 overflow-x-auto">

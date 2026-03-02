@@ -50,10 +50,12 @@ export async function GET(request: NextRequest) {
       newStartDate = `${endYear}-02-01`
       newEndDate = `${endYear}-03-31`
     } else {
-      // 通常: 進級、4/1〜翌3/31
-      newGrade = GRADE_NEXT[c.grade] || c.grade
+      // 通常
       newStartDate = `${endYear + (c.end_date.endsWith('-03-31') ? 0 : 1)}-04-01`
       newEndDate = `${endYear + (c.end_date.endsWith('-03-31') ? 1 : 2)}-03-31`
+      // 3月末→4月頭の切り替え（新開始が4月）の場合のみ進級
+      const newStartMonth = parseInt(newStartDate.slice(5, 7))
+      newGrade = newStartMonth === 4 ? (GRADE_NEXT[c.grade] || c.grade) : c.grade
     }
 
     return {

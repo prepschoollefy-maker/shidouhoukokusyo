@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { searchParams } = new URL(request.url)
   const startDate = searchParams.get('start_date')
   const endDate = searchParams.get('end_date')
+
+  // 日付範囲が指定されている場合、未生成の授業を自動生成
+  if (startDate && endDate) {
+    try {
+      const admin = createAdminClient()
+      await admin.rpc('generate_lessons_for_range', {
+        p_start_date: startDate,
+        p_end_date: endDate,
+      })
+    } catch {
+      // 自動生成エラーは無視して既存データを返す
+    }
+  }
 
   let query = supabase
     .from('lessons')

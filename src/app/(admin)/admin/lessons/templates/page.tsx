@@ -250,13 +250,13 @@ export default function LessonTemplatesPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">通常授業テンプレート</h2>
+        <h2 className="text-2xl font-bold">通常授業の登録</h2>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setGenerateOpen(true)}>
-            <CalendarPlus className="h-4 w-4 mr-1" />授業一括生成
+            <CalendarPlus className="h-4 w-4 mr-1" />授業スケジュール作成
           </Button>
           <Button onClick={() => openCreate()}>
-            <Plus className="h-4 w-4 mr-1" />テンプレート追加
+            <Plus className="h-4 w-4 mr-1" />授業を追加
           </Button>
         </div>
       </div>
@@ -313,9 +313,9 @@ export default function LessonTemplatesPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'テンプレート編集' : 'テンプレート追加'}</DialogTitle>
+            <DialogTitle>{editingId ? '授業パターン編集' : '授業パターン追加'}</DialogTitle>
             <DialogDescription>
-              通常授業のテンプレートを{editingId ? '編集' : '追加'}します
+              通常授業のパターンを{editingId ? '編集' : '追加'}します
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
@@ -410,8 +410,8 @@ export default function LessonTemplatesPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
-        title="テンプレートを削除"
-        description="このテンプレートを削除しますか？"
+        title="授業パターンを削除"
+        description="この授業パターンを削除しますか？"
         onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget); setDeleteTarget(null) }}
       />
 
@@ -419,9 +419,9 @@ export default function LessonTemplatesPage() {
       <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>授業一括生成</DialogTitle>
+            <DialogTitle>授業スケジュール作成</DialogTitle>
             <DialogDescription>
-              有効なテンプレートから指定期間の授業を一括生成します
+              登録済みの授業パターンから、指定した期間の授業スケジュールを自動作成します
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
@@ -445,7 +445,7 @@ export default function LessonTemplatesPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setGenerateOpen(false)}>キャンセル</Button>
             <Button onClick={handleGenerate} disabled={generating}>
-              {generating ? '生成中...' : '生成する'}
+              {generating ? '作成中...' : '作成する'}
             </Button>
           </DialogFooter>
         </DialogContent>
