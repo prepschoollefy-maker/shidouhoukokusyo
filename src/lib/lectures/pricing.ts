@@ -6,8 +6,9 @@
 
 import { GRADE_CATEGORY_MAP, type Grade } from '@/lib/contracts/pricing'
 
+/** フォールバック用デフォルトラベル（DB未接続時に使用） */
 export const LECTURE_LABELS = ['春期', '夏期', '冬期', '受験直前特訓', 'その他'] as const
-export type LectureLabel = (typeof LECTURE_LABELS)[number]
+export type LectureLabel = string
 
 export const LECTURE_COURSES = ['ハイスタンダード', 'エクセレンス', 'エグゼクティブ'] as const
 export type LectureCourseName = (typeof LECTURE_COURSES)[number]

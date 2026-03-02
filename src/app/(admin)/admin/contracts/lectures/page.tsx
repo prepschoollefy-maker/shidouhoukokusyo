@@ -10,12 +10,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2, Search, Lock, ChevronsUpDown, Check } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, ChevronsUpDown, Check, Tags } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
 import { GRADES } from '@/lib/contracts/pricing'
-import { useDashboardAuth } from '@/hooks/use-dashboard-auth'
+import { useContractAuth } from '../layout'
 import {
   LECTURE_LABELS,
   LECTURE_COURSES,
@@ -23,6 +23,12 @@ import {
   type LectureCourseEntry,
   type LectureAllocation,
 } from '@/lib/lectures/pricing'
+
+interface LabelItem {
+  id: string
+  label: string
+  sort_order: number
+}
 
 interface Student {
   id: string
@@ -43,8 +49,7 @@ interface Lecture {
 }
 
 export default function LecturesPage() {
-  // パスワード認証（共通フック）
-  const { authenticated, password, setPassword, storedPw, verifying, initializing, handleAuth: authHandler } = useDashboardAuth()
+  const { storedPw } = useContractAuth()
 
   const [lectures, setLectures] = useState<Lecture[]>([])
   const [students, setStudents] = useState<Student[]>([])
@@ -56,6 +61,12 @@ export default function LecturesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'student' | 'timeline'>('student')
 
+  // ラベル管理
+  const [labelItems, setLabelItems] = useState<LabelItem[]>([])
+  const [labelPopoverOpen, setLabelPopoverOpen] = useState(false)
+  const [newLabelName, setNewLabelName] = useState('')
+  const [addingLabel, setAddingLabel] = useState(false)
+
   // Form state
   const [formStudentId, setFormStudentId] = useState('')
   const [formLabel, setFormLabel] = useState('')
@@ -66,13 +77,23 @@ export default function LecturesPage() {
   ])
   const [formNotes, setFormNotes] = useState('')
 
-  const handleAuth = () => authHandler('/api/lectures')
-
   const fetchLectures = useCallback(async () => {
     if (!storedPw) return
     const res = await fetch(`/api/lectures?pw=${encodeURIComponent(storedPw)}`)
     const json = await res.json()
     setLectures(json.data || [])
+  }, [storedPw])
+
+  const fetchLabels = useCallback(async () => {
+    if (!storedPw) return
+    try {
+      const res = await fetch(`/api/master/lecture-labels?pw=${encodeURIComponent(storedPw)}`)
+      const json = await res.json()
+      if (json.data) setLabelItems(json.data)
+    } catch {
+      // フォールバック: DBから取得できない場合はハードコード値を使用
+      setLabelItems(LECTURE_LABELS.map((l, i) => ({ id: `fallback-${i}`, label: l, sort_order: i })))
+    }
   }, [storedPw])
 
   const fetchStudents = useCallback(async () => {
@@ -84,10 +105,10 @@ export default function LecturesPage() {
   }, [])
 
   useEffect(() => {
-    if (!authenticated || initializing) return
+    if (!storedPw) return
     setLoading(true)
-    Promise.all([fetchLectures(), fetchStudents()]).finally(() => setLoading(false))
-  }, [authenticated, initializing, fetchLectures, fetchStudents])
+    Promise.all([fetchLectures(), fetchStudents(), fetchLabels()]).finally(() => setLoading(false))
+  }, [storedPw, fetchLectures, fetchStudents, fetchLabels])
 
   // 選択中の生徒の学年を取得
   const selectedStudent = students.find(s => s.id === formStudentId)
@@ -194,6 +215,27 @@ export default function LecturesPage() {
     }
   }
 
+  const handleAddLabel = async () => {
+    if (!newLabelName.trim()) return
+    setAddingLabel(true)
+    try {
+      const res = await fetch('/api/master/lecture-labels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-dashboard-pw': storedPw },
+        body: JSON.stringify({ label: newLabelName.trim() }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || '追加に失敗しました')
+      toast.success(`「${newLabelName.trim()}」を追加しました`)
+      setNewLabelName('')
+      fetchLabels()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'エラーが発生しました')
+    } finally {
+      setAddingLabel(false)
+    }
+  }
+
   const updateCourse = (index: number, field: string, value: unknown) => {
     setFormCourses(prev => prev.map((c, i) => {
       if (i !== index) return c
@@ -237,37 +279,6 @@ export default function LecturesPage() {
       if (ci !== courseIndex) return c
       return { ...c, allocation: c.allocation.filter((_, ai) => ai !== allocIndex) }
     }))
-  }
-
-  // 初期化中またはパスワード入力画面
-  if (initializing) return <LoadingSpinner />
-  if (!authenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="w-full max-w-sm">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex flex-col items-center gap-2 mb-2">
-              <Lock className="h-8 w-8 text-muted-foreground" />
-              <h2 className="text-lg font-bold">講習管理</h2>
-              <p className="text-sm text-muted-foreground text-center">閲覧にはパスワードが必要です</p>
-            </div>
-            <div className="space-y-2">
-              <Label>パスワード</Label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAuth() }}
-                autoFocus
-              />
-            </div>
-            <Button className="w-full" onClick={handleAuth} disabled={verifying}>
-              {verifying ? '確認中...' : 'ログイン'}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
   }
 
   if (loading) return <LoadingSpinner />
@@ -317,12 +328,12 @@ export default function LecturesPage() {
   const studentGroups = Array.from(studentGroupMap.values())
     .sort((a, b) => (a.student.student_number || '').localeCompare(b.student.student_number || '', 'ja', { numeric: true }))
 
-  // 時系列ビュー用: ラベル順ソート
-  const labelOrder = LECTURE_LABELS as readonly string[]
+  // 時系列ビュー用: ラベル順ソート（APIのsort_order順）
+  const labelOrderMap = new Map(labelItems.map(item => [item.label, item.sort_order]))
   const timelineLectures = [...filteredLectures].sort((a, b) => {
-    const la = labelOrder.indexOf(a.label)
-    const lb = labelOrder.indexOf(b.label)
-    if (la !== lb) return (la === -1 ? 999 : la) - (lb === -1 ? 999 : lb)
+    const la = labelOrderMap.get(a.label) ?? 999
+    const lb = labelOrderMap.get(b.label) ?? 999
+    if (la !== lb) return la - lb
     return (a.student?.student_number || '').localeCompare(b.student?.student_number || '', 'ja', { numeric: true })
   })
 
@@ -332,6 +343,43 @@ export default function LecturesPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">講習管理</h2>
+        <div className="flex items-center gap-2">
+          <Popover open={labelPopoverOpen} onOpenChange={setLabelPopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Tags className="h-4 w-4 mr-1" />ラベル管理
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72" align="end">
+              <div className="space-y-3">
+                <h4 className="font-medium text-sm">講習ラベル一覧</h4>
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {labelItems.map(item => (
+                    <div key={item.id} className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted">
+                      <Badge variant="secondary">{item.label}</Badge>
+                    </div>
+                  ))}
+                  {labelItems.length === 0 && (
+                    <div className="text-sm text-muted-foreground py-2">ラベルがありません</div>
+                  )}
+                </div>
+                <div className="border-t pt-3">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="新しいラベル名"
+                      value={newLabelName}
+                      onChange={(e) => setNewLabelName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleAddLabel() }}
+                      className="text-sm"
+                    />
+                    <Button size="sm" onClick={handleAddLabel} disabled={addingLabel || !newLabelName.trim()}>
+                      {addingLabel ? '...' : '追加'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm() }}>
           <DialogTrigger asChild>
             <Button><Plus className="h-4 w-4 mr-1" />新規登録</Button>
@@ -391,8 +439,8 @@ export default function LecturesPage() {
                 <Select value={formLabel} onValueChange={setFormLabel}>
                   <SelectTrigger><SelectValue placeholder="選択" /></SelectTrigger>
                   <SelectContent>
-                    {LECTURE_LABELS.map(l => (
-                      <SelectItem key={l} value={l}>{l}</SelectItem>
+                    {labelItems.map(item => (
+                      <SelectItem key={item.id} value={item.label}>{item.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -516,6 +564,7 @@ export default function LecturesPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="flex gap-2 items-center flex-wrap">

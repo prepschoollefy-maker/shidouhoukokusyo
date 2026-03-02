@@ -5,13 +5,12 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { Lock, ArrowRight, Search } from 'lucide-react'
-import { useDashboardAuth } from '@/hooks/use-dashboard-auth'
+import { ArrowRight, Search } from 'lucide-react'
+import { useContractAuth } from '../../layout'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -69,9 +68,7 @@ export default function BillingHistoryPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [studentFilter, setStudentFilter] = useState<StudentFilter>('all')
 
-  const { authenticated, password, setPassword, storedPw, verifying, initializing, handleAuth: authHandler } = useDashboardAuth()
-
-  const handleAuth = () => authHandler(`/api/payments/history?view=monthly&year=${year}&months=${months}`)
+  const { storedPw } = useContractAuth()
 
   const fetchData = useCallback(async (pw: string, currentTab: Tab) => {
     const t = Date.now()
@@ -87,10 +84,10 @@ export default function BillingHistoryPage() {
   }, [year, months])
 
   useEffect(() => {
-    if (!authenticated || initializing) return
+    if (!storedPw) return
     setLoading(true)
     fetchData(storedPw, tab).finally(() => setLoading(false))
-  }, [year, months, tab, authenticated, initializing, storedPw, fetchData])
+  }, [year, months, tab, storedPw, fetchData])
 
   /* ---- computed ---- */
 
@@ -133,38 +130,6 @@ export default function BillingHistoryPage() {
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i)
   const monthsOptions = [3, 6, 12]
-
-  /* ---- auth screen ---- */
-
-  if (initializing) return <LoadingSpinner />
-  if (!authenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="w-full max-w-sm">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex flex-col items-center gap-2 mb-2">
-              <Lock className="h-8 w-8 text-muted-foreground" />
-              <h2 className="text-lg font-bold">入金履歴</h2>
-              <p className="text-sm text-muted-foreground text-center">閲覧にはパスワードが必要です</p>
-            </div>
-            <div className="space-y-2">
-              <Label>パスワード</Label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAuth() }}
-                autoFocus
-              />
-            </div>
-            <Button className="w-full" onClick={handleAuth} disabled={verifying}>
-              {verifying ? '確認中...' : 'ログイン'}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
 
   /* ---- main ---- */
 

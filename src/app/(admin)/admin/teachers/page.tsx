@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Plus, Trash2, Download, Eye, EyeOff, ExternalLink, Copy, Search } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -19,7 +18,6 @@ interface Teacher {
   display_name: string
   email: string
   initial_password: string | null
-  assignments: { student: { name: string }; subject: { name: string } | null }[]
 }
 
 export default function TeachersPage() {
@@ -151,7 +149,7 @@ export default function TeachersPage() {
                 <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>初期パスワード（空欄で自動生成）</Label>
+                <Label>パスワード（空欄で自動生成）</Label>
                 <Input type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="自動生成" />
               </div>
             </div>
@@ -181,8 +179,7 @@ export default function TeachersPage() {
               <TableRow>
                 <TableHead>氏名</TableHead>
                 <TableHead>メール</TableHead>
-                <TableHead>初期パスワード</TableHead>
-                <TableHead>担当生徒</TableHead>
+                <TableHead>パスワード</TableHead>
                 <TableHead className="w-16"></TableHead>
               </TableRow>
             </TableHeader>
@@ -215,13 +212,6 @@ export default function TeachersPage() {
                     ) : (
                       <span className="text-muted-foreground text-sm">-</span>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {[...new Map(t.assignments.map(a => [a.student?.name, a.student?.name])).values()].map((name, i) => (
-                        <Badge key={i} variant="outline" className="text-xs">{name}</Badge>
-                      ))}
-                    </div>
                   </TableCell>
                   <TableCell>
                     <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(t.id)}>

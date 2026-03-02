@@ -53,5 +53,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: createError.message }, { status: 500 })
   }
 
+  // 初期パスワードをprofilesに保存（管理画面で参照可能にする）
+  await admin
+    .from('profiles')
+    .update({ initial_password: password })
+    .eq('id', newUser.user.id)
+
   return NextResponse.json({ data: { id: newUser.user.id } }, { status: 201 })
 }

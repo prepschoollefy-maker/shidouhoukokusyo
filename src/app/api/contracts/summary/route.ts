@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
   // 講習データも取得
   const { data: lectureRows, error: lectureError } = await supabase
     .from('lectures')
-    .select('id, student_id, courses')
+    .select('id, student_id, label, grade, courses')
 
   if (lectureError) return NextResponse.json({ error: lectureError.message }, { status: 500 })
 
@@ -51,15 +51,15 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient()
   const { data: materialRows } = await admin
     .from('material_sales')
-    .select('id, student_id, total_amount, billing_year, billing_month')
+    .select('id, student_id, item_name, unit_price, quantity, total_amount, billing_year, billing_month')
 
   const materialSales = materialRows || []
 
   interface LectureAlloc { year: number; month: number; lessons: number }
   interface LectureCourse { course: string; total_lessons: number; unit_price: number; subtotal: number; allocation: LectureAlloc[] }
 
-  // JS側で月別集計
-  const months: { year: number; month: number; revenue: number; count: number }[] = []
+  // JS側で月別集計（カテゴリ別内訳付き）
+  const months: { year: number; month: number; revenue: number; contractRevenue: number; lectureRevenue: number; materialRevenue: number; count: number }[] = []
   for (let i = 0; i < 12; i++) {
     let m = startMonth + i
     let y = startYear
@@ -68,7 +68,9 @@ export async function GET(request: NextRequest) {
     const firstDay = new Date(y, m - 1, 1)
     const lastDay = new Date(y, m, 0)
 
-    let revenue = 0
+    let contractRevenue = 0
+    let lectureRevenue = 0
+    let materialRevenue = 0
     const studentIds = new Set<string>()
 
     for (const c of contracts) {
@@ -88,33 +90,34 @@ export async function GET(request: NextRequest) {
           monthRevenue -= (c.campaign_discount || 0)
         }
 
-        revenue += monthRevenue
+        contractRevenue += monthRevenue
         studentIds.add(c.student_id)
       }
     }
 
-    // 講習の月別売上を加算
+    // 講習の月別売上
     for (const l of lectures) {
       const courses = (l.courses || []) as LectureCourse[]
       for (const c of courses) {
         for (const a of c.allocation || []) {
           if (a.year === y && a.month === m && a.lessons > 0) {
-            revenue += c.unit_price * a.lessons
+            lectureRevenue += c.unit_price * a.lessons
             studentIds.add(l.student_id)
           }
         }
       }
     }
 
-    // 教材販売の月別売上を加算
+    // 教材販売の月別売上
     for (const ms of materialSales) {
       if (ms.billing_year === y && ms.billing_month === m) {
-        revenue += ms.total_amount
+        materialRevenue += ms.total_amount
         studentIds.add(ms.student_id)
       }
     }
 
-    months.push({ year: y, month: m, revenue, count: studentIds.size })
+    const revenue = contractRevenue + lectureRevenue + materialRevenue
+    months.push({ year: y, month: m, revenue, contractRevenue, lectureRevenue, materialRevenue, count: studentIds.size })
   }
 
   // --- 学年別統計（選択月） ---
@@ -187,11 +190,77 @@ export async function GET(request: NextRequest) {
   const totalGradeRevenue = gradeStats.reduce((s, g) => s + g.monthly_revenue, 0)
   const totalGradeLessons = gradeStats.reduce((s, g) => s + g.weekly_lessons, 0)
 
+  // --- 講習統計（選択月・ラベル別） ---
+  const lectureLabelMap: Record<string, { studentIds: Set<string>; totalLessons: number; revenue: number }> = {}
+  for (const l of lectures) {
+    const label = (l as { label?: string }).label || '未設定'
+    const lCourses = (l.courses || []) as LectureCourse[]
+    for (const c of lCourses) {
+      for (const a of c.allocation || []) {
+        if (a.year === targetY && a.month === targetM && a.lessons > 0) {
+          if (!lectureLabelMap[label]) lectureLabelMap[label] = { studentIds: new Set(), totalLessons: 0, revenue: 0 }
+          lectureLabelMap[label].studentIds.add(l.student_id)
+          lectureLabelMap[label].totalLessons += a.lessons
+          lectureLabelMap[label].revenue += c.unit_price * a.lessons
+        }
+      }
+    }
+  }
+  const LABEL_ORDER = ['春期','夏期','冬期','受験直前特訓','その他']
+  const lectureStats = Object.entries(lectureLabelMap)
+    .sort(([a], [b]) => {
+      const ai = LABEL_ORDER.indexOf(a)
+      const bi = LABEL_ORDER.indexOf(b)
+      if (ai === -1 && bi === -1) return a.localeCompare(b)
+      if (ai === -1) return 1
+      if (bi === -1) return -1
+      return ai - bi
+    })
+    .map(([label, v]) => ({
+      label,
+      student_count: v.studentIds.size,
+      total_lessons: v.totalLessons,
+      revenue: v.revenue,
+    }))
+  const totalLectureStudents = lectureStats.reduce((s, l) => s + l.student_count, 0)
+  const totalLectureLessons = lectureStats.reduce((s, l) => s + l.total_lessons, 0)
+  const totalLectureRevenue = lectureStats.reduce((s, l) => s + l.revenue, 0)
+
+  // --- 教材統計（選択月・商品別） ---
+  const materialItemMap: Record<string, { unit_price: number; quantity: number; revenue: number }> = {}
+  for (const ms of materialSales) {
+    if (ms.billing_year === targetY && ms.billing_month === targetM) {
+      const name = (ms as { item_name?: string }).item_name || '不明'
+      const price = (ms as { unit_price?: number }).unit_price || 0
+      const qty = (ms as { quantity?: number }).quantity || 1
+      if (!materialItemMap[name]) materialItemMap[name] = { unit_price: price, quantity: 0, revenue: 0 }
+      materialItemMap[name].quantity += qty
+      materialItemMap[name].revenue += ms.total_amount
+    }
+  }
+  const materialStats = Object.entries(materialItemMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([item_name, v]) => ({
+      item_name,
+      unit_price: v.unit_price,
+      quantity: v.quantity,
+      revenue: v.revenue,
+    }))
+  const totalMaterialQuantity = materialStats.reduce((s, m) => s + m.quantity, 0)
+  const totalMaterialRevenue = materialStats.reduce((s, m) => s + m.revenue, 0)
+
   return NextResponse.json({
     data: months,
     gradeStats,
     totalGradeStudents,
     totalGradeRevenue,
     totalGradeLessons,
+    lectureStats,
+    totalLectureStudents,
+    totalLectureLessons,
+    totalLectureRevenue,
+    materialStats,
+    totalMaterialQuantity,
+    totalMaterialRevenue,
   })
 }

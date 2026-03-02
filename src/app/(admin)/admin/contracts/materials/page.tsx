@@ -8,11 +8,11 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Search, Lock, ChevronsUpDown, Check } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, ChevronsUpDown, Check } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
-import { useDashboardAuth } from '@/hooks/use-dashboard-auth'
+import { useContractAuth } from '../layout'
 
 interface Student {
   id: string
@@ -36,7 +36,7 @@ interface MaterialSale {
 }
 
 export default function MaterialsPage() {
-  const { authenticated, password, setPassword, storedPw, verifying, initializing, handleAuth: authHandler } = useDashboardAuth()
+  const { storedPw } = useContractAuth()
 
   const [materials, setMaterials] = useState<MaterialSale[]>([])
   const [students, setStudents] = useState<Student[]>([])
@@ -60,8 +60,6 @@ export default function MaterialsPage() {
   const [studentSearch, setStudentSearch] = useState('')
   const [studentPopoverOpen, setStudentPopoverOpen] = useState(false)
 
-  const handleAuth = () => authHandler('/api/materials')
-
   const fetchMaterials = useCallback(async () => {
     if (!storedPw) return
     const res = await fetch(`/api/materials?pw=${encodeURIComponent(storedPw)}`)
@@ -80,10 +78,10 @@ export default function MaterialsPage() {
   }, [])
 
   useEffect(() => {
-    if (!authenticated || initializing) return
+    if (!storedPw) return
     setLoading(true)
     Promise.all([fetchMaterials(), fetchStudents()]).finally(() => setLoading(false))
-  }, [authenticated, initializing, fetchMaterials, fetchStudents])
+  }, [storedPw, fetchMaterials, fetchStudents])
 
   const selectedStudent = students.find(s => s.id === formStudentId)
 
@@ -161,37 +159,6 @@ export default function MaterialsPage() {
     } catch {
       toast.error('削除に失敗しました')
     }
-  }
-
-  // パスワード認証画面
-  if (initializing) return <LoadingSpinner />
-  if (!authenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="w-full max-w-sm">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex flex-col items-center gap-2 mb-2">
-              <Lock className="h-8 w-8 text-muted-foreground" />
-              <h2 className="text-lg font-bold">教材販売管理</h2>
-              <p className="text-sm text-muted-foreground text-center">閲覧にはパスワードが必要です</p>
-            </div>
-            <div className="space-y-2">
-              <Label>パスワード</Label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAuth() }}
-                autoFocus
-              />
-            </div>
-            <Button className="w-full" onClick={handleAuth} disabled={verifying}>
-              {verifying ? '確認中...' : 'ログイン'}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
   }
 
   if (loading) return <LoadingSpinner />

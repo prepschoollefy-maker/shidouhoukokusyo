@@ -12,10 +12,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Lock, CheckCircle2, Loader2, ArrowRight, HelpCircle } from 'lucide-react'
+import { CheckCircle2, Loader2, ArrowRight, HelpCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { useDashboardAuth } from '@/hooks/use-dashboard-auth'
+import { useContractAuth } from '../layout'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -121,8 +121,7 @@ function BillingPageInner() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<PaymentMethodFilter>('all')
 
-  // パスワード認証
-  const { authenticated, password, setPassword, storedPw, verifying, initializing, handleAuth: authHandler } = useDashboardAuth()
+  const { storedPw } = useContractAuth()
 
   // 一括選択
   const [selected, setSelected] = useState<Set<ItemKey>>(new Set())
@@ -179,13 +178,11 @@ function BillingPageInner() {
     setSelected(new Set())
   }, [year, month])
 
-  const handleAuth = () => authHandler(`/api/contracts/billing?year=${year}&month=${month}`)
-
   useEffect(() => {
-    if (!authenticated || initializing) return
+    if (!storedPw) return
     setLoading(true)
     fetchData(storedPw).finally(() => setLoading(false))
-  }, [year, month, authenticated, initializing, storedPw, fetchData])
+  }, [year, month, storedPw, fetchData])
 
   /* ---- payment lookup ---- */
 
@@ -688,38 +685,6 @@ function BillingPageInner() {
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i)
   const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
   const payDifference = parseInt(payForm.paid_amount || '0') - (dialogTarget?.billedAmount || 0)
-
-  /* ---- auth screen ---- */
-
-  if (initializing) return <LoadingSpinner />
-  if (!authenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="w-full max-w-sm">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex flex-col items-center gap-2 mb-2">
-              <Lock className="h-8 w-8 text-muted-foreground" />
-              <h2 className="text-lg font-bold">請求・入金</h2>
-              <p className="text-sm text-muted-foreground text-center">閲覧にはパスワードが必要です</p>
-            </div>
-            <div className="space-y-2">
-              <Label>パスワード</Label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAuth() }}
-                autoFocus
-              />
-            </div>
-            <Button className="w-full" onClick={handleAuth} disabled={verifying}>
-              {verifying ? '確認中...' : 'ログイン'}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
 
   /* ---- main ---- */
 

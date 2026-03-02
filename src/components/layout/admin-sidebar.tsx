@@ -29,6 +29,7 @@ import {
   History,
   ShoppingBag,
   RefreshCw,
+  HelpCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -76,13 +77,14 @@ const navGroups: (NavItem | NavGroup)[] = [
     label: '契約',
     items: [
       { href: '/admin/contracts', label: '通常コース管理', icon: FileSignature },
-      { href: '/admin/contracts/renew', label: '一括更新', icon: RefreshCw },
       { href: '/admin/contracts/lectures', label: '講習管理', icon: BookOpenCheck },
       { href: '/admin/contracts/materials', label: '教材販売', icon: ShoppingBag },
       { href: '/admin/contracts/billing', label: '請求・入金', icon: Receipt },
       { href: '/admin/contracts/billing/history', label: '入金履歴', icon: History },
       { href: '/admin/contracts/dashboard', label: '経営ダッシュボード', icon: TrendingUp },
       { href: 'https://contract.lefy.jp', label: '契約書作成', icon: ExternalLink, external: true },
+      { href: '/admin/contracts/help', label: '契約マニュアル', icon: HelpCircle },
+      { href: '/admin/contracts/renew', label: '次年度契約一括更新', icon: RefreshCw },
     ],
   },
   {

@@ -4,8 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { calculateAll, calculateKeizoku, type ContractCalcResult, type KeizokuCalcResult } from '@/lib/contracts/contract-calc'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { useDashboardAuth } from '@/hooks/use-dashboard-auth'
-import { Lock } from 'lucide-react'
+import { useContractAuth } from '../../layout'
 
 interface Contract {
   id: string
@@ -35,8 +34,7 @@ export default function ContractPrintPage() {
   const [error, setError] = useState('')
   const sheetsRef = useRef<HTMLDivElement>(null)
 
-  const { authenticated, password, setPassword, storedPw, verifying, initializing, handleAuth: authHandler } = useDashboardAuth()
-  const handleAuth = () => authHandler(`/api/contracts/${id}`)
+  const { storedPw } = useContractAuth()
 
   const fetchContract = useCallback(async () => {
     const res = await fetch(`/api/contracts/${id}?pw=${encodeURIComponent(storedPw)}`)
@@ -55,9 +53,9 @@ export default function ContractPrintPage() {
   }, [id, storedPw])
 
   useEffect(() => {
-    if (!authenticated || initializing) return
+    if (!storedPw) return
     fetchContract()
-  }, [authenticated, initializing, fetchContract])
+  }, [storedPw, fetchContract])
 
   // A3自動縮小
   useEffect(() => {
@@ -80,23 +78,6 @@ export default function ContractPrintPage() {
     window.addEventListener('beforeprint', fitPages)
     return () => { clearTimeout(t); window.removeEventListener('beforeprint', fitPages) }
   }, [contract])
-
-  if (initializing) return <LoadingSpinner />
-  if (!authenticated) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
-        <div style={{ background: '#fff', padding: '2rem', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', maxWidth: 360, width: '100%', textAlign: 'center' }}>
-          <Lock style={{ width: 32, height: 32, color: '#999', margin: '0 auto 8px' }} />
-          <h2 style={{ fontSize: '1.1rem', marginBottom: 16 }}>契約書印刷</h2>
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAuth() }}
-            placeholder="パスワード" autoFocus style={{ width: '100%', padding: '8px 12px', border: '1px solid #ccc', borderRadius: 6, fontSize: '1rem', marginBottom: 12 }} />
-          <button onClick={handleAuth} disabled={verifying} style={{ width: '100%', padding: '10px', background: '#2980b9', color: '#fff', border: 'none', borderRadius: 6, fontSize: '1rem', cursor: 'pointer' }}>
-            {verifying ? '確認中...' : 'ログイン'}
-          </button>
-        </div>
-      </div>
-    )
-  }
 
   if (loading) return <LoadingSpinner />
   if (error || !contract) return <div style={{ padding: 40, textAlign: 'center', color: '#c00' }}>{error || 'データが見つかりません'}</div>

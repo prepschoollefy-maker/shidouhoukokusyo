@@ -7,11 +7,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Lock, Search, RefreshCw, Check } from 'lucide-react'
+import { Search, RefreshCw, Check } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { toast } from 'sonner'
 import { GRADES, COURSES, calcMonthlyAmount, type CourseEntry } from '@/lib/contracts/pricing'
-import { useDashboardAuth } from '@/hooks/use-dashboard-auth'
+import { useContractAuth } from '../layout'
 
 interface Student {
   id: string
@@ -47,7 +47,7 @@ interface RowState {
 }
 
 export default function ContractsRenewPage() {
-  const { authenticated, password, setPassword, storedPw, verifying, initializing, handleAuth: authHandler } = useDashboardAuth()
+  const { storedPw } = useContractAuth()
 
   // 年度ロジック
   const now = new Date()
@@ -60,8 +60,6 @@ export default function ContractsRenewPage() {
   const [endFrom, setEndFrom] = useState(`${fy + 1}-01-31`)
   const [endTo, setEndTo] = useState(`${fy + 1}-03-31`)
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({})
-
-  const handleAuth = () => authHandler('/api/contracts/expiring')
 
   const fetchExpiring = useCallback(async () => {
     if (!storedPw) return
@@ -105,8 +103,8 @@ export default function ContractsRenewPage() {
   }, [storedPw, endFrom, endTo])
 
   useEffect(() => {
-    if (authenticated && !initializing) fetchExpiring()
-  }, [authenticated, initializing]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (storedPw) fetchExpiring()
+  }, [storedPw]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateRow = (id: string, update: Partial<RowState>) => {
     setRowStates(prev => ({ ...prev, [id]: { ...prev[id], ...update } }))
@@ -183,36 +181,6 @@ export default function ContractsRenewPage() {
     contracts.filter(c => !rowStates[c.id]?.renewed).length,
     [contracts, rowStates]
   )
-
-  if (initializing) return <LoadingSpinner />
-  if (!authenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="w-full max-w-sm">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex flex-col items-center gap-2 mb-2">
-              <Lock className="h-8 w-8 text-muted-foreground" />
-              <h2 className="text-lg font-bold">一括更新</h2>
-              <p className="text-sm text-muted-foreground text-center">閲覧にはパスワードが必要です</p>
-            </div>
-            <div className="space-y-2">
-              <Label>パスワード</Label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAuth() }}
-                autoFocus
-              />
-            </div>
-            <Button className="w-full" onClick={handleAuth} disabled={verifying}>
-              {verifying ? '確認中...' : 'ログイン'}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-4">
