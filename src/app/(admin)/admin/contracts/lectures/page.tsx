@@ -54,6 +54,7 @@ export default function LecturesPage() {
   const [editing, setEditing] = useState<Lecture | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Lecture | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [viewMode, setViewMode] = useState<'student' | 'timeline'>('student')
 
   // Form state
   const [formStudentId, setFormStudentId] = useState('')
@@ -282,19 +283,8 @@ export default function LecturesPage() {
 
   const totalAmount = calcTotal()
 
-  // 全講習から出現する年月を収集（カラムヘッダー用）
-  const allMonthKeys = new Set<string>()
-  for (const l of filteredLectures) {
-    for (const c of l.courses) {
-      for (const a of (c.allocation || [])) {
-        if (a.lessons > 0) allMonthKeys.add(`${a.year}-${String(a.month).padStart(2, '0')}`)
-      }
-    }
-  }
-  const monthColumns = Array.from(allMonthKeys).sort()
-
-  // 各講習の月別金額を計算
-  const lectureMonthlyAmounts = (l: Lecture): Map<string, number> => {
+  // 各講習の月別金額を計算（インライン表示用）
+  const lectureMonthlyAmounts = (l: Lecture): { label: string; amount: number }[] => {
     const map = new Map<string, number>()
     for (const c of l.courses) {
       const unitPrice = c.unit_price || calcLectureUnitPrice(l.grade, c.course)
@@ -304,7 +294,12 @@ export default function LecturesPage() {
         map.set(key, (map.get(key) || 0) + unitPrice * a.lessons)
       }
     }
-    return map
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, amount]) => {
+        const m = parseInt(key.split('-')[1])
+        return { label: `${m}月`, amount }
+      })
   }
 
   // 生徒別にグルーピング
@@ -319,16 +314,16 @@ export default function LecturesPage() {
   const studentGroups = Array.from(studentGroupMap.values())
     .sort((a, b) => (a.student.student_number || '').localeCompare(b.student.student_number || '', 'ja', { numeric: true }))
 
-  // 全体の月別合計・総合計
-  const grandMonthlyTotals = new Map<string, number>()
-  let grandTotal = 0
-  for (const l of filteredLectures) {
-    grandTotal += l.total_amount
-    const monthly = lectureMonthlyAmounts(l)
-    for (const [key, amount] of monthly) {
-      grandMonthlyTotals.set(key, (grandMonthlyTotals.get(key) || 0) + amount)
-    }
-  }
+  // 時系列ビュー用: ラベル順ソート
+  const labelOrder = LECTURE_LABELS as readonly string[]
+  const timelineLectures = [...filteredLectures].sort((a, b) => {
+    const la = labelOrder.indexOf(a.label)
+    const lb = labelOrder.indexOf(b.label)
+    if (la !== lb) return (la === -1 ? 999 : la) - (lb === -1 ? 999 : lb)
+    return (a.student?.student_number || '').localeCompare(b.student?.student_number || '', 'ja', { numeric: true })
+  })
+
+  const grandTotal = filteredLectures.reduce((sum, l) => sum + l.total_amount, 0)
 
   return (
     <div className="space-y-4">
@@ -520,71 +515,146 @@ export default function LecturesPage() {
         </Dialog>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="生徒名・塾生番号で検索..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex gap-2 items-center flex-wrap">
+        <div className="flex rounded-lg border overflow-hidden">
+          {([['student', '生徒別'], ['timeline', '時系列']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === key ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+              onClick={() => setViewMode(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="生徒名・塾生番号で検索..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="text-sm text-muted-foreground">
+          {studentGroups.length}名 / {filteredLectures.length}件
+          {grandTotal > 0 && <span className="ml-2 font-mono font-medium">{formatYen(grandTotal)}</span>}
+        </div>
       </div>
 
-      <Card>
-        <CardContent className="p-0 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>生徒</TableHead>
-                <TableHead>ラベル</TableHead>
-                <TableHead>学年</TableHead>
-                <TableHead>コース</TableHead>
-                <TableHead className="text-right">合計金額</TableHead>
-                {monthColumns.map(key => {
-                  const [y, m] = key.split('-')
-                  return <TableHead key={key} className="text-right whitespace-nowrap">{parseInt(m)}月</TableHead>
-                })}
-                <TableHead className="w-20"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {studentGroups.map((group) => {
-                // 生徒単位の小計
-                const studentTotal = group.lectures.reduce((s, l) => s + l.total_amount, 0)
-                const studentMonthlyTotals = new Map<string, number>()
-                for (const l of group.lectures) {
-                  const monthly = lectureMonthlyAmounts(l)
-                  for (const [key, amount] of monthly) {
-                    studentMonthlyTotals.set(key, (studentMonthlyTotals.get(key) || 0) + amount)
-                  }
-                }
+      {/* 生徒別ビュー */}
+      {viewMode === 'student' && (
+        <div className="space-y-3">
+          {studentGroups.map((group) => {
+            const studentTotal = group.lectures.reduce((s, l) => s + l.total_amount, 0)
+            return (
+              <Card key={group.student.id}>
+                <CardContent className="p-0">
+                  <div className="px-4 py-3 border-b bg-muted/30 flex items-center gap-3">
+                    <span className="font-medium">{group.student.name}</span>
+                    {group.student.student_number && (
+                      <span className="text-xs text-muted-foreground">{group.student.student_number}</span>
+                    )}
+                    <span className="ml-auto font-mono text-sm font-medium">{formatYen(studentTotal)}</span>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ラベル</TableHead>
+                        <TableHead>学年</TableHead>
+                        <TableHead>コース</TableHead>
+                        <TableHead className="text-right">合計金額</TableHead>
+                        <TableHead>月別内訳</TableHead>
+                        <TableHead className="w-20"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {group.lectures.map((l) => {
+                        const monthly = lectureMonthlyAmounts(l)
+                        return (
+                          <TableRow key={l.id}>
+                            <TableCell><Badge variant="secondary">{l.label}</Badge></TableCell>
+                            <TableCell>{l.grade}</TableCell>
+                            <TableCell className="text-sm">{formatCourses(l.courses)}</TableCell>
+                            <TableCell className="text-right font-mono">{formatYen(l.total_amount)}</TableCell>
+                            <TableCell>
+                              <div className="flex gap-2 flex-wrap">
+                                {monthly.map(({ label, amount }) => (
+                                  <span key={label} className="text-xs bg-muted px-2 py-0.5 rounded font-mono">
+                                    {label} {formatYen(amount)}
+                                  </span>
+                                ))}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(l)}>
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(l)}>
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )
+          })}
+          {filteredLectures.length === 0 && (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                講習データがありません
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
-                return group.lectures.map((l, li) => {
+      {/* 時系列ビュー */}
+      {viewMode === 'timeline' && (
+        <Card>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>生徒</TableHead>
+                  <TableHead>ラベル</TableHead>
+                  <TableHead>学年</TableHead>
+                  <TableHead>コース</TableHead>
+                  <TableHead className="text-right">合計金額</TableHead>
+                  <TableHead>月別内訳</TableHead>
+                  <TableHead className="w-20"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {timelineLectures.map((l) => {
                   const monthly = lectureMonthlyAmounts(l)
                   return (
-                    <TableRow key={l.id} className={li === 0 && group.lectures.length > 1 ? 'border-t-2' : ''}>
-                      {li === 0 ? (
-                        <TableCell className="font-medium align-top" rowSpan={group.lectures.length}>
-                          <div>{group.student?.name}</div>
-                          {group.student?.student_number && (
-                            <div className="text-xs text-muted-foreground">{group.student.student_number}</div>
-                          )}
-                          {group.lectures.length > 1 && (
-                            <div className="text-xs font-mono text-muted-foreground mt-1">
-                              計 {formatYen(studentTotal)}
-                            </div>
-                          )}
-                        </TableCell>
-                      ) : null}
+                    <TableRow key={l.id}>
+                      <TableCell className="font-medium">
+                        <div>{l.student?.name}</div>
+                        {l.student?.student_number && (
+                          <div className="text-xs text-muted-foreground">{l.student.student_number}</div>
+                        )}
+                      </TableCell>
                       <TableCell><Badge variant="secondary">{l.label}</Badge></TableCell>
                       <TableCell>{l.grade}</TableCell>
                       <TableCell className="text-sm">{formatCourses(l.courses)}</TableCell>
                       <TableCell className="text-right font-mono">{formatYen(l.total_amount)}</TableCell>
-                      {monthColumns.map(key => (
-                        <TableCell key={key} className="text-right font-mono text-sm">
-                          {monthly.get(key) ? formatYen(monthly.get(key)!) : <span className="text-muted-foreground">-</span>}
-                        </TableCell>
-                      ))}
+                      <TableCell>
+                        <div className="flex gap-2 flex-wrap">
+                          {monthly.map(({ label, amount }) => (
+                            <span key={label} className="text-xs bg-muted px-2 py-0.5 rounded font-mono">
+                              {label} {formatYen(amount)}
+                            </span>
+                          ))}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
                           <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(l)}>
@@ -597,31 +667,19 @@ export default function LecturesPage() {
                       </TableCell>
                     </TableRow>
                   )
-                })
-              })}
-              {filteredLectures.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6 + monthColumns.length} className="text-center text-muted-foreground py-8">
-                    講習データがありません
-                  </TableCell>
-                </TableRow>
-              )}
-              {filteredLectures.length > 0 && (
-                <TableRow className="bg-muted/50 font-medium">
-                  <TableCell colSpan={4} className="text-right">合計</TableCell>
-                  <TableCell className="text-right font-mono">{formatYen(grandTotal)}</TableCell>
-                  {monthColumns.map(key => (
-                    <TableCell key={key} className="text-right font-mono text-sm">
-                      {grandMonthlyTotals.get(key) ? formatYen(grandMonthlyTotals.get(key)!) : '-'}
+                })}
+                {filteredLectures.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                      講習データがありません
                     </TableCell>
-                  ))}
-                  <TableCell />
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <ConfirmDialog
         open={!!deleteTarget}
