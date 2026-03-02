@@ -282,26 +282,53 @@ export default function LecturesPage() {
 
   const totalAmount = calcTotal()
 
-  // 月別の合計金額を集計
-  const monthlyMap = new Map<string, number>()
+  // 全講習から出現する年月を収集（カラムヘッダー用）
+  const allMonthKeys = new Set<string>()
   for (const l of filteredLectures) {
+    for (const c of l.courses) {
+      for (const a of (c.allocation || [])) {
+        if (a.lessons > 0) allMonthKeys.add(`${a.year}-${String(a.month).padStart(2, '0')}`)
+      }
+    }
+  }
+  const monthColumns = Array.from(allMonthKeys).sort()
+
+  // 各講習の月別金額を計算
+  const lectureMonthlyAmounts = (l: Lecture): Map<string, number> => {
+    const map = new Map<string, number>()
     for (const c of l.courses) {
       const unitPrice = c.unit_price || calcLectureUnitPrice(l.grade, c.course)
       for (const a of (c.allocation || [])) {
         if (a.lessons <= 0) continue
         const key = `${a.year}-${String(a.month).padStart(2, '0')}`
-        monthlyMap.set(key, (monthlyMap.get(key) || 0) + unitPrice * a.lessons)
+        map.set(key, (map.get(key) || 0) + unitPrice * a.lessons)
       }
     }
+    return map
   }
-  const monthlyBreakdown = Array.from(monthlyMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, amount]) => {
-      const [year, month] = key.split('-')
-      return { year: parseInt(year), month: parseInt(month), amount }
-    })
 
-  const grandTotal = filteredLectures.reduce((sum, l) => sum + l.total_amount, 0)
+  // 生徒別にグルーピング
+  const studentGroupMap = new Map<string, { student: Student; lectures: Lecture[] }>()
+  for (const l of filteredLectures) {
+    const sid = l.student_id
+    if (!studentGroupMap.has(sid)) {
+      studentGroupMap.set(sid, { student: l.student, lectures: [] })
+    }
+    studentGroupMap.get(sid)!.lectures.push(l)
+  }
+  const studentGroups = Array.from(studentGroupMap.values())
+    .sort((a, b) => (a.student.student_number || '').localeCompare(b.student.student_number || '', 'ja', { numeric: true }))
+
+  // 全体の月別合計・総合計
+  const grandMonthlyTotals = new Map<string, number>()
+  let grandTotal = 0
+  for (const l of filteredLectures) {
+    grandTotal += l.total_amount
+    const monthly = lectureMonthlyAmounts(l)
+    for (const [key, amount] of monthly) {
+      grandMonthlyTotals.set(key, (grandMonthlyTotals.get(key) || 0) + amount)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -503,25 +530,6 @@ export default function LecturesPage() {
         />
       </div>
 
-      {filteredLectures.length > 0 && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4 flex-wrap">
-              <span className="text-sm font-medium text-muted-foreground">合計金額の月別内訳:</span>
-              {monthlyBreakdown.map(({ year, month, amount }) => (
-                <div key={`${year}-${month}`} className="text-sm">
-                  <span className="text-muted-foreground">{year}年{month}月</span>
-                  <span className="ml-1 font-mono font-medium">{formatYen(amount)}</span>
-                </div>
-              ))}
-              <div className="ml-auto text-sm font-medium">
-                合計: <span className="font-mono text-base">{formatYen(grandTotal)}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <Card>
         <CardContent className="p-0 overflow-x-auto">
           <Table>
@@ -532,39 +540,82 @@ export default function LecturesPage() {
                 <TableHead>学年</TableHead>
                 <TableHead>コース</TableHead>
                 <TableHead className="text-right">合計金額</TableHead>
+                {monthColumns.map(key => {
+                  const [y, m] = key.split('-')
+                  return <TableHead key={key} className="text-right whitespace-nowrap">{parseInt(m)}月</TableHead>
+                })}
                 <TableHead className="w-20"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredLectures.map((l) => (
-                <TableRow key={l.id}>
-                  <TableCell className="font-medium">
-                    <div>{l.student?.name}</div>
-                    {l.student?.student_number && (
-                      <div className="text-xs text-muted-foreground">{l.student.student_number}</div>
-                    )}
-                  </TableCell>
-                  <TableCell><Badge variant="secondary">{l.label}</Badge></TableCell>
-                  <TableCell>{l.grade}</TableCell>
-                  <TableCell className="text-sm">{formatCourses(l.courses)}</TableCell>
-                  <TableCell className="text-right font-mono">{formatYen(l.total_amount)}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(l)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(l)}>
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {studentGroups.map((group) => {
+                // 生徒単位の小計
+                const studentTotal = group.lectures.reduce((s, l) => s + l.total_amount, 0)
+                const studentMonthlyTotals = new Map<string, number>()
+                for (const l of group.lectures) {
+                  const monthly = lectureMonthlyAmounts(l)
+                  for (const [key, amount] of monthly) {
+                    studentMonthlyTotals.set(key, (studentMonthlyTotals.get(key) || 0) + amount)
+                  }
+                }
+
+                return group.lectures.map((l, li) => {
+                  const monthly = lectureMonthlyAmounts(l)
+                  return (
+                    <TableRow key={l.id} className={li === 0 && group.lectures.length > 1 ? 'border-t-2' : ''}>
+                      {li === 0 ? (
+                        <TableCell className="font-medium align-top" rowSpan={group.lectures.length}>
+                          <div>{group.student?.name}</div>
+                          {group.student?.student_number && (
+                            <div className="text-xs text-muted-foreground">{group.student.student_number}</div>
+                          )}
+                          {group.lectures.length > 1 && (
+                            <div className="text-xs font-mono text-muted-foreground mt-1">
+                              計 {formatYen(studentTotal)}
+                            </div>
+                          )}
+                        </TableCell>
+                      ) : null}
+                      <TableCell><Badge variant="secondary">{l.label}</Badge></TableCell>
+                      <TableCell>{l.grade}</TableCell>
+                      <TableCell className="text-sm">{formatCourses(l.courses)}</TableCell>
+                      <TableCell className="text-right font-mono">{formatYen(l.total_amount)}</TableCell>
+                      {monthColumns.map(key => (
+                        <TableCell key={key} className="text-right font-mono text-sm">
+                          {monthly.get(key) ? formatYen(monthly.get(key)!) : <span className="text-muted-foreground">-</span>}
+                        </TableCell>
+                      ))}
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(l)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(l)}>
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
+              })}
               {filteredLectures.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6 + monthColumns.length} className="text-center text-muted-foreground py-8">
                     講習データがありません
                   </TableCell>
+                </TableRow>
+              )}
+              {filteredLectures.length > 0 && (
+                <TableRow className="bg-muted/50 font-medium">
+                  <TableCell colSpan={4} className="text-right">合計</TableCell>
+                  <TableCell className="text-right font-mono">{formatYen(grandTotal)}</TableCell>
+                  {monthColumns.map(key => (
+                    <TableCell key={key} className="text-right font-mono text-sm">
+                      {grandMonthlyTotals.get(key) ? formatYen(grandMonthlyTotals.get(key)!) : '-'}
+                    </TableCell>
+                  ))}
+                  <TableCell />
                 </TableRow>
               )}
             </TableBody>
