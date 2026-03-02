@@ -14,6 +14,12 @@ export async function DELETE(
   }
 
   const admin = createAdminClient()
+
+  // 関連データを先に削除
+  await admin.from('teacher_student_assignments').delete().eq('teacher_id', id)
+  await admin.from('profiles').delete().eq('id', id)
+
+  // 認証ユーザーも削除
   const { error } = await admin.auth.admin.deleteUser(id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })

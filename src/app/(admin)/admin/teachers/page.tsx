@@ -69,7 +69,8 @@ export default function TeachersPage() {
 
   const handleDelete = async (id: string) => {
     try {
-      await fetch(`/api/teachers/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/teachers/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('削除に失敗しました')
       toast.success('削除しました')
       fetchTeachers()
     } catch { toast.error('削除に失敗しました') }
