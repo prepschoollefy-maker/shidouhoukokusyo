@@ -300,8 +300,8 @@ export default function LecturesPage() {
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, amount]) => {
-        const m = parseInt(key.split('-')[1])
-        return { label: `${m}月`, amount }
+        const [y, m] = key.split('-')
+        return { label: `${y}年${parseInt(m)}月`, amount }
       })
   }
 

@@ -46,6 +46,7 @@ export default function MaterialsPage() {
   const [editing, setEditing] = useState<MaterialSale | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<MaterialSale | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [viewMode, setViewMode] = useState<'student' | 'timeline'>('student')
 
   // Form state
   const [formStudentId, setFormStudentId] = useState('')
@@ -210,6 +211,28 @@ export default function MaterialsPage() {
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i)
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
 
+  // 生徒別にグルーピング
+  const studentGroupMap = new Map<string, { student: Student; items: MaterialSale[] }>()
+  for (const m of filteredMaterials) {
+    const sid = m.student_id
+    if (!studentGroupMap.has(sid)) {
+      studentGroupMap.set(sid, { student: m.student, items: [] })
+    }
+    studentGroupMap.get(sid)!.items.push(m)
+  }
+  const studentGroups = Array.from(studentGroupMap.values())
+    .sort((a, b) => (a.student.student_number || '').localeCompare(b.student.student_number || '', 'ja', { numeric: true }))
+
+  // 時系列ビュー用: 請求年月→販売日順
+  const timelineMaterials = [...filteredMaterials].sort((a, b) => {
+    const aKey = `${a.billing_year}-${String(a.billing_month).padStart(2, '0')}`
+    const bKey = `${b.billing_year}-${String(b.billing_month).padStart(2, '0')}`
+    if (aKey !== bKey) return aKey.localeCompare(bKey)
+    return (a.sale_date || '').localeCompare(b.sale_date || '')
+  })
+
+  const grandTotal = filteredMaterials.reduce((sum, m) => sum + m.total_amount, 0)
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -310,69 +333,153 @@ export default function MaterialsPage() {
         </Dialog>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="生徒名・塾生番号・品名で検索..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex gap-2 items-center flex-wrap">
+        <div className="flex rounded-lg border overflow-hidden">
+          {([['student', '生徒別'], ['timeline', '時系列']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === key ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+              onClick={() => setViewMode(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="生徒名・塾生番号・品名で検索..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="text-sm text-muted-foreground">
+          {studentGroups.length}名 / {filteredMaterials.length}件
+          {grandTotal > 0 && <span className="ml-2 font-mono font-medium">{formatYen(grandTotal)}</span>}
+        </div>
       </div>
 
-      <Card>
-        <CardContent className="p-0 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>生徒</TableHead>
-                <TableHead>品名</TableHead>
-                <TableHead className="text-right">単価</TableHead>
-                <TableHead className="text-center">数量</TableHead>
-                <TableHead className="text-right">合計</TableHead>
-                <TableHead>販売日</TableHead>
-                <TableHead>請求月</TableHead>
-                <TableHead className="w-20"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredMaterials.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell className="font-medium">
-                    <div>{m.student?.name}</div>
-                    {m.student?.student_number && (
-                      <div className="text-xs text-muted-foreground">{m.student.student_number}</div>
+      {/* 生徒別ビュー */}
+      {viewMode === 'student' && (
+        <div className="space-y-3">
+          {studentGroups.map((group) => {
+            const studentTotal = group.items.reduce((s, m) => s + m.total_amount, 0)
+            return (
+              <Card key={group.student.id}>
+                <CardContent className="p-0">
+                  <div className="px-4 py-3 border-b bg-muted/30 flex items-center gap-3">
+                    <span className="font-medium">{group.student.name}</span>
+                    {group.student.student_number && (
+                      <span className="text-xs text-muted-foreground">{group.student.student_number}</span>
                     )}
-                  </TableCell>
-                  <TableCell>{m.item_name}</TableCell>
-                  <TableCell className="text-right font-mono">{formatYen(m.unit_price)}</TableCell>
-                  <TableCell className="text-center">{m.quantity}</TableCell>
-                  <TableCell className="text-right font-mono font-bold">{formatYen(m.total_amount)}</TableCell>
-                  <TableCell className="text-sm">{m.sale_date}</TableCell>
-                  <TableCell className="text-sm">{m.billing_year}/{m.billing_month}月</TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(m)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(m)}>
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filteredMaterials.length === 0 && (
+                    <span className="ml-auto font-mono text-sm font-medium">{formatYen(studentTotal)}</span>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>品名</TableHead>
+                        <TableHead className="text-right">単価</TableHead>
+                        <TableHead className="text-center">数量</TableHead>
+                        <TableHead className="text-right">合計</TableHead>
+                        <TableHead>販売日</TableHead>
+                        <TableHead>請求月</TableHead>
+                        <TableHead className="w-20"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {group.items.map((m) => (
+                        <TableRow key={m.id}>
+                          <TableCell>{m.item_name}</TableCell>
+                          <TableCell className="text-right font-mono">{formatYen(m.unit_price)}</TableCell>
+                          <TableCell className="text-center">{m.quantity}</TableCell>
+                          <TableCell className="text-right font-mono font-bold">{formatYen(m.total_amount)}</TableCell>
+                          <TableCell className="text-sm">{m.sale_date}</TableCell>
+                          <TableCell className="text-sm">{m.billing_year}年{m.billing_month}月</TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(m)}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(m)}>
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )
+          })}
+          {filteredMaterials.length === 0 && (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                教材販売データがありません
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* 時系列ビュー */}
+      {viewMode === 'timeline' && (
+        <Card>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                    教材販売データがありません
-                  </TableCell>
+                  <TableHead>生徒</TableHead>
+                  <TableHead>品名</TableHead>
+                  <TableHead className="text-right">単価</TableHead>
+                  <TableHead className="text-center">数量</TableHead>
+                  <TableHead className="text-right">合計</TableHead>
+                  <TableHead>販売日</TableHead>
+                  <TableHead>請求月</TableHead>
+                  <TableHead className="w-20"></TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {timelineMaterials.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell className="font-medium">
+                      <div>{m.student?.name}</div>
+                      {m.student?.student_number && (
+                        <div className="text-xs text-muted-foreground">{m.student.student_number}</div>
+                      )}
+                    </TableCell>
+                    <TableCell>{m.item_name}</TableCell>
+                    <TableCell className="text-right font-mono">{formatYen(m.unit_price)}</TableCell>
+                    <TableCell className="text-center">{m.quantity}</TableCell>
+                    <TableCell className="text-right font-mono font-bold">{formatYen(m.total_amount)}</TableCell>
+                    <TableCell className="text-sm">{m.sale_date}</TableCell>
+                    <TableCell className="text-sm">{m.billing_year}年{m.billing_month}月</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(m)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(m)}>
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filteredMaterials.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                      教材販売データがありません
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <ConfirmDialog
         open={!!deleteTarget}
