@@ -164,7 +164,41 @@ export async function GET(request: NextRequest) {
   }
 
   const materialTotal = materialData.reduce((sum, m) => sum + m.total_amount, 0)
-  const total = contractTotal + lectureTotal + materialTotal
 
-  return NextResponse.json({ data: billing, lectureData, materialData, total, contractTotal, lectureTotal, materialTotal })
+  // 返金・調整データ: 当月の year/month に該当するもの
+  let adjustmentData: {
+    id: string
+    student: { id: string; name: string; student_number: string | null }
+    amount: number
+    reason: string
+    status: string
+    completed_date: string | null
+    notes: string
+    created_at: string
+  }[] = []
+
+  const { data: adjustmentRows, error: adjustmentError } = await admin
+    .from('adjustments')
+    .select('*, student:students(id, name, student_number)')
+    .eq('year', year)
+    .eq('month', month)
+    .order('created_at', { ascending: true })
+
+  if (!adjustmentError && adjustmentRows) {
+    adjustmentData = adjustmentRows.map((a) => ({
+      id: a.id,
+      student: a.student,
+      amount: a.amount,
+      reason: a.reason,
+      status: a.status,
+      completed_date: a.completed_date,
+      notes: a.notes,
+      created_at: a.created_at,
+    }))
+  }
+
+  const adjustmentTotal = adjustmentData.reduce((sum, a) => sum + a.amount, 0)
+  const total = contractTotal + lectureTotal + materialTotal + adjustmentTotal
+
+  return NextResponse.json({ data: billing, lectureData, materialData, adjustmentData, total, contractTotal, lectureTotal, materialTotal, adjustmentTotal })
 }

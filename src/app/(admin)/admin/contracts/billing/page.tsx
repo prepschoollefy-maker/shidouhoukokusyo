@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { CheckCircle2, Loader2, ArrowRight, HelpCircle } from 'lucide-react'
+import { CheckCircle2, Loader2, ArrowRight, HelpCircle, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { useContractAuth } from '../layout'
@@ -81,6 +81,17 @@ interface MaterialBillingItem {
   effective_payment_method: '振込' | '口座振替'
 }
 
+interface AdjustmentItem {
+  id: string
+  student: { id: string; name: string; student_number: string | null }
+  amount: number
+  reason: string
+  status: string
+  completed_date: string | null
+  notes: string
+  created_at: string
+}
+
 type ItemKey = string
 const contractKey = (id: string): ItemKey => `contract:${id}`
 const lectureKey = (id: string): ItemKey => `lecture:${id}`
@@ -112,11 +123,13 @@ function BillingPageInner() {
   const [billing, setBilling] = useState<BillingItem[]>([])
   const [lectureBilling, setLectureBilling] = useState<LectureBillingItem[]>([])
   const [materialBilling, setMaterialBilling] = useState<MaterialBillingItem[]>([])
+  const [adjustmentBilling, setAdjustmentBilling] = useState<AdjustmentItem[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [total, setTotal] = useState(0)
   const [contractTotal, setContractTotal] = useState(0)
   const [lectureTotal, setLectureTotal] = useState(0)
   const [materialTotal, setMaterialTotal] = useState(0)
+  const [adjustmentTotal, setAdjustmentTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<PaymentMethodFilter>('all')
@@ -132,6 +145,13 @@ function BillingPageInner() {
 
   // 支払方法オーバーライド中のキー
   const [overridingKeys, setOverridingKeys] = useState<Set<ItemKey>>(new Set())
+
+  // 調整ダイアログ
+  const [adjDialogOpen, setAdjDialogOpen] = useState(false)
+  const [adjEditing, setAdjEditing] = useState<AdjustmentItem | null>(null)
+  const [adjForm, setAdjForm] = useState({ student_id: '', amount: '', reason: '', notes: '' })
+  const [adjSaving, setAdjSaving] = useState(false)
+  const [students, setStudents] = useState<{ id: string; name: string; student_number: string | null }[]>([])
 
   // 詳細ダイアログ
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -166,10 +186,12 @@ function BillingPageInner() {
       setBilling(json.data || [])
       setLectureBilling(json.lectureData || [])
       setMaterialBilling(json.materialData || [])
+      setAdjustmentBilling(json.adjustmentData || [])
       setTotal(json.total || 0)
       setContractTotal(json.contractTotal || 0)
       setLectureTotal(json.lectureTotal || 0)
       setMaterialTotal(json.materialTotal || 0)
+      setAdjustmentTotal(json.adjustmentTotal || 0)
     }
     if (paymentsRes.ok) {
       const json = await paymentsRes.json()
@@ -182,6 +204,10 @@ function BillingPageInner() {
     if (!storedPw) return
     setLoading(true)
     fetchData(storedPw).finally(() => setLoading(false))
+    // 生徒リスト取得（調整追加ダイアログ用）
+    fetch(`/api/students?_t=${Date.now()}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => { if (json?.data) setStudents(json.data) })
   }, [year, month, storedPw, fetchData])
 
   /* ---- payment lookup ---- */
@@ -554,6 +580,98 @@ function BillingPageInner() {
     }
   }
 
+  /* ---- adjustment handlers ---- */
+
+  const openAdjDialog = (item?: AdjustmentItem) => {
+    if (item) {
+      setAdjEditing(item)
+      setAdjForm({
+        student_id: item.student?.id || '',
+        amount: String(item.amount),
+        reason: item.reason,
+        notes: item.notes,
+      })
+    } else {
+      setAdjEditing(null)
+      setAdjForm({ student_id: '', amount: '', reason: '', notes: '' })
+    }
+    setAdjDialogOpen(true)
+  }
+
+  const handleSaveAdjustment = async () => {
+    if (!adjForm.student_id || !adjForm.amount) {
+      toast.error('生徒と金額は必須です')
+      return
+    }
+    setAdjSaving(true)
+    try {
+      const params = `pw=${encodeURIComponent(storedPw)}`
+      if (adjEditing) {
+        const res = await fetch(`/api/adjustments/${adjEditing.id}?${params}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: parseInt(adjForm.amount),
+            reason: adjForm.reason,
+            notes: adjForm.notes,
+          }),
+        })
+        if (!res.ok) throw new Error('更新に失敗しました')
+        toast.success('調整を更新しました')
+      } else {
+        const res = await fetch(`/api/adjustments?${params}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: adjForm.student_id,
+            year,
+            month,
+            amount: parseInt(adjForm.amount),
+            reason: adjForm.reason,
+            notes: adjForm.notes,
+          }),
+        })
+        if (!res.ok) throw new Error('登録に失敗しました')
+        toast.success('調整を追加しました')
+      }
+      setAdjDialogOpen(false)
+      await fetchData(storedPw)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存に失敗しました')
+    } finally {
+      setAdjSaving(false)
+    }
+  }
+
+  const handleMarkCompleted = async (item: AdjustmentItem) => {
+    try {
+      const params = `pw=${encodeURIComponent(storedPw)}`
+      const res = await fetch(`/api/adjustments/${item.id}?${params}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: '対応済み' }),
+      })
+      if (!res.ok) throw new Error('更新に失敗しました')
+      toast.success('対応済みにしました')
+      await fetchData(storedPw)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '更新に失敗しました')
+    }
+  }
+
+  const handleDeleteAdjustment = async (item: AdjustmentItem) => {
+    if (!confirm('この調整データを削除しますか？')) return
+    try {
+      const params = `pw=${encodeURIComponent(storedPw)}`
+      const res = await fetch(`/api/adjustments/${item.id}?${params}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('削除に失敗しました')
+      toast.success('調整を削除しました')
+      await fetchData(storedPw)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '削除に失敗しました')
+    }
+  }
+
   /* ---- render helpers ---- */
 
   const formatYen = (n: number) => `¥${n.toLocaleString()}`
@@ -731,6 +849,7 @@ function BillingPageInner() {
             <span>通常コース: {formatYen(contractTotal)}（{billing.length}件）</span>
             {lectureTotal > 0 && <span>講習: {formatYen(lectureTotal)}（{lectureBilling.length}件）</span>}
             {materialTotal > 0 && <span>教材販売: {formatYen(materialTotal)}（{materialBilling.length}件）</span>}
+            {adjustmentTotal !== 0 && <span className={adjustmentTotal < 0 ? 'text-red-600' : ''}>返金・調整: {formatYen(adjustmentTotal)}（{adjustmentBilling.length}件）</span>}
           </div>
           <div className="flex gap-4 text-sm mt-2">
             <span className="text-green-600">入金済: {paidCount}件 {formatYen(paidAmount)}</span>
@@ -989,6 +1108,72 @@ function BillingPageInner() {
               </Table>
             </CardContent>
           </Card>
+
+          {/* 返金・調整 */}
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">返金・調整</h3>
+            <Button size="sm" variant="outline" onClick={() => openAdjDialog()}>
+              <Plus className="h-4 w-4 mr-1" />調整を追加
+            </Button>
+          </div>
+          <Card>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>塾生番号</TableHead>
+                    <TableHead>生徒名</TableHead>
+                    <TableHead>理由</TableHead>
+                    <TableHead className="text-right">金額</TableHead>
+                    <TableHead className="text-center">対応状況</TableHead>
+                    <TableHead>備考</TableHead>
+                    <TableHead className="text-center">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {adjustmentBilling.map(a => (
+                    <TableRow key={a.id}>
+                      <TableCell className="text-muted-foreground text-sm">{a.student?.student_number || '-'}</TableCell>
+                      <TableCell className="font-medium">{a.student?.name}</TableCell>
+                      <TableCell className="text-sm">{a.reason}</TableCell>
+                      <TableCell className={`text-right font-mono font-bold ${a.amount < 0 ? 'text-red-600' : ''}`}>
+                        {formatYen(a.amount)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {a.status === '対応済み'
+                          ? <Badge variant="default" className="bg-green-600 hover:bg-green-700">対応済み</Badge>
+                          : <Badge variant="secondary">未対応</Badge>
+                        }
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{a.notes}</TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex gap-1 justify-center">
+                          {a.status !== '対応済み' && (
+                            <Button size="sm" variant="outline" onClick={() => handleMarkCompleted(a)}>
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />対応済み
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" onClick={() => openAdjDialog(a)}>
+                            編集
+                          </Button>
+                          <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => handleDeleteAdjustment(a)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {adjustmentBilling.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        該当月の返金・調整データがありません
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </>
       )}
 
@@ -1067,6 +1252,68 @@ function BillingPageInner() {
                 {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />保存中</> : '保存'}
               </Button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjustment dialog */}
+      <Dialog open={adjDialogOpen} onOpenChange={setAdjDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{adjEditing ? '調整を編集' : '調整を追加'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {!adjEditing && (
+              <div className="space-y-2">
+                <Label>生徒</Label>
+                <Select value={adjForm.student_id} onValueChange={v => setAdjForm({ ...adjForm, student_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="生徒を選択" /></SelectTrigger>
+                  <SelectContent>
+                    {students.map(s => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.student_number ? `${s.student_number} ` : ''}{s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {adjEditing && (
+              <div className="bg-muted/50 rounded-lg p-3">
+                <span className="text-sm text-muted-foreground">生徒:</span> {adjEditing.student?.name}
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>金額（マイナス=返金、プラス=追加請求）</Label>
+              <Input
+                type="number"
+                value={adjForm.amount}
+                onChange={e => setAdjForm({ ...adjForm, amount: e.target.value })}
+                placeholder="-100000"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>理由</Label>
+              <Input
+                value={adjForm.reason}
+                onChange={e => setAdjForm({ ...adjForm, reason: e.target.value })}
+                placeholder="例: コマ数減による返金"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>備考</Label>
+              <Input
+                value={adjForm.notes}
+                onChange={e => setAdjForm({ ...adjForm, notes: e.target.value })}
+                placeholder="任意"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdjDialogOpen(false)}>キャンセル</Button>
+            <Button onClick={handleSaveAdjustment} disabled={adjSaving}>
+              {adjSaving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />保存中</> : '保存'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

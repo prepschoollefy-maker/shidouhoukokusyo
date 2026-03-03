@@ -104,13 +104,16 @@ async function handleMonthly(
   const rangeEndDate = new Date(last.year, last.month, 0)
   const rangeEnd = rangeEndDate.toISOString().split('T')[0]
 
-  const [contractsRes, lecturesRes] = await Promise.all([
+  const admin = createAdminClient()
+  const [contractsRes, lecturesRes, adjustmentsRes] = await Promise.all([
     supabase.from('contracts').select('*').lte('start_date', rangeEnd).gte('end_date', rangeStart),
     supabase.from('lectures').select('*'),
+    admin.from('adjustments').select('*'),
   ])
 
   const contracts = contractsRes.data || []
   const lectures = lecturesRes.data || []
+  const adjustments = adjustmentsRes.data || []
 
   const result = targetMonths.map(({ year, month }) => {
     const firstDay = `${year}-${String(month).padStart(2, '0')}-01`
@@ -133,6 +136,14 @@ async function handleMonthly(
         totalBilled += amt
         totalItems++
       }
+    }
+
+    // 当月の adjustments を加算
+    const monthAdjustments = adjustments.filter(
+      a => (a.year as number) === year && (a.month as number) === month
+    )
+    for (const a of monthAdjustments) {
+      totalBilled += (a.amount as number)
     }
 
     // payments 集計
@@ -174,14 +185,17 @@ async function handleStudent(
   const rangeEndDate = new Date(last.year, last.month, 0)
   const rangeEnd = rangeEndDate.toISOString().split('T')[0]
 
-  const [contractsRes, lecturesRes, studentsRes] = await Promise.all([
+  const admin = createAdminClient()
+  const [contractsRes, lecturesRes, studentsRes, adjustmentsRes] = await Promise.all([
     supabase.from('contracts').select('*, student:students(id, name, student_number)').lte('start_date', rangeEnd).gte('end_date', rangeStart),
     supabase.from('lectures').select('*, student:students(id, name, student_number)'),
     supabase.from('students').select('id, name, student_number'),
+    admin.from('adjustments').select('*, student:students(id, name, student_number)'),
   ])
 
   const contracts = contractsRes.data || []
   const lectures = lecturesRes.data || []
+  const adjustments = adjustmentsRes.data || []
 
   // payments を contract_id / lecture_id でマッピング
   const paymentsByContract = new Map<string, Record<string, unknown>[]>()
@@ -267,6 +281,21 @@ async function handleStudent(
       entry.total_billed += billedAmount
       entry.total_paid += paidAmount
     }
+  }
+
+  // adjustments を生徒別に振り分け
+  for (const a of adjustments) {
+    const student = a.student as { id: string; name: string; student_number: string | null } | null
+    if (!student) continue
+
+    const aYear = a.year as number
+    const aMonth = a.month as number
+    if (!targetMonths.some(t => t.year === aYear && t.month === aMonth)) continue
+
+    const entry = getOrCreate(student.id, student.name, student.student_number)
+    const amount = a.amount as number
+    entry.months.push({ year: aYear, month: aMonth, billing_type: 'adjustment', billed_amount: amount, paid_amount: 0, status: a.status as string })
+    entry.total_billed += amount
   }
 
   const data = Array.from(studentMap.values()).map(s => ({
