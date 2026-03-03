@@ -29,7 +29,8 @@ export async function GET(request: NextRequest) {
       teacher:profiles ( id, display_name ),
       subject:subjects ( id, name ),
       time_slot:time_slots ( id, slot_number, label, start_time, end_time, sort_order ),
-      booth:booths ( id, booth_number, label )
+      booth:booths ( id, booth_number, label ),
+      original_lesson:lessons!lessons_original_lesson_id_fkey ( id, lesson_date, time_slot_id, student:students ( id, name ) )
     `)
     .order('lesson_date')
 
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { student_id, teacher_id, subject_id, lesson_date, time_slot_id, booth_id, lesson_type, notes } = body
+  const { student_id, teacher_id, subject_id, lesson_date, time_slot_id, booth_id, lesson_type, notes, original_lesson_id } = body
 
   const { data, error } = await supabase
     .from('lessons')
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
       booth_id,
       lesson_type: lesson_type || 'regular',
       notes: notes || '',
+      ...(original_lesson_id ? { original_lesson_id } : {}),
     })
     .select()
     .single()

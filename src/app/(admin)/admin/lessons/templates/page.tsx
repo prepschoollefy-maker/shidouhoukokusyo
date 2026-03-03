@@ -109,6 +109,11 @@ export default function LessonTemplatesPage() {
   const [generateDates, setGenerateDates] = useState({ start_date: '', end_date: '' })
   const [generating, setGenerating] = useState(false)
 
+  // テンプレート保存後の自動生成確認
+  const [autoGenTarget, setAutoGenTarget] = useState<{ templateId: string; studentId: string } | null>(null)
+  const [autoGenDates, setAutoGenDates] = useState({ start_date: '', end_date: '' })
+  const [autoGenerating, setAutoGenerating] = useState(false)
+
   const fetchAll = useCallback(async () => {
     const [tplRes, slotsRes, boothsRes, studentsRes, teachersRes, subjectsRes] = await Promise.all([
       fetch('/api/lesson-templates'),
@@ -184,9 +189,46 @@ export default function LessonTemplatesPage() {
       }
       toast.success(editingId ? '更新しました' : '追加しました')
       setDialogOpen(false)
+      // 新規作成時は自動生成を提案
+      if (!editingId && json.data?.id) {
+        const today = new Date().toISOString().split('T')[0]
+        setAutoGenDates({ start_date: today, end_date: '' })
+        setAutoGenTarget({ templateId: json.data.id, studentId: form.student_id })
+      }
       fetchAll()
     } catch {
       toast.error('保存に失敗しました')
+    }
+  }
+
+  const handleAutoGenerate = async () => {
+    if (!autoGenTarget) return
+    if (!autoGenDates.start_date || !autoGenDates.end_date) {
+      toast.error('日付範囲を指定してください')
+      return
+    }
+    setAutoGenerating(true)
+    try {
+      const res = await fetch('/api/lessons/generate-for-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          template_id: autoGenTarget.templateId,
+          start_date: autoGenDates.start_date,
+          end_date: autoGenDates.end_date,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error || '生成に失敗しました')
+        return
+      }
+      toast.success(json.message)
+      setAutoGenTarget(null)
+    } catch {
+      toast.error('生成に失敗しました')
+    } finally {
+      setAutoGenerating(false)
     }
   }
 
@@ -414,6 +456,42 @@ export default function LessonTemplatesPage() {
         description="この授業パターンを削除しますか？"
         onConfirm={() => { if (deleteTarget) handleDelete(deleteTarget); setDeleteTarget(null) }}
       />
+
+      {/* テンプレート保存後の自動生成確認ダイアログ */}
+      <Dialog open={!!autoGenTarget} onOpenChange={(open) => { if (!open) setAutoGenTarget(null) }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>授業を自動生成しますか？</DialogTitle>
+            <DialogDescription>
+              登録したテンプレートから、指定した期間の授業を自動生成します。後から時間割ページで確認できます。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label>開始日</Label>
+              <Input
+                type="date"
+                value={autoGenDates.start_date}
+                onChange={(e) => setAutoGenDates({ ...autoGenDates, start_date: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>終了日（契約終了日など）</Label>
+              <Input
+                type="date"
+                value={autoGenDates.end_date}
+                onChange={(e) => setAutoGenDates({ ...autoGenDates, end_date: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAutoGenTarget(null)}>スキップ</Button>
+            <Button onClick={handleAutoGenerate} disabled={autoGenerating}>
+              {autoGenerating ? '生成中...' : '生成する'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 授業一括生成ダイアログ */}
       <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>

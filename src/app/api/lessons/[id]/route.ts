@@ -13,11 +13,14 @@ export async function PUT(
   }
 
   const body = await request.json()
-  const { student_id, teacher_id, subject_id, lesson_date, time_slot_id, booth_id, lesson_type, status, notes } = body
+  const { student_id, teacher_id, subject_id, lesson_date, time_slot_id, booth_id, lesson_type, status, notes, original_lesson_id } = body
+
+  const updateData: Record<string, unknown> = { student_id, teacher_id, subject_id, lesson_date, time_slot_id, booth_id, lesson_type, status, notes }
+  if (original_lesson_id !== undefined) updateData.original_lesson_id = original_lesson_id
 
   const { data, error } = await supabase
     .from('lessons')
-    .update({ student_id, teacher_id, subject_id, lesson_date, time_slot_id, booth_id, lesson_type, status, notes })
+    .update(updateData)
     .eq('id', id)
     .select()
     .single()
