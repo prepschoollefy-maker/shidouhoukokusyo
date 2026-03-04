@@ -12,10 +12,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { CheckCircle2, Loader2, ArrowRight, HelpCircle, Plus, Trash2, Undo2 } from 'lucide-react'
+import { CheckCircle2, Loader2, ArrowRight, HelpCircle, Plus, Trash2, Undo2, Lock, Unlock, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { useContractAuth } from '../layout'
+import { GRADES } from '@/lib/contracts/pricing'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -23,10 +24,11 @@ import { useContractAuth } from '../layout'
 
 interface Payment {
   id: string
-  billing_type: 'contract' | 'lecture' | 'material'
+  billing_type: 'contract' | 'lecture' | 'material' | 'manual'
   contract_id: string | null
   lecture_id: string | null
   material_sale_id: string | null
+  manual_billing_id: string | null
   year: number
   month: number
   billed_amount: number
@@ -55,6 +57,11 @@ interface BillingItem {
   student: { id: string; name: string; student_number: string | null; payment_method: string }
   effective_payment_method: '振込' | '口座振替'
   out_of_period?: boolean
+  suspended?: boolean
+  confirmed?: boolean
+  confirmation_id?: string
+  confirmed_at?: string
+  amount_changed?: boolean
 }
 
 interface LectureBillingItem {
@@ -65,6 +72,10 @@ interface LectureBillingItem {
   courses: { course: string; unit_price: number; lessons: number; amount: number }[]
   total_amount: number
   effective_payment_method: '振込' | '口座振替'
+  confirmed?: boolean
+  confirmation_id?: string
+  confirmed_at?: string
+  amount_changed?: boolean
 }
 
 type StatusFilter = 'all' | '未入金' | '入金済み' | '過不足あり'
@@ -80,6 +91,10 @@ interface MaterialBillingItem {
   sale_date: string
   notes: string
   effective_payment_method: '振込' | '口座振替'
+  confirmed?: boolean
+  confirmation_id?: string
+  confirmed_at?: string
+  amount_changed?: boolean
 }
 
 interface AdjustmentItem {
@@ -97,10 +112,25 @@ interface AdjustmentItem {
   linked_label: string | null
 }
 
+interface ManualBillingItem {
+  id: string
+  student: { id: string; name: string; student_number: string | null; payment_method: string }
+  amount: number
+  description: string
+  notes: string
+  created_at: string
+  effective_payment_method: '振込' | '口座振替'
+  confirmed?: boolean
+  confirmation_id?: string
+  confirmed_at?: string
+  amount_changed?: boolean
+}
+
 type ItemKey = string
 const contractKey = (id: string): ItemKey => `contract:${id}`
 const lectureKey = (id: string): ItemKey => `lecture:${id}`
 const materialKey = (id: string): ItemKey => `material:${id}`
+const manualKey = (id: string): ItemKey => `manual:${id}`
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -128,12 +158,14 @@ function BillingPageInner() {
   const [billing, setBilling] = useState<BillingItem[]>([])
   const [lectureBilling, setLectureBilling] = useState<LectureBillingItem[]>([])
   const [materialBilling, setMaterialBilling] = useState<MaterialBillingItem[]>([])
+  const [manualBilling, setManualBilling] = useState<ManualBillingItem[]>([])
   const [adjustmentBilling, setAdjustmentBilling] = useState<AdjustmentItem[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [total, setTotal] = useState(0)
   const [contractTotal, setContractTotal] = useState(0)
   const [lectureTotal, setLectureTotal] = useState(0)
   const [materialTotal, setMaterialTotal] = useState(0)
+  const [manualTotal, setManualTotal] = useState(0)
   const [adjustmentTotal, setAdjustmentTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -151,6 +183,10 @@ function BillingPageInner() {
   // 支払方法オーバーライド中のキー
   const [overridingKeys, setOverridingKeys] = useState<Set<ItemKey>>(new Set())
 
+  // 請求確定中のキー
+  const [lockingKeys, setLockingKeys] = useState<Set<ItemKey>>(new Set())
+  const [bulkLocking, setBulkLocking] = useState(false)
+
   // 調整ダイアログ
   const [adjDialogOpen, setAdjDialogOpen] = useState(false)
   const [adjEditing, setAdjEditing] = useState<AdjustmentItem | null>(null)
@@ -159,7 +195,7 @@ function BillingPageInner() {
   const [students, setStudents] = useState<{ id: string; name: string; student_number: string | null }[]>([])
   // 請求項目紐付き調整ダイアログ用
   const [adjLinkedTarget, setAdjLinkedTarget] = useState<{
-    billingType: 'contract' | 'lecture' | 'material'
+    billingType: 'contract' | 'lecture' | 'material' | 'manual'
     refId: string
     studentName: string
     billingLabel: string
@@ -167,10 +203,16 @@ function BillingPageInner() {
     studentId: string
   } | null>(null)
 
+  // 手動請求ダイアログ
+  const [manualDialogOpen, setManualDialogOpen] = useState(false)
+  const [manualEditing, setManualEditing] = useState<ManualBillingItem | null>(null)
+  const [manualForm, setManualForm] = useState({ student_id: '', amount: '', description: '', notes: '' })
+  const [manualSaving, setManualSaving] = useState(false)
+
   // 詳細ダイアログ
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogTarget, setDialogTarget] = useState<{
-    billingType: 'contract' | 'lecture' | 'material'
+    billingType: 'contract' | 'lecture' | 'material' | 'manual'
     refId: string
     studentName: string
     billedAmount: number
@@ -200,11 +242,13 @@ function BillingPageInner() {
       setBilling(json.data || [])
       setLectureBilling(json.lectureData || [])
       setMaterialBilling(json.materialData || [])
+      setManualBilling(json.manualData || [])
       setAdjustmentBilling(json.adjustmentData || [])
       setTotal(json.total || 0)
       setContractTotal(json.contractTotal || 0)
       setLectureTotal(json.lectureTotal || 0)
       setMaterialTotal(json.materialTotal || 0)
+      setManualTotal(json.manualTotal || 0)
       setAdjustmentTotal(json.adjustmentTotal || 0)
     }
     if (paymentsRes.ok) {
@@ -226,11 +270,12 @@ function BillingPageInner() {
 
   /* ---- payment lookup ---- */
 
-  const getPayment = (type: 'contract' | 'lecture' | 'material', id: string): Payment | undefined =>
+  const getPayment = (type: 'contract' | 'lecture' | 'material' | 'manual', id: string): Payment | undefined =>
     payments.find(p =>
       type === 'contract' ? p.contract_id === id
         : type === 'lecture' ? p.lecture_id === id
-        : p.material_sale_id === id
+        : type === 'material' ? p.material_sale_id === id
+        : p.manual_billing_id === id
     )
 
   const getStatus = (payment: Payment | undefined): '未入金' | '入金済み' | '過不足あり' =>
@@ -288,6 +333,7 @@ function BillingPageInner() {
   const filteredBilling = sortByStudentNumber(filterByStatus(billing, b => getPayment('contract', b.id), b => getDisplayPaymentMethod(getPayment('contract', b.id), b.effective_payment_method)))
   const filteredLectures = sortByStudentNumber(filterByStatus(lectureBilling, l => getPayment('lecture', l.id), l => getDisplayPaymentMethod(getPayment('lecture', l.id), l.effective_payment_method)))
   const filteredMaterials = sortByStudentNumber(filterByStatus(materialBilling, m => getPayment('material', m.id), m => getDisplayPaymentMethod(getPayment('material', m.id), m.effective_payment_method)))
+  const filteredManuals = sortByStudentNumber(filterByStatus(manualBilling, m => getPayment('manual', m.id), m => getDisplayPaymentMethod(getPayment('manual', m.id), m.effective_payment_method)))
 
   /* ---- stats ---- */
 
@@ -295,6 +341,7 @@ function BillingPageInner() {
     ...billing.map(b => { const p = getPayment('contract', b.id); return { amount: b.total_amount, payment: p, epm: getDisplayPaymentMethod(p, b.effective_payment_method) } }),
     ...lectureBilling.map(l => { const p = getPayment('lecture', l.id); return { amount: l.total_amount, payment: p, epm: getDisplayPaymentMethod(p, l.effective_payment_method) } }),
     ...materialBilling.map(m => { const p = getPayment('material', m.id); return { amount: m.total_amount, payment: p, epm: getDisplayPaymentMethod(p, m.effective_payment_method) } }),
+    ...manualBilling.map(m => { const p = getPayment('manual', m.id); return { amount: m.amount, payment: p, epm: getDisplayPaymentMethod(p, m.effective_payment_method) } }),
   ]
   const paidCount = allItems.filter(i => getStatus(i.payment) === '入金済み').length
   const paidAmount = allItems.filter(i => getStatus(i.payment) === '入金済み').reduce((s, i) => s + (i.payment?.paid_amount || 0), 0)
@@ -319,6 +366,7 @@ function BillingPageInner() {
     ...filteredBilling.filter(b => isUnpaidStatus(getPayment('contract', b.id))).map(b => contractKey(b.id)),
     ...filteredLectures.filter(l => isUnpaidStatus(getPayment('lecture', l.id))).map(l => lectureKey(l.id)),
     ...filteredMaterials.filter(m => isUnpaidStatus(getPayment('material', m.id))).map(m => materialKey(m.id)),
+    ...filteredManuals.filter(m => isUnpaidStatus(getPayment('manual', m.id))).map(m => manualKey(m.id)),
   ]
   const allUnpaidSelected = allUnpaidKeys.length > 0 && allUnpaidKeys.every(k => selected.has(k))
 
@@ -328,7 +376,7 @@ function BillingPageInner() {
 
   /* ---- quick confirm (1-click) ---- */
 
-  const quickConfirmApi = async (billingType: 'contract' | 'lecture' | 'material', refId: string, billedAmount: number, method: string) => {
+  const quickConfirmApi = async (billingType: 'contract' | 'lecture' | 'material' | 'manual', refId: string, billedAmount: number, method: string) => {
     const params = `pw=${encodeURIComponent(storedPw)}`
     const res = await fetch(`/api/payments?${params}`, {
       method: 'POST',
@@ -338,6 +386,7 @@ function BillingPageInner() {
         contract_id: billingType === 'contract' ? refId : null,
         lecture_id: billingType === 'lecture' ? refId : null,
         material_sale_id: billingType === 'material' ? refId : null,
+        manual_billing_id: billingType === 'manual' ? refId : null,
         year,
         month,
         billed_amount: billedAmount,
@@ -357,7 +406,7 @@ function BillingPageInner() {
 
   const handleTogglePaymentMethod = async (
     key: ItemKey,
-    billingType: 'contract' | 'lecture' | 'material',
+    billingType: 'contract' | 'lecture' | 'material' | 'manual',
     refId: string,
     billedAmount: number,
     currentDisplayMethod: '振込' | '口座振替',
@@ -392,6 +441,7 @@ function BillingPageInner() {
             contract_id: billingType === 'contract' ? refId : null,
             lecture_id: billingType === 'lecture' ? refId : null,
             material_sale_id: billingType === 'material' ? refId : null,
+            manual_billing_id: billingType === 'manual' ? refId : null,
             year,
             month,
             billed_amount: billedAmount,
@@ -416,7 +466,7 @@ function BillingPageInner() {
     }
   }
 
-  const handleQuickConfirm = async (key: ItemKey, billingType: 'contract' | 'lecture' | 'material', refId: string, billedAmount: number, method: string) => {
+  const handleQuickConfirm = async (key: ItemKey, billingType: 'contract' | 'lecture' | 'material' | 'manual', refId: string, billedAmount: number, method: string) => {
     setConfirmingKeys(prev => new Set(prev).add(key))
     try {
       await quickConfirmApi(billingType, refId, billedAmount, method)
@@ -442,7 +492,7 @@ function BillingPageInner() {
     try {
       const promises: Promise<void>[] = []
       for (const key of selected) {
-        const [type, id] = key.split(':') as ['contract' | 'lecture' | 'material', string]
+        const [type, id] = key.split(':') as ['contract' | 'lecture' | 'material' | 'manual', string]
         if (type === 'contract') {
           const b = billing.find(x => x.id === id)
           const p = getPayment('contract', id)
@@ -460,6 +510,12 @@ function BillingPageInner() {
           const p = getPayment('material', id)
           if (m && isUnpaidStatus(p)) {
             promises.push(quickConfirmApi('material', id, m.total_amount, getDisplayPaymentMethod(p, m.effective_payment_method)))
+          }
+        } else if (type === 'manual') {
+          const m = manualBilling.find(x => x.id === id)
+          const p = getPayment('manual', id)
+          if (m && isUnpaidStatus(p)) {
+            promises.push(quickConfirmApi('manual', id, m.amount, getDisplayPaymentMethod(p, m.effective_payment_method)))
           }
         }
       }
@@ -508,6 +564,15 @@ function BillingPageInner() {
           promises.push(quickConfirmApi('material', m.id, m.total_amount, '口座振替'))
         }
       }
+      // manual billings
+      for (const m of manualBilling) {
+        const p = getPayment('manual', m.id)
+        if (getDisplayPaymentMethod(p, m.effective_payment_method) === '口座振替' && isUnpaidStatus(p)) {
+          const key = manualKey(m.id)
+          setConfirmingKeys(prev => new Set(prev).add(key))
+          promises.push(quickConfirmApi('manual', m.id, m.amount, '口座振替'))
+        }
+      }
       await Promise.all(promises)
       toast.success(`口座振替 ${promises.length}件を入金OKにしました`)
       await fetchData(storedPw)
@@ -519,10 +584,152 @@ function BillingPageInner() {
     }
   }
 
+  /* ---- billing confirmation (lock) ---- */
+
+  const buildSnapshot = (billingType: 'contract' | 'lecture' | 'material' | 'manual', refId: string) => {
+    if (billingType === 'contract') {
+      const b = billing.find(x => x.id === refId)
+      if (!b) return null
+      return {
+        tuition: b.tuition,
+        enrollment_fee: b.enrollment_fee_amount,
+        facility_fee: b.facility_fee,
+        campaign_discount: b.campaign_discount_amount,
+        total_amount: b.total_amount,
+        suspended: !!b.suspended,
+      }
+    } else if (billingType === 'lecture') {
+      const l = lectureBilling.find(x => x.id === refId)
+      if (!l) return null
+      return { total_amount: l.total_amount, courses: l.courses }
+    } else if (billingType === 'material') {
+      const m = materialBilling.find(x => x.id === refId)
+      if (!m) return null
+      return { total_amount: m.total_amount, unit_price: m.unit_price, quantity: m.quantity }
+    } else {
+      const m = manualBilling.find(x => x.id === refId)
+      if (!m) return null
+      return { amount: m.amount, description: m.description }
+    }
+  }
+
+  const handleLockItem = async (key: ItemKey, billingType: 'contract' | 'lecture' | 'material' | 'manual', refId: string) => {
+    const snapshot = buildSnapshot(billingType, refId)
+    if (!snapshot) return
+    setLockingKeys(prev => new Set(prev).add(key))
+    try {
+      const params = `pw=${encodeURIComponent(storedPw)}`
+      const res = await fetch(`/api/billing-confirmations?${params}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [{ billing_type: billingType, ref_id: refId, snapshot }], year, month }),
+      })
+      if (!res.ok) throw new Error('確定に失敗しました')
+      toast.success('請求を確定しました')
+      await fetchData(storedPw)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '確定に失敗しました')
+    } finally {
+      setLockingKeys(prev => { const n = new Set(prev); n.delete(key); return n })
+    }
+  }
+
+  const handleUnlockItem = async (confirmationId: string) => {
+    if (!confirm('確定を解除しますか？最新の計算値に戻ります。')) return
+    try {
+      const params = `pw=${encodeURIComponent(storedPw)}`
+      const res = await fetch(`/api/billing-confirmations/${confirmationId}?${params}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('確定解除に失敗しました')
+      toast.success('確定を解除しました')
+      await fetchData(storedPw)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '確定解除に失敗しました')
+    }
+  }
+
+  const handleBulkLock = async () => {
+    // 未確定の全項目を確定
+    const items: { billing_type: string; ref_id: string; snapshot: Record<string, unknown> }[] = []
+    for (const b of billing) {
+      if (!b.confirmed && !b.out_of_period) {
+        const snap = buildSnapshot('contract', b.id)
+        if (snap) items.push({ billing_type: 'contract', ref_id: b.id, snapshot: snap })
+      }
+    }
+    for (const l of lectureBilling) {
+      if (!l.confirmed) {
+        const snap = buildSnapshot('lecture', l.id)
+        if (snap) items.push({ billing_type: 'lecture', ref_id: l.id, snapshot: snap })
+      }
+    }
+    for (const m of materialBilling) {
+      if (!m.confirmed) {
+        const snap = buildSnapshot('material', m.id)
+        if (snap) items.push({ billing_type: 'material', ref_id: m.id, snapshot: snap })
+      }
+    }
+    for (const m of manualBilling) {
+      if (!m.confirmed) {
+        const snap = buildSnapshot('manual', m.id)
+        if (snap) items.push({ billing_type: 'manual', ref_id: m.id, snapshot: snap })
+      }
+    }
+    if (items.length === 0) {
+      toast.info('すべて確定済みです')
+      return
+    }
+    setBulkLocking(true)
+    try {
+      const params = `pw=${encodeURIComponent(storedPw)}`
+      const res = await fetch(`/api/billing-confirmations?${params}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, year, month }),
+      })
+      if (!res.ok) throw new Error('一括確定に失敗しました')
+      toast.success(`${items.length}件を確定しました`)
+      await fetchData(storedPw)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '一括確定に失敗しました')
+    } finally {
+      setBulkLocking(false)
+    }
+  }
+
+  /* ---- grade change ---- */
+
+  const [changingGradeId, setChangingGradeId] = useState<string | null>(null)
+
+  const handleGradeChange = async (contractId: string, newGrade: string, currentCourses: { course: string; lessons: number }[]) => {
+    setChangingGradeId(contractId)
+    try {
+      const params = `pw=${encodeURIComponent(storedPw)}`
+      const res = await fetch(`/api/contracts/${contractId}?${params}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grade: newGrade, courses: currentCourses }),
+      })
+      if (!res.ok) throw new Error('学年変更に失敗しました')
+      toast.success(`学年を${newGrade}に変更しました`)
+      await fetchData(storedPw)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '学年変更に失敗しました')
+    } finally {
+      setChangingGradeId(null)
+    }
+  }
+
+  // 未確定件数
+  const unconfirmedCount =
+    billing.filter(b => !b.confirmed && !b.out_of_period).length +
+    lectureBilling.filter(l => !l.confirmed).length +
+    materialBilling.filter(m => !m.confirmed).length +
+    manualBilling.filter(m => !m.confirmed).length
+
   /* ---- detail dialog ---- */
 
   const openDetailDialog = (
-    billingType: 'contract' | 'lecture' | 'material',
+    billingType: 'contract' | 'lecture' | 'material' | 'manual',
     refId: string,
     studentName: string,
     billedAmount: number,
@@ -573,6 +780,7 @@ function BillingPageInner() {
             contract_id: dialogTarget.billingType === 'contract' ? dialogTarget.refId : null,
             lecture_id: dialogTarget.billingType === 'lecture' ? dialogTarget.refId : null,
             material_sale_id: dialogTarget.billingType === 'material' ? dialogTarget.refId : null,
+            manual_billing_id: dialogTarget.billingType === 'manual' ? dialogTarget.refId : null,
             year,
             month,
             billed_amount: dialogTarget.billedAmount,
@@ -637,7 +845,7 @@ function BillingPageInner() {
 
   /** 請求行から返金ダイアログを開く */
   const openLinkedAdjDialog = (
-    billingType: 'contract' | 'lecture' | 'material',
+    billingType: 'contract' | 'lecture' | 'material' | 'manual',
     refId: string,
     studentId: string,
     studentName: string,
@@ -737,6 +945,82 @@ function BillingPageInner() {
     }
   }
 
+  /* ---- manual billing handlers ---- */
+
+  const openManualDialog = (item?: ManualBillingItem) => {
+    if (item) {
+      setManualEditing(item)
+      setManualForm({
+        student_id: item.student?.id || '',
+        amount: String(item.amount),
+        description: item.description,
+        notes: item.notes,
+      })
+    } else {
+      setManualEditing(null)
+      setManualForm({ student_id: '', amount: '', description: '', notes: '' })
+    }
+    setManualDialogOpen(true)
+  }
+
+  const handleSaveManualBilling = async () => {
+    if (!manualForm.student_id || !manualForm.amount || !manualForm.description) {
+      toast.error('生徒・金額・説明は必須です')
+      return
+    }
+    setManualSaving(true)
+    try {
+      const params = `pw=${encodeURIComponent(storedPw)}`
+      if (manualEditing) {
+        const res = await fetch(`/api/manual-billings/${manualEditing.id}?${params}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: parseInt(manualForm.amount),
+            description: manualForm.description,
+            notes: manualForm.notes,
+          }),
+        })
+        if (!res.ok) throw new Error('更新に失敗しました')
+        toast.success('手動請求を更新しました')
+      } else {
+        const res = await fetch(`/api/manual-billings?${params}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: manualForm.student_id,
+            year,
+            month,
+            amount: parseInt(manualForm.amount),
+            description: manualForm.description,
+            notes: manualForm.notes,
+          }),
+        })
+        if (!res.ok) throw new Error('登録に失敗しました')
+        toast.success('手動請求を追加しました')
+      }
+      setManualDialogOpen(false)
+      await fetchData(storedPw)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存に失敗しました')
+    } finally {
+      setManualSaving(false)
+    }
+  }
+
+  const handleDeleteManualBilling = async (item: ManualBillingItem) => {
+    if (!confirm('この手動請求を削除しますか？')) return
+    try {
+      const params = `pw=${encodeURIComponent(storedPw)}`
+      const res = await fetch(`/api/manual-billings/${item.id}?${params}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('削除に失敗しました')
+      toast.success('手動請求を削除しました')
+      await fetchData(storedPw)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '削除に失敗しました')
+    }
+  }
+
   /* ---- render helpers ---- */
 
   const formatYen = (n: number) => `¥${n.toLocaleString()}`
@@ -798,6 +1082,57 @@ function BillingPageInner() {
     return <span className={`text-xs px-1.5 py-0.5 rounded ${color}`}>{s}</span>
   }
 
+  const confirmationBadge = (item: { confirmed?: boolean; amount_changed?: boolean }) => {
+    if (!item.confirmed) return null
+    return (
+      <div className="flex gap-1 items-center">
+        <Badge variant="outline" className="text-xs border-green-400 text-green-700 bg-green-50">
+          <Lock className="h-3 w-3 mr-0.5" />確定済
+        </Badge>
+        {item.amount_changed && (
+          <Badge variant="outline" className="text-xs border-yellow-400 text-yellow-700 bg-yellow-50">
+            <AlertTriangle className="h-3 w-3 mr-0.5" />金額変動あり
+          </Badge>
+        )}
+      </div>
+    )
+  }
+
+  const lockActionCell = (
+    key: ItemKey,
+    billingType: 'contract' | 'lecture' | 'material' | 'manual',
+    refId: string,
+    item: { confirmed?: boolean; confirmation_id?: string },
+  ) => {
+    const isLocking = lockingKeys.has(key)
+    if (item.confirmed && item.confirmation_id) {
+      return (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-orange-600 hover:text-orange-800"
+          onClick={() => handleUnlockItem(item.confirmation_id!)}
+        >
+          <Unlock className="h-3.5 w-3.5 mr-1" />確定解除
+        </Button>
+      )
+    }
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        className="text-green-700 border-green-300 hover:bg-green-50"
+        disabled={isLocking}
+        onClick={() => handleLockItem(key, billingType, refId)}
+      >
+        {isLocking
+          ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />確定中</>
+          : <><Lock className="h-3.5 w-3.5 mr-1" />確定</>
+        }
+      </Button>
+    )
+  }
+
   const paymentStatusCell = (payment: Payment | undefined) => {
     const status = getStatus(payment)
     if (!payment) return <>{statusBadge(status)}</>
@@ -821,7 +1156,7 @@ function BillingPageInner() {
 
   const actionCell = (
     key: ItemKey,
-    billingType: 'contract' | 'lecture' | 'material',
+    billingType: 'contract' | 'lecture' | 'material' | 'manual',
     refId: string,
     studentId: string,
     studentName: string,
@@ -958,6 +1293,7 @@ function BillingPageInner() {
             <span>通常コース: {formatYen(contractTotal)}（{billing.length}件）</span>
             {lectureTotal > 0 && <span>講習: {formatYen(lectureTotal)}（{lectureBilling.length}件）</span>}
             {materialTotal > 0 && <span>教材販売: {formatYen(materialTotal)}（{materialBilling.length}件）</span>}
+            {manualTotal > 0 && <span>その他の請求: {formatYen(manualTotal)}（{manualBilling.length}件）</span>}
             {adjustmentTotal !== 0 && <span className={adjustmentTotal < 0 ? 'text-red-600' : ''}>返金・調整: {formatYen(adjustmentTotal)}（{adjustmentBilling.length}件）</span>}
           </div>
           <div className="flex gap-4 text-sm mt-2">
@@ -994,6 +1330,19 @@ function BillingPageInner() {
           </div>
         </div>
         <div className="flex gap-2">
+          {unconfirmedCount > 0 && (
+            <Button
+              variant="outline"
+              className="text-green-700 border-green-300 hover:bg-green-50"
+              onClick={handleBulkLock}
+              disabled={bulkLocking}
+            >
+              {bulkLocking
+                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />確定中...</>
+                : <><Lock className="h-4 w-4 mr-1" />未確定をすべて確定 ({unconfirmedCount}件)</>
+              }
+            </Button>
+          )}
           {unpaidByDirectDebit > 0 && (
             <Button
               variant="outline"
@@ -1037,12 +1386,14 @@ function BillingPageInner() {
                     <TableHead>塾生番号</TableHead>
                     <TableHead>生徒名</TableHead>
                     <TableHead className="text-center">支払方法</TableHead>
+                    <TableHead>学年</TableHead>
                     <TableHead>コース</TableHead>
                     <TableHead className="text-right">月謝</TableHead>
                     <TableHead className="text-right">入塾金</TableHead>
                     <TableHead className="text-right">設備利用料</TableHead>
                     <TableHead className="text-right">割引</TableHead>
                     <TableHead className="text-right">請求額</TableHead>
+                    <TableHead className="text-center">確定</TableHead>
                     <TableHead className="text-center">入金状況</TableHead>
                     <TableHead className="text-center">操作</TableHead>
                   </TableRow>
@@ -1063,12 +1414,32 @@ function BillingPageInner() {
                         <TableCell className="font-medium">
                           {b.student?.name}
                           {b.out_of_period && <Badge variant="outline" className="ml-1 text-xs border-gray-400 text-gray-500">契約期間外</Badge>}
+                          {b.suspended && <Badge variant="outline" className="ml-1 text-xs border-blue-400 text-blue-600">休塾中</Badge>}
                         </TableCell>
                         <TableCell className="text-center">{paymentMethodBadge(displayMethod, {
                           onClick: () => handleTogglePaymentMethod(key, 'contract', b.id, b.total_amount, displayMethod, payment),
                           isOverriding: overridingKeys.has(key),
                           isOverridden,
                         })}</TableCell>
+                        <TableCell>
+                          {changingGradeId === b.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Select
+                              value={b.grade}
+                              onValueChange={(v) => handleGradeChange(b.id, v, b.courses)}
+                            >
+                              <SelectTrigger className="h-7 w-16 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {GRADES.map(g => (
+                                  <SelectItem key={g} value={g}>{g}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </TableCell>
                         <TableCell className="text-sm">{formatCourses(b.courses)}</TableCell>
                         <TableCell className="text-right font-mono">{formatYen(b.tuition)}</TableCell>
                         <TableCell className="text-right font-mono">
@@ -1082,6 +1453,12 @@ function BillingPageInner() {
                           {b.campaign_discount_amount > 0 ? `-${formatYen(b.campaign_discount_amount)}` : '-'}
                         </TableCell>
                         <TableCell className="text-right">{billedAmountCell(b.total_amount, getAdjustmentsForItem('contract', b.id))}</TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            {confirmationBadge(b)}
+                            {lockActionCell(key, 'contract', b.id, b)}
+                          </div>
+                        </TableCell>
                         <TableCell className="text-center">{paymentStatusCell(payment)}</TableCell>
                         <TableCell className="text-center">
                           {actionCell(key, 'contract', b.id, b.student?.id || '', b.student?.name || '', b.total_amount, formatCourses(b.courses), b.effective_payment_method, payment)}
@@ -1091,7 +1468,7 @@ function BillingPageInner() {
                   })}
                   {filteredBilling.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={14} className="text-center text-muted-foreground py-8">
                         {statusFilter !== 'all' || paymentMethodFilter !== 'all' ? '該当するデータがありません' : '該当月の通常コース請求データがありません'}
                       </TableCell>
                     </TableRow>
@@ -1115,6 +1492,7 @@ function BillingPageInner() {
                     <TableHead>ラベル</TableHead>
                     <TableHead>コース</TableHead>
                     <TableHead className="text-right">当月請求額</TableHead>
+                    <TableHead className="text-center">確定</TableHead>
                     <TableHead className="text-center">入金状況</TableHead>
                     <TableHead className="text-center">操作</TableHead>
                   </TableRow>
@@ -1141,6 +1519,12 @@ function BillingPageInner() {
                         <TableCell className="text-sm">{l.label}</TableCell>
                         <TableCell className="text-sm">{formatLectureCourses(l.courses)}</TableCell>
                         <TableCell className="text-right">{billedAmountCell(l.total_amount, getAdjustmentsForItem('lecture', l.id))}</TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            {confirmationBadge(l)}
+                            {lockActionCell(key, 'lecture', l.id, l)}
+                          </div>
+                        </TableCell>
                         <TableCell className="text-center">{paymentStatusCell(payment)}</TableCell>
                         <TableCell className="text-center">
                           {actionCell(key, 'lecture', l.id, l.student?.id || '', l.student?.name || '', l.total_amount, l.label, l.effective_payment_method, payment)}
@@ -1150,7 +1534,7 @@ function BillingPageInner() {
                   })}
                   {filteredLectures.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                         {statusFilter !== 'all' || paymentMethodFilter !== 'all' ? '該当するデータがありません' : '該当月の講習請求データがありません'}
                       </TableCell>
                     </TableRow>
@@ -1175,6 +1559,7 @@ function BillingPageInner() {
                     <TableHead className="text-center">数量</TableHead>
                     <TableHead className="text-right">単価</TableHead>
                     <TableHead className="text-right">請求額</TableHead>
+                    <TableHead className="text-center">確定</TableHead>
                     <TableHead className="text-center">入金状況</TableHead>
                     <TableHead className="text-center">操作</TableHead>
                   </TableRow>
@@ -1202,6 +1587,12 @@ function BillingPageInner() {
                         <TableCell className="text-center">{m.quantity}</TableCell>
                         <TableCell className="text-right font-mono">{formatYen(m.unit_price)}</TableCell>
                         <TableCell className="text-right">{billedAmountCell(m.total_amount, getAdjustmentsForItem('material', m.id))}</TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            {confirmationBadge(m)}
+                            {lockActionCell(key, 'material', m.id, m)}
+                          </div>
+                        </TableCell>
                         <TableCell className="text-center">{paymentStatusCell(payment)}</TableCell>
                         <TableCell className="text-center">
                           {actionCell(key, 'material', m.id, m.student?.id || '', m.student?.name || '', m.total_amount, m.item_name, m.effective_payment_method, payment)}
@@ -1211,8 +1602,115 @@ function BillingPageInner() {
                   })}
                   {filteredMaterials.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                         {statusFilter !== 'all' || paymentMethodFilter !== 'all' ? '該当するデータがありません' : '該当月の教材販売データがありません'}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* その他の請求（手動請求） */}
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">その他の請求</h3>
+            <Button size="sm" variant="outline" onClick={() => openManualDialog()}>
+              <Plus className="h-4 w-4 mr-1" />その他の請求を追加
+            </Button>
+          </div>
+          <Card>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10" />
+                    <TableHead>塾生番号</TableHead>
+                    <TableHead>生徒名</TableHead>
+                    <TableHead className="text-center">支払方法</TableHead>
+                    <TableHead>説明</TableHead>
+                    <TableHead className="text-right">請求額</TableHead>
+                    <TableHead className="text-center">確定</TableHead>
+                    <TableHead className="text-center">入金状況</TableHead>
+                    <TableHead className="text-center">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredManuals.map(m => {
+                    const payment = getPayment('manual', m.id)
+                    const isUnpaid = isUnpaidStatus(payment)
+                    const key = manualKey(m.id)
+                    const displayMethod = getDisplayPaymentMethod(payment, m.effective_payment_method)
+                    const isOverridden = payment?.payment_method != null && payment.payment_method !== m.effective_payment_method
+                    return (
+                      <TableRow key={m.id} className={confirmingKeys.has(key) ? 'opacity-60' : ''}>
+                        <TableCell className="text-center">
+                          {isUnpaid && <Checkbox checked={selected.has(key)} onCheckedChange={() => toggle(key)} />}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{m.student?.student_number || '-'}</TableCell>
+                        <TableCell className="font-medium">{m.student?.name}</TableCell>
+                        <TableCell className="text-center">{paymentMethodBadge(displayMethod, {
+                          onClick: () => handleTogglePaymentMethod(key, 'manual', m.id, m.amount, displayMethod, payment),
+                          isOverriding: overridingKeys.has(key),
+                          isOverridden,
+                        })}</TableCell>
+                        <TableCell className="text-sm">{m.description}</TableCell>
+                        <TableCell className="text-right font-mono font-bold">{formatYen(m.amount)}</TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            {confirmationBadge(m)}
+                            {lockActionCell(key, 'manual', m.id, m)}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">{paymentStatusCell(payment)}</TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex gap-1 justify-center flex-wrap">
+                            {isUnpaid ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  disabled={confirmingKeys.has(key)}
+                                  onClick={() => handleQuickConfirm(key, 'manual', m.id, m.amount, displayMethod)}
+                                >
+                                  {confirmingKeys.has(key)
+                                    ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />処理中</>
+                                    : <><CheckCircle2 className="h-3.5 w-3.5 mr-1" />入金OK</>
+                                  }
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-muted-foreground"
+                                  disabled={confirmingKeys.has(key)}
+                                  onClick={() => openDetailDialog('manual', m.id, m.student?.name || '', m.amount, displayMethod, payment ?? null)}
+                                >
+                                  入金詳細
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openDetailDialog('manual', m.id, m.student?.name || '', m.amount, displayMethod, payment!)}
+                              >
+                                入金編集
+                              </Button>
+                            )}
+                            <Button size="sm" variant="ghost" onClick={() => openManualDialog(m)}>
+                              請求編集
+                            </Button>
+                            <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => handleDeleteManualBilling(m)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                  {filteredManuals.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                        {statusFilter !== 'all' || paymentMethodFilter !== 'all' ? '該当するデータがありません' : '該当月のその他の請求データはありません'}
                       </TableCell>
                     </TableRow>
                   )}
@@ -1439,6 +1937,67 @@ function BillingPageInner() {
             <Button variant="outline" onClick={() => { setAdjDialogOpen(false); setAdjLinkedTarget(null) }}>キャンセル</Button>
             <Button onClick={handleSaveAdjustment} disabled={adjSaving}>
               {adjSaving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />保存中</> : '保存'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual billing dialog */}
+      <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{manualEditing ? 'その他の請求を編集' : 'その他の請求を追加'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {manualEditing ? (
+              <div className="bg-muted/50 rounded-lg p-3">
+                <span className="text-sm text-muted-foreground">生徒:</span> {manualEditing.student?.name}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>生徒</Label>
+                <Select value={manualForm.student_id} onValueChange={v => setManualForm({ ...manualForm, student_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="生徒を選択" /></SelectTrigger>
+                  <SelectContent>
+                    {students.map(s => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.student_number ? `${s.student_number} ` : ''}{s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>金額</Label>
+              <Input
+                type="number"
+                value={manualForm.amount}
+                onChange={e => setManualForm({ ...manualForm, amount: e.target.value })}
+                placeholder="1000"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>説明</Label>
+              <Input
+                value={manualForm.description}
+                onChange={e => setManualForm({ ...manualForm, description: e.target.value })}
+                placeholder="例: 差額請求（3月分不足分）"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>備考</Label>
+              <Input
+                value={manualForm.notes}
+                onChange={e => setManualForm({ ...manualForm, notes: e.target.value })}
+                placeholder="任意"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManualDialogOpen(false)}>キャンセル</Button>
+            <Button onClick={handleSaveManualBilling} disabled={manualSaving}>
+              {manualSaving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />保存中</> : '保存'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -65,11 +65,21 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const billingYm = `${year}-${String(month).padStart(2, '0')}`
+
   const billing = (data || []).map((c) => calcContractBilling(c, false))
   const billingContractIds = new Set(billing.map(b => (b as Record<string, unknown>).id as string))
 
   // 契約期間外だが入金・調整がある契約を追加取得
   const admin = createAdminClient()
+
+  // 休塾中の生徒を取得
+  const { data: suspensionRows } = await admin
+    .from('student_suspensions')
+    .select('student_id')
+    .lte('start_ym', billingYm)
+    .gte('end_ym', billingYm)
+  const suspendedStudentIds = new Set((suspensionRows || []).map(s => s.student_id))
   const [paymentRefRes, adjustmentRefRes] = await Promise.all([
     admin.from('payments').select('contract_id').eq('year', year).eq('month', month).not('contract_id', 'is', null),
     admin.from('adjustments').select('contract_id').eq('year', year).eq('month', month).not('contract_id', 'is', null),
@@ -88,6 +98,56 @@ export async function GET(request: NextRequest) {
       .in('id', [...extraIds])
     for (const c of extraContracts || []) {
       billing.push(calcContractBilling(c, true))
+    }
+  }
+
+  // 休塾中の生徒は請求額を0にする
+  for (const b of billing) {
+    const rec = b as Record<string, unknown>
+    const student = rec.student as { id: string } | null
+    if (student?.id && suspendedStudentIds.has(student.id)) {
+      b.tuition = 0
+      b.facility_fee = 0
+      b.enrollment_fee_amount = 0
+      b.campaign_discount_amount = 0
+      b.total_amount = 0
+      rec.suspended = true
+    }
+  }
+
+  // 確定データを取得
+  const { data: confirmations } = await admin
+    .from('billing_confirmations')
+    .select('*')
+    .eq('year', year)
+    .eq('month', month)
+
+  // 確定データをマップ化（billing_type:ref_id → confirmation）
+  const confirmationMap = new Map<string, { id: string; snapshot: Record<string, unknown>; confirmed_at: string }>()
+  for (const c of confirmations || []) {
+    confirmationMap.set(`${c.billing_type}:${c.ref_id}`, { id: c.id, snapshot: c.snapshot, confirmed_at: c.confirmed_at })
+  }
+
+  // 確定済み契約: スナップショットの金額で上書き
+  for (const b of billing) {
+    const rec = b as Record<string, unknown>
+    const conf = confirmationMap.get(`contract:${rec.id as string}`)
+    if (conf) {
+      const snap = conf.snapshot as Record<string, unknown>
+      // 計算値と確定値が異なるか判定
+      const currentTotal = b.total_amount
+      const snapTotal = (snap.total_amount as number) ?? currentTotal
+      rec.confirmed = true
+      rec.confirmation_id = conf.id
+      rec.confirmed_at = conf.confirmed_at
+      rec.amount_changed = currentTotal !== snapTotal
+      // スナップショットで金額を上書き
+      b.tuition = (snap.tuition as number) ?? b.tuition
+      b.enrollment_fee_amount = (snap.enrollment_fee as number) ?? b.enrollment_fee_amount
+      b.facility_fee = (snap.facility_fee as number) ?? b.facility_fee
+      b.campaign_discount_amount = (snap.campaign_discount as number) ?? b.campaign_discount_amount
+      b.total_amount = snapTotal
+      if (snap.suspended !== undefined) rec.suspended = snap.suspended
     }
   }
 
@@ -147,6 +207,21 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // 確定済み講習: スナップショットの金額で上書き
+  for (const l of lectureData) {
+    const conf = confirmationMap.get(`lecture:${l.id}`)
+    if (conf) {
+      const snap = conf.snapshot as Record<string, unknown>
+      const currentTotal = l.total_amount
+      const snapTotal = (snap.total_amount as number) ?? currentTotal
+      ;(l as Record<string, unknown>).confirmed = true
+      ;(l as Record<string, unknown>).confirmation_id = conf.id
+      ;(l as Record<string, unknown>).confirmed_at = conf.confirmed_at
+      ;(l as Record<string, unknown>).amount_changed = currentTotal !== snapTotal
+      l.total_amount = snapTotal
+    }
+  }
+
   const lectureTotal = lectureData.reduce((sum, l) => sum + l.total_amount, 0)
 
   // 教材販売データ: 当月の billing_year/month に該当するもの
@@ -184,7 +259,69 @@ export async function GET(request: NextRequest) {
     }))
   }
 
+  // 確定済み教材: スナップショットの金額で上書き
+  for (const m of materialData) {
+    const conf = confirmationMap.get(`material:${m.id}`)
+    if (conf) {
+      const snap = conf.snapshot as Record<string, unknown>
+      const currentTotal = m.total_amount
+      const snapTotal = (snap.total_amount as number) ?? currentTotal
+      ;(m as Record<string, unknown>).confirmed = true
+      ;(m as Record<string, unknown>).confirmation_id = conf.id
+      ;(m as Record<string, unknown>).confirmed_at = conf.confirmed_at
+      ;(m as Record<string, unknown>).amount_changed = currentTotal !== snapTotal
+      m.total_amount = snapTotal
+    }
+  }
+
   const materialTotal = materialData.reduce((sum, m) => sum + m.total_amount, 0)
+
+  // 手動請求データ: 当月の year/month に該当するもの
+  let manualData: {
+    id: string
+    student: { id: string; name: string; student_number: string | null; payment_method: string; direct_debit_start_ym: string | null }
+    amount: number
+    description: string
+    notes: string
+    created_at: string
+    effective_payment_method: '振込' | '口座振替'
+  }[] = []
+
+  const { data: manualRows, error: manualError } = await admin
+    .from('manual_billings')
+    .select('*, student:students(id, name, student_number, payment_method, direct_debit_start_ym)')
+    .eq('year', year)
+    .eq('month', month)
+    .order('created_at', { ascending: true })
+
+  if (!manualError && manualRows) {
+    manualData = manualRows.map((m) => ({
+      id: m.id,
+      student: m.student,
+      amount: m.amount,
+      description: m.description,
+      notes: m.notes,
+      created_at: m.created_at,
+      effective_payment_method: m.student ? getEffectivePaymentMethod(m.student, year, month) : '振込' as const,
+    }))
+  }
+
+  // 確定済み手動請求: スナップショットの金額で上書き
+  for (const m of manualData) {
+    const conf = confirmationMap.get(`manual:${m.id}`)
+    if (conf) {
+      const snap = conf.snapshot as Record<string, unknown>
+      const currentAmount = m.amount
+      const snapAmount = (snap.amount as number) ?? currentAmount
+      ;(m as Record<string, unknown>).confirmed = true
+      ;(m as Record<string, unknown>).confirmation_id = conf.id
+      ;(m as Record<string, unknown>).confirmed_at = conf.confirmed_at
+      ;(m as Record<string, unknown>).amount_changed = currentAmount !== snapAmount
+      m.amount = snapAmount
+    }
+  }
+
+  const manualTotal = manualData.reduce((sum, m) => sum + m.amount, 0)
 
   // 返金・調整データ: 当月の year/month に該当するもの
   let adjustmentData: {
@@ -240,7 +377,7 @@ export async function GET(request: NextRequest) {
   }
 
   const adjustmentTotal = adjustmentData.reduce((sum, a) => sum + a.amount, 0)
-  const total = contractTotal + lectureTotal + materialTotal + adjustmentTotal
+  const total = contractTotal + lectureTotal + materialTotal + manualTotal + adjustmentTotal
 
-  return NextResponse.json({ data: billing, lectureData, materialData, adjustmentData, total, contractTotal, lectureTotal, materialTotal, adjustmentTotal })
+  return NextResponse.json({ data: billing, lectureData, materialData, manualData, adjustmentData, total, contractTotal, lectureTotal, materialTotal, manualTotal, adjustmentTotal })
 }

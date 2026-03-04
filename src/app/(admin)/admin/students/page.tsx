@@ -9,11 +9,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Download, Search, RotateCcw, UserMinus, List, LayoutGrid } from 'lucide-react'
+import { Plus, Pencil, Trash2, Download, Search, RotateCcw, UserMinus, List, LayoutGrid, PauseCircle, Play } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
 import { CsvImportDialog } from '@/components/csv-import-dialog'
+
+interface Suspension {
+  id: string
+  student_id: string
+  start_ym: string
+  end_ym: string
+  reason: string | null
+  created_at: string
+}
 
 interface Student {
   id: string
@@ -26,6 +35,7 @@ interface Student {
   parent_emails: { id: string; email: string; label: string | null }[]
   student_subjects: { subject: { id: string; name: string } }[]
   teacher_student_assignments: { teacher_id: string; teacher: { id: string; display_name: string } }[]
+  suspensions?: Suspension[]
 }
 
 interface Subject { id: string; name: string }
@@ -50,6 +60,10 @@ export default function StudentsPage() {
   const [restoreTarget, setRestoreTarget] = useState<Student | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [suspendTarget, setSuspendTarget] = useState<Student | null>(null)
+  const [suspendStartYm, setSuspendStartYm] = useState('')
+  const [suspendEndYm, setSuspendEndYm] = useState('')
+  const [suspendReason, setSuspendReason] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'active' | 'withdrawn'>('active')
   const [groupByGrade, setGroupByGrade] = useState(false)
@@ -70,7 +84,19 @@ export default function StudentsPage() {
       fetch('/api/teachers'),
     ])
     const [sj, subj, tj] = await Promise.all([studentsRes.json(), subjectsRes.json(), teachersRes.json()])
-    setStudents(sj.data || [])
+    const studentList: Student[] = sj.data || []
+
+    // 通塾生の場合、休塾データを取得
+    if (statusFilter === 'active' && studentList.length > 0) {
+      const suspResults = await Promise.all(
+        studentList.map(s => fetch(`/api/students/${s.id}/suspensions`).then(r => r.json()))
+      )
+      for (let i = 0; i < studentList.length; i++) {
+        studentList[i].suspensions = suspResults[i].data || []
+      }
+    }
+
+    setStudents(studentList)
     setSubjects(subj.data || [])
     setTeachers(tj.data || [])
     setLoading(false)
@@ -206,6 +232,49 @@ export default function StudentsPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '一括削除に失敗しました')
     }
+  }
+
+  const handleSuspend = async (studentId: string) => {
+    if (!suspendStartYm || !suspendEndYm) {
+      toast.error('開始月と終了月を入力してください')
+      return
+    }
+    try {
+      const res = await fetch(`/api/students/${studentId}/suspensions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ start_ym: suspendStartYm, end_ym: suspendEndYm, reason: suspendReason || null }),
+      })
+      if (!res.ok) throw new Error('休塾設定に失敗しました')
+      const json = await res.json()
+      toast.success(`休塾を設定しました（授業${json.lessonsCancelled}件キャンセル）`)
+      setSuspendTarget(null)
+      setSuspendStartYm('')
+      setSuspendEndYm('')
+      setSuspendReason('')
+      fetchData()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '休塾設定に失敗しました')
+    }
+  }
+
+  const handleCancelSuspension = async (studentId: string, suspensionId: string) => {
+    try {
+      const res = await fetch(`/api/students/${studentId}/suspensions/${suspensionId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('休塾解除に失敗しました')
+      const json = await res.json()
+      toast.success(`休塾を解除しました（授業${json.lessonsGenerated}件再生成）`)
+      fetchData()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '休塾解除に失敗しました')
+    }
+  }
+
+  const getCurrentSuspension = (s: Student): Suspension | null => {
+    if (!s.suspensions?.length) return null
+    const now = new Date()
+    const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    return s.suspensions.find(ss => ss.start_ym <= currentYm && ss.end_ym >= currentYm) || null
   }
 
   if (loading) return <LoadingSpinner />
@@ -396,10 +465,18 @@ export default function StudentsPage() {
                       </TableRow>
                     )
                   }
+                  const currentSusp = getCurrentSuspension(s)
                   rows.push(
                     <TableRow key={s.id}>
                       <TableCell className="text-muted-foreground text-sm">{s.student_number || '-'}</TableCell>
-                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell className="font-medium">
+                        {s.name}
+                        {currentSusp && (
+                          <Badge variant="outline" className="ml-2 text-xs border-blue-400 text-blue-600">
+                            休塾中 ({currentSusp.start_ym.slice(5)}月〜{currentSusp.end_ym.slice(5)}月)
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell>{s.grade || '-'}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{s.direct_debit_start_ym || '-'}</TableCell>
                       <TableCell>
@@ -416,6 +493,17 @@ export default function StudentsPage() {
                           {statusFilter === 'active' ? (
                             <>
                               <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
+                              {currentSusp ? (
+                                <Button variant="ghost" size="sm" aria-label="休塾解除" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                  onClick={() => handleCancelSuspension(s.id, currentSusp.id)}>
+                                  <Play className="h-4 w-4 mr-1" />休塾解除
+                                </Button>
+                              ) : (
+                                <Button variant="ghost" size="sm" aria-label="休塾" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                  onClick={() => setSuspendTarget(s)}>
+                                  <PauseCircle className="h-4 w-4 mr-1" />休塾
+                                </Button>
+                              )}
                               <Button variant="ghost" size="sm" aria-label="退塾" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50" onClick={() => setWithdrawTarget(s)}>
                                 <UserMinus className="h-4 w-4 mr-1" />退塾
                               </Button>
@@ -481,6 +569,31 @@ export default function StudentsPage() {
         onConfirm={() => { handleBulkDelete(); setBulkDeleteOpen(false) }}
         confirmLabel="一括削除する"
       />
+
+      {/* 休塾ダイアログ */}
+      <Dialog open={!!suspendTarget} onOpenChange={(open) => { if (!open) { setSuspendTarget(null); setSuspendStartYm(''); setSuspendEndYm(''); setSuspendReason('') } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>{suspendTarget?.name}さんの休塾設定</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>開始月 *</Label>
+              <Input type="month" value={suspendStartYm} onChange={(e) => setSuspendStartYm(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>終了月 *</Label>
+              <Input type="month" value={suspendEndYm} onChange={(e) => setSuspendEndYm(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>理由（任意）</Label>
+              <Input value={suspendReason} onChange={(e) => setSuspendReason(e.target.value)} placeholder="例: 家庭の事情" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setSuspendTarget(null); setSuspendStartYm(''); setSuspendEndYm(''); setSuspendReason('') }}>キャンセル</Button>
+            <Button onClick={() => { if (suspendTarget) handleSuspend(suspendTarget.id) }}>休塾設定</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
