@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
 
   const materialSales = materialRows || []
 
+
   interface LectureAlloc { year: number; month: number; lessons: number }
   interface LectureCourse { course: string; total_lessons: number; unit_price: number; subtotal: number; allocation: LectureAlloc[] }
 

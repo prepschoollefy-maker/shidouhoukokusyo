@@ -18,12 +18,15 @@ export async function PUT(
   if (pwError) return pwError
 
   const body = await request.json()
-  const { amount, reason, status, completed_date, notes } = body
+  const { amount, reason, status, completed_date, notes, contract_id, lecture_id, material_sale_id } = body
 
   const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (amount !== undefined) updateData.amount = amount
   if (reason !== undefined) updateData.reason = reason
   if (notes !== undefined) updateData.notes = notes
+  if (contract_id !== undefined) updateData.contract_id = contract_id
+  if (lecture_id !== undefined) updateData.lecture_id = lecture_id
+  if (material_sale_id !== undefined) updateData.material_sale_id = material_sale_id
   if (status !== undefined) {
     updateData.status = status
     if (status === '対応済み' && !completed_date) {
@@ -37,7 +40,7 @@ export async function PUT(
     .from('adjustments')
     .update(updateData)
     .eq('id', id)
-    .select('*, student:students(id, name, student_number)')
+    .select('*, student:students(id, name, student_number), contract:contracts(id, courses, monthly_amount), lecture:lectures(id, label), material_sale:material_sales(id, item_name)')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

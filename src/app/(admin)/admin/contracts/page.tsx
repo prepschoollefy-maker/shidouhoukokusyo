@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Plus, Pencil, Trash2, Search, ChevronsUpDown, Check, ChevronDown, ChevronRight, ExternalLink, Printer } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, ChevronsUpDown, Check, ChevronDown, ChevronRight, ExternalLink, Printer, AlertTriangle, Info } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -80,6 +80,11 @@ export default function ContractsPage() {
   const [formNotes, setFormNotes] = useState('')
   const [formCampaign, setFormCampaign] = useState('_none')
   const [calcAmount, setCalcAmount] = useState<number | null>(null)
+  const [formGrade, setFormGrade] = useState('')
+
+  // Safeguard state
+  const [overlapWarnings, setOverlapWarnings] = useState<{ id: string; start_date: string; end_date: string; courses: { course: string }[] }[]>([])
+  const [enrollmentFeeAutoSet, setEnrollmentFeeAutoSet] = useState(false)
 
   const fetchContracts = useCallback(async () => {
     if (!storedPw) return
@@ -102,9 +107,40 @@ export default function ContractsPage() {
     Promise.all([fetchContracts(), fetchStudents()]).finally(() => setLoading(false))
   }, [storedPw, fetchContracts, fetchStudents])
 
-  // 選択中の生徒の学年を取得
+  // 新規作成時: 生徒選択で学年を自動セット
   const selectedStudent = students.find(s => s.id === formStudentId)
-  const formGrade = editing ? editing.grade : (selectedStudent?.grade || '')
+  useEffect(() => {
+    if (!editing && selectedStudent?.grade) {
+      setFormGrade(selectedStudent.grade)
+    }
+  }, [formStudentId, editing, selectedStudent?.grade])
+
+  // 契約チェック（重複検知 + 入塾金自動設定）
+  useEffect(() => {
+    if (!storedPw || !formStudentId) {
+      setOverlapWarnings([])
+      return
+    }
+    const params = new URLSearchParams({ student_id: formStudentId, pw: storedPw })
+    if (formStartDate) params.set('start_date', formStartDate)
+    if (formEndDate) params.set('end_date', formEndDate)
+    if (editing) params.set('exclude_id', editing.id)
+
+    const controller = new AbortController()
+    fetch(`/api/contracts/check-student?${params}`, { signal: controller.signal })
+      .then(r => r.json())
+      .then(json => {
+        setOverlapWarnings(json.overlapping_contracts || [])
+        // 新規作成 + 既存契約あり + キャンペーン未選択 → 入塾金支払い済みに自動設定
+        if (!editing && json.has_existing_contract && formCampaign === '_none') {
+          setFormCampaign('入塾金支払い済み')
+          setEnrollmentFeeAutoSet(true)
+        }
+      })
+      .catch(() => {})
+    return () => controller.abort()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formStudentId, formStartDate, formEndDate, storedPw, editing])
 
   // 月謝自動計算
   useEffect(() => {
@@ -125,10 +161,11 @@ export default function ContractsPage() {
   }, [formGrade, formCourses])
 
   const resetForm = () => {
-    setFormStudentId(''); setFormStartDate(''); setFormEndDate('')
+    setFormStudentId(''); setFormStartDate(''); setFormEndDate(''); setFormGrade('')
     setFormCourses([{ course: '', lessons: 1 }]); setStudentSearch('')
     setFormNotes(''); setFormCampaign('_none'); setCalcAmount(null); setEditing(null)
     setStudentPopoverOpen(false)
+    setOverlapWarnings([]); setEnrollmentFeeAutoSet(false)
   }
 
   const openEdit = (c: Contract) => {
@@ -136,10 +173,12 @@ export default function ContractsPage() {
     setFormStudentId(c.student_id)
     setFormStartDate(c.start_date)
     setFormEndDate(c.end_date)
+    setFormGrade(c.grade)
     setFormCourses(c.courses.length ? c.courses : [{ course: '', lessons: 1 }])
     setFormNotes(c.notes)
     setFormCampaign(c.campaign || '_none')
     setStudentSearch('')
+    setOverlapWarnings([]); setEnrollmentFeeAutoSet(false)
     setDialogOpen(true)
   }
 
@@ -440,11 +479,17 @@ export default function ContractsPage() {
                     </PopoverContent>
                   </Popover>
                 </div>
-                {formGrade && (
-                  <div className="text-sm text-muted-foreground">
-                    学年: <span className="font-medium text-foreground">{formGrade}</span>
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <Label>学年 *</Label>
+                  <Select value={formGrade} onValueChange={setFormGrade}>
+                    <SelectTrigger><SelectValue placeholder="学年を選択" /></SelectTrigger>
+                    <SelectContent>
+                      {GRADES.map(g => (
+                        <SelectItem key={g} value={g}>{g}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>開始日 *</Label>
@@ -455,6 +500,22 @@ export default function ContractsPage() {
                     <Input type="date" value={formEndDate} onChange={(e) => setFormEndDate(e.target.value)} />
                   </div>
                 </div>
+                {overlapWarnings.length > 0 && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 flex gap-2">
+                    <AlertTriangle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="font-medium text-yellow-800">期間が重複する契約があります</p>
+                      <ul className="mt-1 space-y-0.5 text-yellow-700">
+                        {overlapWarnings.map(c => (
+                          <li key={c.id}>
+                            {c.start_date} ~ {c.end_date}（{c.courses.map(co => co.course).join(', ')}）
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-1 text-yellow-600">重複期間は二重請求の原因になります。このまま保存することもできます。</p>
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>コース *</Label>
                   {formCourses.map((c, i) => (
@@ -498,7 +559,7 @@ export default function ContractsPage() {
                 )}
                 <div className="space-y-2">
                   <Label>キャンペーン</Label>
-                  <Select value={formCampaign} onValueChange={setFormCampaign}>
+                  <Select value={formCampaign} onValueChange={(v) => { setFormCampaign(v); setEnrollmentFeeAutoSet(false) }}>
                     <SelectTrigger><SelectValue placeholder="なし" /></SelectTrigger>
                     <SelectContent>
                       {CAMPAIGN_OPTIONS.map(opt => (
@@ -506,6 +567,15 @@ export default function ContractsPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {enrollmentFeeAutoSet && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-md p-3 flex gap-2">
+                      <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-blue-700">
+                        <p>この生徒には既存の契約があるため、入塾金を「支払い済み」に自動設定しました。</p>
+                        <p className="text-blue-500">キャンペーン欄から変更できます。</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>備考</Label>

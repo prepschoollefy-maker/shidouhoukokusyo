@@ -38,28 +38,20 @@ export async function GET(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const billing = (data || []).map((c) => {
-    const startDate = new Date(c.start_date)
+  const calcContractBilling = (c: Record<string, unknown>, outOfPeriod = false) => {
+    const startDate = new Date(c.start_date as string)
     const startDay = startDate.getDate()
     const startYear = startDate.getFullYear()
     const startMonth = startDate.getMonth() + 1
     const isFirstMonth = startYear === year && startMonth === month
 
-    // 授業料（月謝）: 16日開始の初月は半額
     const isHalf = isFirstMonth && startDay >= 16
-    const tuition = isHalf ? Math.floor(c.monthly_amount / 2) : c.monthly_amount
-
-    // 入塾金: 契約開始月のみ
-    const enrollmentFee = isFirstMonth ? (c.enrollment_fee || 0) : 0
-
-    // 設備利用料: 16日開始の初月は半額
+    const tuition = isHalf ? Math.floor((c.monthly_amount as number) / 2) : (c.monthly_amount as number)
+    const enrollmentFee = isFirstMonth ? ((c.enrollment_fee as number) || 0) : 0
     const facilityFee = isHalf ? FACILITY_FEE_HALF_TAX_INCL : FACILITY_FEE_MONTHLY_TAX_INCL
-
-    // キャンペーン割引: 契約開始月のみ
-    const campaignDiscount = isFirstMonth ? (c.campaign_discount || 0) : 0
-
-    // 合計
+    const campaignDiscount = isFirstMonth ? ((c.campaign_discount as number) || 0) : 0
     const totalAmount = tuition + enrollmentFee + facilityFee - campaignDiscount
+    const student = c.student as { id: string; name: string; student_number: string | null; payment_method: string; direct_debit_start_ym: string | null } | null
 
     return {
       ...c,
@@ -68,11 +60,41 @@ export async function GET(request: NextRequest) {
       facility_fee: facilityFee,
       campaign_discount_amount: campaignDiscount,
       total_amount: totalAmount,
-      effective_payment_method: c.student ? getEffectivePaymentMethod(c.student, year, month) : '振込',
+      effective_payment_method: student ? getEffectivePaymentMethod(student, year, month) : '振込',
+      out_of_period: outOfPeriod,
     }
-  })
+  }
 
-  const contractTotal = billing.reduce((sum, b) => sum + b.total_amount, 0)
+  const billing = (data || []).map((c) => calcContractBilling(c, false))
+  const billingContractIds = new Set(billing.map(b => (b as Record<string, unknown>).id as string))
+
+  // 契約期間外だが入金・調整がある契約を追加取得
+  const admin = createAdminClient()
+  const [paymentRefRes, adjustmentRefRes] = await Promise.all([
+    admin.from('payments').select('contract_id').eq('year', year).eq('month', month).not('contract_id', 'is', null),
+    admin.from('adjustments').select('contract_id').eq('year', year).eq('month', month).not('contract_id', 'is', null),
+  ])
+  const extraIds = new Set<string>()
+  for (const p of paymentRefRes.data || []) {
+    if (p.contract_id && !billingContractIds.has(p.contract_id)) extraIds.add(p.contract_id)
+  }
+  for (const a of adjustmentRefRes.data || []) {
+    if (a.contract_id && !billingContractIds.has(a.contract_id)) extraIds.add(a.contract_id)
+  }
+  if (extraIds.size > 0) {
+    const { data: extraContracts } = await supabase
+      .from('contracts')
+      .select('*, student:students(id, name, student_number, payment_method, direct_debit_start_ym)')
+      .in('id', [...extraIds])
+    for (const c of extraContracts || []) {
+      billing.push(calcContractBilling(c, true))
+    }
+  }
+
+  // 契約期間外の行は contractTotal に含めない（請求額サマリーの整合性）
+  const contractTotal = billing
+    .filter(b => !b.out_of_period)
+    .reduce((sum, b) => sum + b.total_amount, 0)
 
   // 講習データ: 当月の allocation を含む講習を集計（lecture_id でグループ化）
   const { data: lectureRows, error: lectureError } = await supabase
@@ -141,7 +163,6 @@ export async function GET(request: NextRequest) {
     effective_payment_method: '振込' | '口座振替'
   }[] = []
 
-  const admin = createAdminClient()
   const { data: materialRows, error: materialError } = await admin
     .from('material_sales')
     .select('*, student:students(id, name, student_number, payment_method, direct_debit_start_ym)')
@@ -175,26 +196,47 @@ export async function GET(request: NextRequest) {
     completed_date: string | null
     notes: string
     created_at: string
+    contract_id: string | null
+    lecture_id: string | null
+    material_sale_id: string | null
+    linked_label: string | null
   }[] = []
 
   const { data: adjustmentRows, error: adjustmentError } = await admin
     .from('adjustments')
-    .select('*, student:students(id, name, student_number)')
+    .select('*, student:students(id, name, student_number), contract:contracts(id, courses, grade), lecture:lectures(id, label, grade), material_sale:material_sales(id, item_name)')
     .eq('year', year)
     .eq('month', month)
     .order('created_at', { ascending: true })
 
   if (!adjustmentError && adjustmentRows) {
-    adjustmentData = adjustmentRows.map((a) => ({
-      id: a.id,
-      student: a.student,
-      amount: a.amount,
-      reason: a.reason,
-      status: a.status,
-      completed_date: a.completed_date,
-      notes: a.notes,
-      created_at: a.created_at,
-    }))
+    adjustmentData = adjustmentRows.map((a) => {
+      // 紐付き先のラベルを生成
+      let linked_label: string | null = null
+      if (a.contract_id && a.contract) {
+        const courses = ((a.contract as Record<string, unknown>).courses || []) as { course: string }[]
+        const courseNames = courses.map((c: { course: string }) => c.course).join(', ')
+        linked_label = `通常コース: ${courseNames || '不明'}`
+      } else if (a.lecture_id && a.lecture) {
+        linked_label = `講習: ${(a.lecture as Record<string, unknown>).label || '不明'}`
+      } else if (a.material_sale_id && a.material_sale) {
+        linked_label = `教材: ${(a.material_sale as Record<string, unknown>).item_name || '不明'}`
+      }
+      return {
+        id: a.id,
+        student: a.student,
+        amount: a.amount,
+        reason: a.reason,
+        status: a.status,
+        completed_date: a.completed_date,
+        notes: a.notes,
+        created_at: a.created_at,
+        contract_id: a.contract_id || null,
+        lecture_id: a.lecture_id || null,
+        material_sale_id: a.material_sale_id || null,
+        linked_label,
+      }
+    })
   }
 
   const adjustmentTotal = adjustmentData.reduce((sum, a) => sum + a.amount, 0)

@@ -11,19 +11,11 @@ export async function DELETE() {
 
   const admin = createAdminClient()
 
-  // Delete related data without ON DELETE CASCADE first
-  const condition = 'id' // dummy column to match all rows via neq
-  const dummyId = '00000000-0000-0000-0000-000000000000'
-
-  await admin.from('email_logs').delete().neq(condition, dummyId)
-  await admin.from('summaries').delete().neq(condition, dummyId)
-  await admin.from('lesson_reports').delete().neq(condition, dummyId)
-
-  // Now delete students (CASCADE handles parent_emails, student_subjects, etc.)
+  // 論理削除（全生徒の status を 'deleted' に変更）
   const { error } = await admin
     .from('students')
-    .delete()
-    .neq(condition, dummyId)
+    .update({ status: 'deleted' })
+    .neq('status', 'deleted')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })

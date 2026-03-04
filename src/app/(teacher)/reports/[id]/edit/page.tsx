@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { ReportForm } from '@/components/reports/report-form'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ClosedDaysCalendarDialog } from '@/components/closed-days-calendar-dialog'
 
 export default function ReportEditPage() {
   const params = useParams()
@@ -57,7 +58,10 @@ export default function ReportEditPage() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-bold">レポート編集</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">レポート編集</h2>
+        <ClosedDaysCalendarDialog />
+      </div>
       <ReportForm initialData={initialData} reportId={params.id as string} />
     </div>
   )

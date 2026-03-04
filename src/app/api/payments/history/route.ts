@@ -108,7 +108,7 @@ async function handleMonthly(
   const [contractsRes, lecturesRes, adjustmentsRes] = await Promise.all([
     supabase.from('contracts').select('*').lte('start_date', rangeEnd).gte('end_date', rangeStart),
     supabase.from('lectures').select('*'),
-    admin.from('adjustments').select('*'),
+    admin.from('adjustments').select('*, contract_id, lecture_id, material_sale_id'),
   ])
 
   const contracts = contractsRes.data || []
@@ -190,7 +190,7 @@ async function handleStudent(
     supabase.from('contracts').select('*, student:students(id, name, student_number)').lte('start_date', rangeEnd).gte('end_date', rangeStart),
     supabase.from('lectures').select('*, student:students(id, name, student_number)'),
     supabase.from('students').select('id, name, student_number'),
-    admin.from('adjustments').select('*, student:students(id, name, student_number)'),
+    admin.from('adjustments').select('*, student:students(id, name, student_number), contract_id, lecture_id, material_sale_id'),
   ])
 
   const contracts = contractsRes.data || []

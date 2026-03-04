@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { CalendarOff, Plus, Trash2 } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { CsvImportDialog } from '@/components/csv-import-dialog'
 import { toast } from 'sonner'
 
 // ─── Types ───────────────────────────
@@ -860,6 +861,13 @@ function ClosedDaysTab() {
               <Plus className="h-4 w-4 mr-1" />{saving ? '追加中...' : '追加'}
               {previewCount > 1 && ` (${previewCount}日)`}
             </Button>
+            <CsvImportDialog
+              title="休館日CSVインポート"
+              description={"1行目：ヘッダー「日付」\n2行目以降：日付を1行ずつ入力（例: 2026/4/29）\n\n※ 既に登録済みの日付は自動でスキップされます\n※ 登録された日の予定済み授業は自動キャンセルされます"}
+              sampleCsv={"日付\n2026/04/29\n2026/05/03\n2026/05/04\n2026/05/05\n2026/05/06"}
+              apiEndpoint="/api/closed-days/import"
+              onSuccess={() => fetchClosedDays()}
+            />
           </div>
           {endDate && (
             <div className="flex gap-4 items-center">

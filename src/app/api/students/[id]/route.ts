@@ -144,31 +144,8 @@ export async function DELETE(
 
   const admin = createAdminClient()
 
-  // 売上データがある場合は削除をブロック（退塾処理を案内）
-  const [contracts, lectures, materials] = await Promise.all([
-    admin.from('contracts').select('id').eq('student_id', id).limit(1),
-    admin.from('lectures').select('id').eq('student_id', id).limit(1),
-    admin.from('material_sales').select('id').eq('student_id', id).limit(1),
-  ])
-  const hasFinancialData =
-    (contracts.data?.length || 0) > 0 ||
-    (lectures.data?.length || 0) > 0 ||
-    (materials.data?.length || 0) > 0
-
-  if (hasFinancialData) {
-    return NextResponse.json(
-      { error: 'この生徒には契約・講習・教材販売データが存在するため削除できません。売上履歴を保持するには「退塾」処理を行ってください。' },
-      { status: 400 }
-    )
-  }
-
-  // Delete related data without ON DELETE CASCADE first
-  await admin.from('email_logs').delete().eq('student_id', id)
-  await admin.from('summaries').delete().eq('student_id', id)
-  await admin.from('lesson_reports').delete().eq('student_id', id)
-
-  // Now delete student (CASCADE handles parent_emails, student_subjects, etc.)
-  const { error } = await admin.from('students').delete().eq('id', id)
+  // 論理削除（status を 'deleted' に変更するだけで実データは残す）
+  const { error } = await admin.from('students').update({ status: 'deleted' }).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }

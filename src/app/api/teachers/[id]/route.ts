@@ -15,14 +15,12 @@ export async function DELETE(
 
   const admin = createAdminClient()
 
-  // FK制約のある関連データを先にNULL化または削除
+  // FK制約のある関連データを先にNULL化
   await admin.from('lesson_reports').update({ teacher_id: null }).eq('teacher_id', id)
   await admin.from('mendan_records').update({ created_by: null }).eq('created_by', id)
-  // CASCADE設定済みだが明示的に削除
-  await admin.from('teacher_student_assignments').delete().eq('teacher_id', id)
-  await admin.from('profiles').delete().eq('id', id)
 
-  // 認証ユーザーも削除
+  // 認証ユーザーを削除（profiles は ON DELETE CASCADE で自動削除、
+  // teacher_student_assignments / instructor_shifts / lessons 等も CASCADE で削除）
   const { error } = await admin.auth.admin.deleteUser(id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })

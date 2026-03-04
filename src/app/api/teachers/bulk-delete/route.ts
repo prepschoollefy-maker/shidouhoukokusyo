@@ -25,6 +25,10 @@ export async function DELETE() {
   let count = 0
 
   for (const teacher of teachers) {
+    // FK制約のある関連データを先にNULL化
+    await admin.from('lesson_reports').update({ teacher_id: null }).eq('teacher_id', teacher.id)
+    await admin.from('mendan_records').update({ created_by: null }).eq('created_by', teacher.id)
+
     const { error } = await admin.auth.admin.deleteUser(teacher.id)
     if (error) {
       errors.push(error.message)

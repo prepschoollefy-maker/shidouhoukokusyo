@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { CheckCircle2, Loader2, ArrowRight, HelpCircle, Plus, Trash2 } from 'lucide-react'
+import { CheckCircle2, Loader2, ArrowRight, HelpCircle, Plus, Trash2, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { useContractAuth } from '../layout'
@@ -54,6 +54,7 @@ interface BillingItem {
   end_date: string
   student: { id: string; name: string; student_number: string | null; payment_method: string }
   effective_payment_method: '振込' | '口座振替'
+  out_of_period?: boolean
 }
 
 interface LectureBillingItem {
@@ -90,6 +91,10 @@ interface AdjustmentItem {
   completed_date: string | null
   notes: string
   created_at: string
+  contract_id: string | null
+  lecture_id: string | null
+  material_sale_id: string | null
+  linked_label: string | null
 }
 
 type ItemKey = string
@@ -152,6 +157,15 @@ function BillingPageInner() {
   const [adjForm, setAdjForm] = useState({ student_id: '', amount: '', reason: '', notes: '' })
   const [adjSaving, setAdjSaving] = useState(false)
   const [students, setStudents] = useState<{ id: string; name: string; student_number: string | null }[]>([])
+  // 請求項目紐付き調整ダイアログ用
+  const [adjLinkedTarget, setAdjLinkedTarget] = useState<{
+    billingType: 'contract' | 'lecture' | 'material'
+    refId: string
+    studentName: string
+    billingLabel: string
+    billedAmount: number
+    studentId: string
+  } | null>(null)
 
   // 詳細ダイアログ
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -229,6 +243,28 @@ function BillingPageInner() {
   /** オーバーライド用レコード（paid_amount=0, status=未入金）も未入金扱い */
   const isUnpaidStatus = (payment: Payment | undefined): boolean =>
     !payment || payment.status === '未入金'
+
+  /* ---- adjustment lookup for billing items ---- */
+
+  const getAdjustmentsForItem = (type: 'contract' | 'lecture' | 'material', id: string): AdjustmentItem[] =>
+    adjustmentBilling.filter(a =>
+      type === 'contract' ? a.contract_id === id
+        : type === 'lecture' ? a.lecture_id === id
+        : a.material_sale_id === id
+    )
+
+  /** インライン表示されなかった全調整（紐付けなし ＋ 請求行が消えた孤立紐付き） */
+  const inlineAdjustmentIds = new Set<string>()
+  for (const b of billing) {
+    getAdjustmentsForItem('contract', b.id).forEach(a => inlineAdjustmentIds.add(a.id))
+  }
+  for (const l of lectureBilling) {
+    getAdjustmentsForItem('lecture', l.id).forEach(a => inlineAdjustmentIds.add(a.id))
+  }
+  for (const m of materialBilling) {
+    getAdjustmentsForItem('material', m.id).forEach(a => inlineAdjustmentIds.add(a.id))
+  }
+  const otherAdjustments = adjustmentBilling.filter(a => !inlineAdjustmentIds.has(a.id))
 
   /* ---- filter ---- */
 
@@ -583,6 +619,7 @@ function BillingPageInner() {
   /* ---- adjustment handlers ---- */
 
   const openAdjDialog = (item?: AdjustmentItem) => {
+    setAdjLinkedTarget(null)
     if (item) {
       setAdjEditing(item)
       setAdjForm({
@@ -595,6 +632,26 @@ function BillingPageInner() {
       setAdjEditing(null)
       setAdjForm({ student_id: '', amount: '', reason: '', notes: '' })
     }
+    setAdjDialogOpen(true)
+  }
+
+  /** 請求行から返金ダイアログを開く */
+  const openLinkedAdjDialog = (
+    billingType: 'contract' | 'lecture' | 'material',
+    refId: string,
+    studentId: string,
+    studentName: string,
+    billingLabel: string,
+    billedAmount: number,
+  ) => {
+    setAdjEditing(null)
+    setAdjLinkedTarget({ billingType, refId, studentName, billingLabel, billedAmount, studentId })
+    setAdjForm({
+      student_id: studentId,
+      amount: String(-billedAmount),
+      reason: '',
+      notes: '',
+    })
     setAdjDialogOpen(true)
   }
 
@@ -619,22 +676,30 @@ function BillingPageInner() {
         if (!res.ok) throw new Error('更新に失敗しました')
         toast.success('調整を更新しました')
       } else {
+        const postBody: Record<string, unknown> = {
+          student_id: adjForm.student_id,
+          year,
+          month,
+          amount: parseInt(adjForm.amount),
+          reason: adjForm.reason,
+          notes: adjForm.notes,
+        }
+        // 請求項目紐付けがある場合
+        if (adjLinkedTarget) {
+          if (adjLinkedTarget.billingType === 'contract') postBody.contract_id = adjLinkedTarget.refId
+          if (adjLinkedTarget.billingType === 'lecture') postBody.lecture_id = adjLinkedTarget.refId
+          if (adjLinkedTarget.billingType === 'material') postBody.material_sale_id = adjLinkedTarget.refId
+        }
         const res = await fetch(`/api/adjustments?${params}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            student_id: adjForm.student_id,
-            year,
-            month,
-            amount: parseInt(adjForm.amount),
-            reason: adjForm.reason,
-            notes: adjForm.notes,
-          }),
+          body: JSON.stringify(postBody),
         })
         if (!res.ok) throw new Error('登録に失敗しました')
         toast.success('調整を追加しました')
       }
       setAdjDialogOpen(false)
+      setAdjLinkedTarget(null)
       await fetchData(storedPw)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存に失敗しました')
@@ -736,6 +801,8 @@ function BillingPageInner() {
   const paymentStatusCell = (payment: Payment | undefined) => {
     const status = getStatus(payment)
     if (!payment) return <>{statusBadge(status)}</>
+    // オーバーライド専用レコード（入金額0・未入金）は通常の未入金と同じ表示
+    if (payment.paid_amount === 0 && payment.status === '未入金') return <>{statusBadge(status)}</>
     return (
       <div className="flex flex-col items-center gap-0.5">
         {statusBadge(status)}
@@ -756,8 +823,10 @@ function BillingPageInner() {
     key: ItemKey,
     billingType: 'contract' | 'lecture' | 'material',
     refId: string,
+    studentId: string,
     studentName: string,
     billedAmount: number,
+    billingLabel: string,
     defaultMethod: string,
     payment: Payment | undefined,
   ) => {
@@ -766,7 +835,7 @@ function BillingPageInner() {
     const isUnpaid = isUnpaidStatus(payment)
     if (isUnpaid) {
       return (
-        <div className="flex gap-1 justify-center">
+        <div className="flex gap-1 justify-center flex-wrap">
           <Button
             size="sm"
             disabled={isConfirming}
@@ -786,17 +855,57 @@ function BillingPageInner() {
           >
             詳細
           </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-red-500 hover:text-red-700"
+            onClick={() => openLinkedAdjDialog(billingType, refId, studentId, studentName, billingLabel, billedAmount)}
+          >
+            <Undo2 className="h-3.5 w-3.5 mr-1" />返金
+          </Button>
         </div>
       )
     }
     return (
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => openDetailDialog(billingType, refId, studentName, billedAmount, displayMethod, payment!)}
-      >
-        編集
-      </Button>
+      <div className="flex gap-1 justify-center flex-wrap">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => openDetailDialog(billingType, refId, studentName, billedAmount, displayMethod, payment!)}
+        >
+          編集
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-red-500 hover:text-red-700"
+          onClick={() => openLinkedAdjDialog(billingType, refId, studentId, studentName, billingLabel, billedAmount)}
+        >
+          <Undo2 className="h-3.5 w-3.5 mr-1" />返金
+        </Button>
+      </div>
+    )
+  }
+
+  /** 請求額セル: 調整がある場合はインライン表示 */
+  const billedAmountCell = (amount: number, adjustments: AdjustmentItem[]) => {
+    if (adjustments.length === 0) {
+      return <span className="font-mono font-bold">{formatYen(amount)}</span>
+    }
+    const adjTotal = adjustments.reduce((s, a) => s + a.amount, 0)
+    const netAmount = amount + adjTotal
+    return (
+      <div className="space-y-0.5">
+        <div className="font-mono font-bold">{formatYen(amount)}</div>
+        {adjustments.map(a => (
+          <div key={a.id} className="text-xs text-red-600">
+            返金 {formatYen(a.amount)}{a.reason ? `（${a.reason}）` : ''}
+          </div>
+        ))}
+        <div className="border-t border-gray-300 pt-0.5 text-xs font-bold text-gray-700">
+          実質 {formatYen(netAmount)}
+        </div>
+      </div>
     )
   }
 
@@ -946,12 +1055,15 @@ function BillingPageInner() {
                     const displayMethod = getDisplayPaymentMethod(payment, b.effective_payment_method)
                     const isOverridden = payment?.payment_method != null && payment.payment_method !== b.effective_payment_method
                     return (
-                      <TableRow key={b.id} className={confirmingKeys.has(key) ? 'opacity-60' : ''}>
+                      <TableRow key={b.id} className={`${confirmingKeys.has(key) ? 'opacity-60' : ''} ${b.out_of_period ? 'bg-gray-50' : ''}`}>
                         <TableCell className="text-center">
-                          {isUnpaid && <Checkbox checked={selected.has(key)} onCheckedChange={() => toggle(key)} />}
+                          {isUnpaid && !b.out_of_period && <Checkbox checked={selected.has(key)} onCheckedChange={() => toggle(key)} />}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">{b.student?.student_number || '-'}</TableCell>
-                        <TableCell className="font-medium">{b.student?.name}</TableCell>
+                        <TableCell className="font-medium">
+                          {b.student?.name}
+                          {b.out_of_period && <Badge variant="outline" className="ml-1 text-xs border-gray-400 text-gray-500">契約期間外</Badge>}
+                        </TableCell>
                         <TableCell className="text-center">{paymentMethodBadge(displayMethod, {
                           onClick: () => handleTogglePaymentMethod(key, 'contract', b.id, b.total_amount, displayMethod, payment),
                           isOverriding: overridingKeys.has(key),
@@ -969,10 +1081,10 @@ function BillingPageInner() {
                         <TableCell className="text-right font-mono text-red-500">
                           {b.campaign_discount_amount > 0 ? `-${formatYen(b.campaign_discount_amount)}` : '-'}
                         </TableCell>
-                        <TableCell className="text-right font-mono font-bold">{formatYen(b.total_amount)}</TableCell>
+                        <TableCell className="text-right">{billedAmountCell(b.total_amount, getAdjustmentsForItem('contract', b.id))}</TableCell>
                         <TableCell className="text-center">{paymentStatusCell(payment)}</TableCell>
                         <TableCell className="text-center">
-                          {actionCell(key, 'contract', b.id, b.student?.name || '', b.total_amount, b.effective_payment_method, payment)}
+                          {actionCell(key, 'contract', b.id, b.student?.id || '', b.student?.name || '', b.total_amount, formatCourses(b.courses), b.effective_payment_method, payment)}
                         </TableCell>
                       </TableRow>
                     )
@@ -1028,10 +1140,10 @@ function BillingPageInner() {
                         })}</TableCell>
                         <TableCell className="text-sm">{l.label}</TableCell>
                         <TableCell className="text-sm">{formatLectureCourses(l.courses)}</TableCell>
-                        <TableCell className="text-right font-mono font-bold">{formatYen(l.total_amount)}</TableCell>
+                        <TableCell className="text-right">{billedAmountCell(l.total_amount, getAdjustmentsForItem('lecture', l.id))}</TableCell>
                         <TableCell className="text-center">{paymentStatusCell(payment)}</TableCell>
                         <TableCell className="text-center">
-                          {actionCell(key, 'lecture', l.id, l.student?.name || '', l.total_amount, l.effective_payment_method, payment)}
+                          {actionCell(key, 'lecture', l.id, l.student?.id || '', l.student?.name || '', l.total_amount, l.label, l.effective_payment_method, payment)}
                         </TableCell>
                       </TableRow>
                     )
@@ -1089,10 +1201,10 @@ function BillingPageInner() {
                         <TableCell className="text-sm">{m.item_name}</TableCell>
                         <TableCell className="text-center">{m.quantity}</TableCell>
                         <TableCell className="text-right font-mono">{formatYen(m.unit_price)}</TableCell>
-                        <TableCell className="text-right font-mono font-bold">{formatYen(m.total_amount)}</TableCell>
+                        <TableCell className="text-right">{billedAmountCell(m.total_amount, getAdjustmentsForItem('material', m.id))}</TableCell>
                         <TableCell className="text-center">{paymentStatusCell(payment)}</TableCell>
                         <TableCell className="text-center">
-                          {actionCell(key, 'material', m.id, m.student?.name || '', m.total_amount, m.effective_payment_method, payment)}
+                          {actionCell(key, 'material', m.id, m.student?.id || '', m.student?.name || '', m.total_amount, m.item_name, m.effective_payment_method, payment)}
                         </TableCell>
                       </TableRow>
                     )
@@ -1109,9 +1221,9 @@ function BillingPageInner() {
             </CardContent>
           </Card>
 
-          {/* 返金・調整 */}
+          {/* その他の調整（インライン表示されなかった全調整） */}
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">返金・調整</h3>
+            <h3 className="text-lg font-semibold">その他の調整</h3>
             <Button size="sm" variant="outline" onClick={() => openAdjDialog()}>
               <Plus className="h-4 w-4 mr-1" />調整を追加
             </Button>
@@ -1123,6 +1235,7 @@ function BillingPageInner() {
                   <TableRow>
                     <TableHead>塾生番号</TableHead>
                     <TableHead>生徒名</TableHead>
+                    <TableHead>紐付き先</TableHead>
                     <TableHead>理由</TableHead>
                     <TableHead className="text-right">金額</TableHead>
                     <TableHead className="text-center">対応状況</TableHead>
@@ -1131,10 +1244,13 @@ function BillingPageInner() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {adjustmentBilling.map(a => (
+                  {otherAdjustments.map(a => (
                     <TableRow key={a.id}>
                       <TableCell className="text-muted-foreground text-sm">{a.student?.student_number || '-'}</TableCell>
                       <TableCell className="font-medium">{a.student?.name}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {a.linked_label || '-'}
+                      </TableCell>
                       <TableCell className="text-sm">{a.reason}</TableCell>
                       <TableCell className={`text-right font-mono font-bold ${a.amount < 0 ? 'text-red-600' : ''}`}>
                         {formatYen(a.amount)}
@@ -1163,10 +1279,10 @@ function BillingPageInner() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {adjustmentBilling.length === 0 && (
+                  {otherAdjustments.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                        該当月の返金・調整データがありません
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        該当月のその他の調整データはありません
                       </TableCell>
                     </TableRow>
                   )}
@@ -1257,13 +1373,28 @@ function BillingPageInner() {
       </Dialog>
 
       {/* Adjustment dialog */}
-      <Dialog open={adjDialogOpen} onOpenChange={setAdjDialogOpen}>
+      <Dialog open={adjDialogOpen} onOpenChange={(open) => { setAdjDialogOpen(open); if (!open) setAdjLinkedTarget(null) }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{adjEditing ? '調整を編集' : '調整を追加'}</DialogTitle>
+            <DialogTitle>{adjEditing ? '調整を編集' : adjLinkedTarget ? '返金・調整を追加' : '調整を追加'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {!adjEditing && (
+            {/* 紐付きモード: 請求情報を表示 */}
+            {adjLinkedTarget && (
+              <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+                <div className="text-sm"><span className="text-muted-foreground">生徒:</span> {adjLinkedTarget.studentName}</div>
+                <div className="text-sm"><span className="text-muted-foreground">請求内容:</span> {adjLinkedTarget.billingLabel}</div>
+                <div className="text-sm"><span className="text-muted-foreground">請求額:</span> <span className="font-bold">{formatYen(adjLinkedTarget.billedAmount)}</span></div>
+              </div>
+            )}
+            {/* 編集モード: 生徒名を表示 */}
+            {adjEditing && (
+              <div className="bg-muted/50 rounded-lg p-3">
+                <span className="text-sm text-muted-foreground">生徒:</span> {adjEditing.student?.name}
+              </div>
+            )}
+            {/* 紐付けなし新規: 生徒選択 */}
+            {!adjEditing && !adjLinkedTarget && (
               <div className="space-y-2">
                 <Label>生徒</Label>
                 <Select value={adjForm.student_id} onValueChange={v => setAdjForm({ ...adjForm, student_id: v })}>
@@ -1276,11 +1407,6 @@ function BillingPageInner() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-            )}
-            {adjEditing && (
-              <div className="bg-muted/50 rounded-lg p-3">
-                <span className="text-sm text-muted-foreground">生徒:</span> {adjEditing.student?.name}
               </div>
             )}
             <div className="space-y-2">
@@ -1310,7 +1436,7 @@ function BillingPageInner() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAdjDialogOpen(false)}>キャンセル</Button>
+            <Button variant="outline" onClick={() => { setAdjDialogOpen(false); setAdjLinkedTarget(null) }}>キャンセル</Button>
             <Button onClick={handleSaveAdjustment} disabled={adjSaving}>
               {adjSaving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />保存中</> : '保存'}
             </Button>

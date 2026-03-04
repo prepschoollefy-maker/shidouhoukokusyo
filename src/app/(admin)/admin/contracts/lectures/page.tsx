@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2, Search, ChevronsUpDown, Check, Tags } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, ChevronsUpDown, Check, Tags, ChevronDown, ChevronRight } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -60,6 +60,7 @@ export default function LecturesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Lecture | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'student' | 'timeline'>('student')
+  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
 
   // ラベル管理
   const [labelItems, setLabelItems] = useState<LabelItem[]>([])
@@ -596,64 +597,84 @@ export default function LecturesPage() {
 
       {/* 生徒別ビュー */}
       {viewMode === 'student' && (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {studentGroups.map((group) => {
             const studentTotal = group.lectures.reduce((s, l) => s + l.total_amount, 0)
+            const isExpanded = expandedStudents.has(group.student.id)
             return (
-              <Card key={group.student.id}>
-                <CardContent className="p-0">
-                  <div className="px-4 py-3 border-b bg-muted/30 flex items-center gap-3">
-                    <span className="font-medium">{group.student.name}</span>
+              <Card key={group.student.id} className="overflow-hidden">
+                <button
+                  className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-muted/50 transition-colors"
+                  onClick={() => setExpandedStudents(prev => {
+                    const next = new Set(prev)
+                    if (next.has(group.student.id)) next.delete(group.student.id)
+                    else next.add(group.student.id)
+                    return next
+                  })}
+                >
+                  {isExpanded
+                    ? <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    : <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  }
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="font-medium truncate">{group.student.name}</span>
                     {group.student.student_number && (
                       <span className="text-xs text-muted-foreground">{group.student.student_number}</span>
                     )}
-                    <span className="ml-auto font-mono text-sm font-medium">{formatYen(studentTotal)}</span>
                   </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>ラベル</TableHead>
-                        <TableHead>学年</TableHead>
-                        <TableHead>コース</TableHead>
-                        <TableHead className="text-right">合計金額</TableHead>
-                        <TableHead>月別内訳</TableHead>
-                        <TableHead className="w-20"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {group.lectures.map((l) => {
-                        const monthly = lectureMonthlyAmounts(l)
-                        return (
-                          <TableRow key={l.id}>
-                            <TableCell><Badge variant="secondary">{l.label}</Badge></TableCell>
-                            <TableCell>{l.grade}</TableCell>
-                            <TableCell className="text-sm">{formatCourses(l.courses)}</TableCell>
-                            <TableCell className="text-right font-mono">{formatYen(l.total_amount)}</TableCell>
-                            <TableCell>
-                              <div className="flex gap-2 flex-wrap">
-                                {monthly.map(({ label, amount }) => (
-                                  <span key={label} className="text-xs bg-muted px-2 py-0.5 rounded font-mono">
-                                    {label} {formatYen(amount)}
-                                  </span>
-                                ))}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-1">
-                                <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(l)}>
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(l)}>
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </CardContent>
+                  <span className="text-sm text-muted-foreground flex-shrink-0">
+                    {group.lectures.length}件
+                  </span>
+                  <span className="font-mono text-sm font-medium flex-shrink-0">{formatYen(studentTotal)}</span>
+                </button>
+                {isExpanded && (
+                  <CardContent className="p-0 border-t">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>ラベル</TableHead>
+                          <TableHead>学年</TableHead>
+                          <TableHead>コース</TableHead>
+                          <TableHead className="text-right">合計金額</TableHead>
+                          <TableHead>月別内訳</TableHead>
+                          <TableHead className="w-20"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {group.lectures.map((l) => {
+                          const monthly = lectureMonthlyAmounts(l)
+                          return (
+                            <TableRow key={l.id}>
+                              <TableCell><Badge variant="secondary">{l.label}</Badge></TableCell>
+                              <TableCell>{l.grade}</TableCell>
+                              <TableCell className="text-sm">{formatCourses(l.courses)}</TableCell>
+                              <TableCell className="text-right font-mono">{formatYen(l.total_amount)}</TableCell>
+                              <TableCell>
+                                <div className="flex gap-2 flex-wrap">
+                                  {monthly.map(({ label, amount }) => (
+                                    <span key={label} className="text-xs bg-muted px-2 py-0.5 rounded font-mono">
+                                      {label} {formatYen(amount)}
+                                    </span>
+                                  ))}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex gap-1">
+                                  <Button variant="ghost" size="icon" aria-label="編集" onClick={() => openEdit(l)}>
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" aria-label="削除" onClick={() => setDeleteTarget(l)}>
+                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                )}
               </Card>
             )
           })}

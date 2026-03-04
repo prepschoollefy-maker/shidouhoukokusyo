@@ -92,7 +92,6 @@ export default function StudentsPage() {
         </Card>
       ) : (
         <>
-          <p className="text-sm text-muted-foreground">{totalCount}名</p>
           <div className="space-y-2">
             {students.map((student) => (
               <Link key={student.id} href={`/students/${student.id}`}>
