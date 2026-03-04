@@ -61,21 +61,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertError.message }, { status: 500 })
   }
 
-  // 前契約のend_dateを新開始日の前日に更新
-  // 手動で文字列操作（タイムゾーン問題回避）
-  const [y, m, d] = new_start_date.split('-').map(Number)
-  const prevDay = new Date(y, m - 1, d - 1)
-  const prevEndDate = `${prevDay.getFullYear()}-${String(prevDay.getMonth() + 1).padStart(2, '0')}-${String(prevDay.getDate()).padStart(2, '0')}`
-
-  const { error: updateError } = await admin
-    .from('contracts')
-    .update({ end_date: prevEndDate })
-    .eq('id', contract_id)
-
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 })
-  }
-
   return NextResponse.json({
     ok: true,
     contract_id: newContract.id,

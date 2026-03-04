@@ -153,7 +153,9 @@ export function calculateAll(
   const g30 = g29 * (1 + TAX_RATE)
   const m30 = m29 * (1 + TAX_RATE)
 
-  const enrollmentFee = (campaign === '入塾金無料' || campaign === '講習キャンペーン' || campaign === '入塾金支払い済み') ? 0 : ENROLLMENT_FEE
+  const enrollmentFee = campaign === '入塾金半額' ? 16500
+    : (campaign === '入塾金無料' || campaign === '講習キャンペーン' || campaign === '入塾金支払い済み') ? 0
+    : ENROLLMENT_FEE
   const firstTuition = g30
   const firstTotal = enrollmentFee + firstTuition
 
@@ -246,6 +248,7 @@ export function calculateKeizoku(
   gradeBefore: string,
   gradeAfter: string,
   prevStartDate: string,
+  prevEndDate: string,
   startDate: string, // 継続日
   endDate: string,
   beforeCourses: { course: string; lessons: number }[],
@@ -254,7 +257,7 @@ export function calculateKeizoku(
   const prevStart = new Date(prevStartDate + 'T00:00:00')
   const keizokuDate = new Date(startDate + 'T00:00:00')
   const endD = new Date(endDate + 'T00:00:00')
-  const prevEnd = new Date(keizokuDate.getTime() - 86400000)
+  const prevEnd = new Date(prevEndDate + 'T00:00:00')
 
   const before = calcTuitionBlock(gradeBefore, beforeCourses)
   const after = calcTuitionBlock(gradeAfter, afterCourses)

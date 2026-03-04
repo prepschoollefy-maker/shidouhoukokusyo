@@ -114,7 +114,8 @@ function InitialPrint({ contract }: { contract: Contract }) {
 function RenewalPrint({ contract, prevContract }: { contract: Contract; prevContract: Contract }) {
   const calc = calculateKeizoku(
     prevContract.grade, contract.grade,
-    prevContract.start_date, contract.start_date, contract.end_date,
+    prevContract.start_date, prevContract.end_date,
+    contract.start_date, contract.end_date,
     prevContract.courses, contract.courses,
   )
 
