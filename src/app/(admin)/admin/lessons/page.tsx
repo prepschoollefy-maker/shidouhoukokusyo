@@ -18,7 +18,7 @@ import {
   ChevronLeft, ChevronRight, Plus, ArrowLeftRight, Menu,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { addDays, format, getDay } from 'date-fns'
+import { addDays, format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 
 // ─── Types ───────────────────────────
@@ -73,16 +73,6 @@ interface Lesson {
   booth: Booth | null
 }
 
-interface InstructorShift {
-  id: string
-  teacher_id: string
-  time_slot_id: string
-  shift_type: string
-  day_of_week: number | null
-  specific_date: string | null
-  is_available: boolean
-}
-
 interface FormData {
   student_id: string
   teacher_id: string
@@ -134,7 +124,6 @@ export default function SchedulePage() {
   const [students, setStudents] = useState<StudentOption[]>([])
   const [teachers, setTeachers] = useState<TeacherOption[]>([])
   const [subjects, setSubjects] = useState<SubjectOption[]>([])
-  const [shifts, setShifts] = useState<InstructorShift[]>([])
   const [loading, setLoading] = useState(true)
 
   const [currentDate, setCurrentDate] = useState(() => new Date())
@@ -187,14 +176,6 @@ export default function SchedulePage() {
     setLoading(false)
   }, [dateStr])
 
-  // シフト取得
-  const fetchShifts = useCallback(async () => {
-    const dow = getDay(currentDate)
-    const res = await fetch(`/api/instructor-shifts?day_of_week=${dow}&specific_date=${dateStr}`)
-    const json = await res.json()
-    setShifts(json.data || [])
-  }, [currentDate, dateStr])
-
   // 振替ストック取得
   const fetchStock = useCallback(async () => {
     const res = await fetch('/api/lessons/reschedule-stock')
@@ -203,28 +184,14 @@ export default function SchedulePage() {
   }, [])
 
   useEffect(() => { fetchMasters() }, [fetchMasters])
-  useEffect(() => { fetchLessons(); fetchShifts() }, [fetchLessons, fetchShifts])
+  useEffect(() => { fetchLessons() }, [fetchLessons])
   useEffect(() => { fetchStock() }, [fetchStock])
 
-  // 講師列を決定: シフトありの講師 + 当日授業を持つ講師
+  // 講師列を決定: 当日授業を持つ講師のみ表示
   const columnTeachers = useMemo(() => {
-    const dow = getDay(currentDate)
-    // シフト登録のある講師
-    const shiftTeacherIds = new Set(
-      shifts
-        .filter((s) => s.is_available && (
-          (s.shift_type === 'regular' && s.day_of_week === dow) ||
-          (s.shift_type === 'specific' && s.specific_date === dateStr)
-        ))
-        .map((s) => s.teacher_id)
-    )
-    // 当日授業を持つ講師
-    for (const l of lessons) {
-      shiftTeacherIds.add(l.teacher_id)
-    }
-    // teachersの順序を維持
-    return teachers.filter((t) => shiftTeacherIds.has(t.id))
-  }, [shifts, lessons, teachers, currentDate, dateStr])
+    const teacherIds = new Set(lessons.map((l) => l.teacher_id))
+    return teachers.filter((t) => teacherIds.has(t.id))
+  }, [lessons, teachers])
 
   // マトリクスデータ: matrix[time_slot_id][teacher_id] = Lesson[]
   const matrix = useMemo(() => {
