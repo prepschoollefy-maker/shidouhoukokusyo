@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Search, RefreshCw, Check } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { toast } from 'sonner'
@@ -131,6 +132,14 @@ export default function ContractsRenewPage() {
     const row = rowStates[contractId]
     if (!row || row.renewed || row.renewing) return
 
+    if (!row.newStartDate || !row.newEndDate) {
+      toast.error('期間を入力してください')
+      return
+    }
+    if (row.newStartDate > row.newEndDate) {
+      toast.error('開始日が終了日より後になっています')
+      return
+    }
     const validCourses = row.newCourses.filter(c => c.course && c.lessons > 0)
     if (validCourses.length === 0) {
       toast.error('コースを1つ以上設定してください')
@@ -234,206 +243,241 @@ export default function ContractsRenewPage() {
       )}
 
       {!loading && contracts.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left p-2 whitespace-nowrap">塾生No.</th>
-                <th className="text-left p-2 whitespace-nowrap">氏名</th>
-                <th className="text-left p-2 whitespace-nowrap">現学年</th>
-                <th className="text-left p-2 whitespace-nowrap">現コース</th>
-                <th className="text-left p-2 whitespace-nowrap">契約終了日</th>
-                <th className="p-2"></th>
-                <th className="text-left p-2 whitespace-nowrap">新学年</th>
-                <th className="text-left p-2 whitespace-nowrap">新コース1</th>
-                <th className="text-left p-2 whitespace-nowrap">コマ</th>
-                <th className="text-left p-2 whitespace-nowrap">新コース2</th>
-                <th className="text-left p-2 whitespace-nowrap">コマ</th>
-                <th className="text-left p-2 whitespace-nowrap">新開始日</th>
-                <th className="text-left p-2 whitespace-nowrap">新終了日</th>
-                <th className="text-left p-2 whitespace-nowrap">月謝</th>
-                <th className="p-2 whitespace-nowrap">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {contracts.map((c) => {
-                const row = rowStates[c.id]
-                if (!row) return null
+        <Card>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>塾生No.</TableHead>
+                  <TableHead>氏名</TableHead>
+                  <TableHead>現在</TableHead>
+                  <TableHead className="text-center w-8"></TableHead>
+                  <TableHead>新学年</TableHead>
+                  <TableHead>新コース（各コース＋週コマ数）</TableHead>
+                  <TableHead>新期間</TableHead>
+                  <TableHead className="text-right">月謝</TableHead>
+                  <TableHead className="text-center">操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {contracts.map((c) => {
+                  const row = rowStates[c.id]
+                  if (!row) return null
 
-                const preview = row.renewed
-                  ? row.newMonthlyAmount
-                  : getPreviewAmount(row)
+                  const preview = row.renewed
+                    ? row.newMonthlyAmount
+                    : getPreviewAmount(row)
 
-                return (
-                  <tr
-                    key={c.id}
-                    className={`border-b ${row.renewed ? 'bg-green-50 opacity-70' : 'hover:bg-muted/30'}`}
-                  >
-                    {/* 現在の契約（読み取り専用） */}
-                    <td className="p-2 whitespace-nowrap font-mono text-xs">
-                      {c.student?.student_number || '-'}
-                    </td>
-                    <td className="p-2 whitespace-nowrap">{c.student?.name || '-'}</td>
-                    <td className="p-2 whitespace-nowrap">{c.grade}</td>
-                    <td className="p-2 whitespace-nowrap text-xs">{formatCourses(c.courses)}</td>
-                    <td className="p-2 whitespace-nowrap">{c.end_date}</td>
+                  return (
+                    <TableRow
+                      key={c.id}
+                      className={row.renewed ? 'bg-green-50 opacity-70' : ''}
+                    >
+                      <TableCell className="font-mono text-xs whitespace-nowrap">
+                        {c.student?.student_number || '-'}
+                      </TableCell>
+                      <TableCell className="font-medium whitespace-nowrap">{c.student?.name || '-'}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        <div>{c.grade} / {formatCourses(c.courses)}</div>
+                        <div>〜{c.end_date}</div>
+                      </TableCell>
 
-                    {/* 矢印 */}
-                    <td className="p-2 text-center text-muted-foreground">→</td>
+                      <TableCell className="text-center text-muted-foreground">→</TableCell>
 
-                    {/* 新しい契約（編集可能） */}
-                    <td className="p-2">
-                      <Select
-                        value={row.newGrade}
-                        onValueChange={(v) => updateRow(c.id, { newGrade: v })}
-                        disabled={row.renewed}
-                      >
-                        <SelectTrigger className="w-20 h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {GRADES.map(g => (
-                            <SelectItem key={g} value={g}>{g}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </td>
-
-                    {/* コース1 */}
-                    <td className="p-2">
-                      <Select
-                        value={row.newCourses[0]?.course || ''}
-                        onValueChange={(v) => updateRowCourse(c.id, 0, 'course', v)}
-                        disabled={row.renewed}
-                      >
-                        <SelectTrigger className="w-24 h-8 text-xs">
-                          <SelectValue placeholder="-" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {COURSES.map(name => (
-                            <SelectItem key={name} value={name}>{name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="p-2">
-                      <Input
-                        type="number"
-                        min={1}
-                        max={7}
-                        value={row.newCourses[0]?.lessons || 1}
-                        onChange={(e) => updateRowCourse(c.id, 0, 'lessons', parseInt(e.target.value) || 1)}
-                        disabled={row.renewed}
-                        className="w-14 h-8 text-xs"
-                      />
-                    </td>
-
-                    {/* コース2 */}
-                    <td className="p-2">
-                      <Select
-                        value={row.newCourses[1]?.course || '_none'}
-                        onValueChange={(v) => {
-                          if (v === '_none') {
-                            // コース2を削除
-                            setRowStates(prev => ({
-                              ...prev,
-                              [c.id]: {
-                                ...prev[c.id],
-                                newCourses: [prev[c.id].newCourses[0]],
-                              },
-                            }))
-                          } else {
-                            if (row.newCourses.length < 2) {
-                              setRowStates(prev => ({
-                                ...prev,
-                                [c.id]: {
-                                  ...prev[c.id],
-                                  newCourses: [...prev[c.id].newCourses, { course: v, lessons: 1 }],
-                                },
-                              }))
-                            } else {
-                              updateRowCourse(c.id, 1, 'course', v)
-                            }
-                          }
-                        }}
-                        disabled={row.renewed}
-                      >
-                        <SelectTrigger className="w-24 h-8 text-xs">
-                          <SelectValue placeholder="-" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">-</SelectItem>
-                          {COURSES.map(name => (
-                            <SelectItem key={name} value={name}>{name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="p-2">
-                      {row.newCourses.length >= 2 && (
-                        <Input
-                          type="number"
-                          min={1}
-                          max={7}
-                          value={row.newCourses[1]?.lessons || 1}
-                          onChange={(e) => updateRowCourse(c.id, 1, 'lessons', parseInt(e.target.value) || 1)}
+                      <TableCell>
+                        <Select
+                          value={row.newGrade}
+                          onValueChange={(v) => updateRow(c.id, { newGrade: v })}
                           disabled={row.renewed}
-                          className="w-14 h-8 text-xs"
-                        />
-                      )}
-                    </td>
-
-                    {/* 日付 */}
-                    <td className="p-2">
-                      <Input
-                        type="date"
-                        value={row.newStartDate}
-                        onChange={(e) => updateRow(c.id, { newStartDate: e.target.value })}
-                        disabled={row.renewed}
-                        className="w-36 h-8 text-xs"
-                      />
-                    </td>
-                    <td className="p-2">
-                      <Input
-                        type="date"
-                        value={row.newEndDate}
-                        onChange={(e) => updateRow(c.id, { newEndDate: e.target.value })}
-                        disabled={row.renewed}
-                        className="w-36 h-8 text-xs"
-                      />
-                    </td>
-
-                    {/* 月謝プレビュー */}
-                    <td className="p-2 whitespace-nowrap font-mono text-xs">
-                      {preview != null ? formatYen(preview) : '-'}
-                    </td>
-
-                    {/* 操作 */}
-                    <td className="p-2 text-center">
-                      {row.renewed ? (
-                        <span className="inline-flex items-center gap-1 text-green-600 text-xs">
-                          <Check className="h-4 w-4" />
-                          済
-                        </span>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => handleRenew(c.id)}
-                          disabled={row.renewing}
-                          className="h-8 text-xs"
                         >
-                          <RefreshCw className={`h-3 w-3 mr-1 ${row.renewing ? 'animate-spin' : ''}`} />
-                          {row.renewing ? '処理中' : '更新'}
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+                          <SelectTrigger className="w-20 h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {GRADES.map(g => (
+                              <SelectItem key={g} value={g}>{g}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          {/* コース1 */}
+                          <div className="flex items-center gap-1">
+                            <Select
+                              value={row.newCourses[0]?.course || ''}
+                              onValueChange={(v) => updateRowCourse(c.id, 0, 'course', v)}
+                              disabled={row.renewed}
+                            >
+                              <SelectTrigger className="w-24 h-8 text-xs">
+                                <SelectValue placeholder="-" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {COURSES.map(name => (
+                                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="number" min={1} max={7}
+                              value={row.newCourses[0]?.lessons || 1}
+                              onChange={(e) => updateRowCourse(c.id, 0, 'lessons', parseInt(e.target.value) || 1)}
+                              disabled={row.renewed}
+                              className="w-14 h-8 text-xs"
+                            />
+                          </div>
+                          {/* コース2 */}
+                          <div className="flex items-center gap-1">
+                            <Select
+                              value={row.newCourses[1]?.course || '_none'}
+                              onValueChange={(v) => {
+                                if (v === '_none') {
+                                  setRowStates(prev => ({
+                                    ...prev,
+                                    [c.id]: {
+                                      ...prev[c.id],
+                                      newCourses: [prev[c.id].newCourses[0]],
+                                    },
+                                  }))
+                                } else {
+                                  if (row.newCourses.length < 2) {
+                                    setRowStates(prev => ({
+                                      ...prev,
+                                      [c.id]: {
+                                        ...prev[c.id],
+                                        newCourses: [...prev[c.id].newCourses, { course: v, lessons: 1 }],
+                                      },
+                                    }))
+                                  } else {
+                                    updateRowCourse(c.id, 1, 'course', v)
+                                  }
+                                }
+                              }}
+                              disabled={row.renewed}
+                            >
+                              <SelectTrigger className="w-24 h-8 text-xs">
+                                <SelectValue placeholder="-" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="_none">-</SelectItem>
+                                {COURSES.map(name => (
+                                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {row.newCourses.length >= 2 && (
+                              <Input
+                                type="number" min={1} max={7}
+                                value={row.newCourses[1]?.lessons || 1}
+                                onChange={(e) => updateRowCourse(c.id, 1, 'lessons', parseInt(e.target.value) || 1)}
+                                disabled={row.renewed}
+                                className="w-14 h-8 text-xs"
+                              />
+                            )}
+                          </div>
+                          {/* コース3 */}
+                          {(row.newCourses.length >= 2) && (
+                            <div className="flex items-center gap-1">
+                              <Select
+                                value={row.newCourses[2]?.course || '_none'}
+                                onValueChange={(v) => {
+                                  if (v === '_none') {
+                                    setRowStates(prev => ({
+                                      ...prev,
+                                      [c.id]: {
+                                        ...prev[c.id],
+                                        newCourses: prev[c.id].newCourses.slice(0, 2),
+                                      },
+                                    }))
+                                  } else {
+                                    if (row.newCourses.length < 3) {
+                                      setRowStates(prev => ({
+                                        ...prev,
+                                        [c.id]: {
+                                          ...prev[c.id],
+                                          newCourses: [...prev[c.id].newCourses, { course: v, lessons: 1 }],
+                                        },
+                                      }))
+                                    } else {
+                                      updateRowCourse(c.id, 2, 'course', v)
+                                    }
+                                  }
+                                }}
+                                disabled={row.renewed}
+                              >
+                                <SelectTrigger className="w-24 h-8 text-xs">
+                                  <SelectValue placeholder="-" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="_none">-</SelectItem>
+                                  {COURSES.map(name => (
+                                    <SelectItem key={name} value={name}>{name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {row.newCourses.length >= 3 && (
+                                <Input
+                                  type="number" min={1} max={7}
+                                  value={row.newCourses[2]?.lessons || 1}
+                                  onChange={(e) => updateRowCourse(c.id, 2, 'lessons', parseInt(e.target.value) || 1)}
+                                  disabled={row.renewed}
+                                  className="w-14 h-8 text-xs"
+                                />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <Input
+                            type="date"
+                            value={row.newStartDate}
+                            onChange={(e) => updateRow(c.id, { newStartDate: e.target.value })}
+                            disabled={row.renewed}
+                            className="w-32 h-8 text-xs"
+                          />
+                          <Input
+                            type="date"
+                            value={row.newEndDate}
+                            onChange={(e) => updateRow(c.id, { newEndDate: e.target.value })}
+                            disabled={row.renewed}
+                            className="w-32 h-8 text-xs"
+                          />
+                        </div>
+                      </TableCell>
+
+                      <TableCell className="text-right whitespace-nowrap font-mono text-sm">
+                        {preview != null ? formatYen(preview) : '-'}
+                      </TableCell>
+
+                      <TableCell className="text-center">
+                        {row.renewed ? (
+                          <span className="inline-flex items-center gap-1 text-green-600 text-xs">
+                            <Check className="h-4 w-4" />済
+                          </span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => handleRenew(c.id)}
+                            disabled={row.renewing}
+                            className="h-8 text-xs"
+                          >
+                            <RefreshCw className={`h-3 w-3 mr-1 ${row.renewing ? 'animate-spin' : ''}`} />
+                            {row.renewing ? '処理中' : '更新'}
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
     </div>
   )

@@ -330,7 +330,9 @@ function BillingPageInner() {
       return aNum.localeCompare(bNum, 'ja', { numeric: true })
     })
 
-  const filteredBilling = sortByStudentNumber(filterByStatus(billing, b => getPayment('contract', b.id), b => getDisplayPaymentMethod(getPayment('contract', b.id), b.effective_payment_method)))
+  // 休塾中で請求額0円かつ未確定の行は非表示
+  const visibleBilling = billing.filter(b => !(b.suspended && b.total_amount === 0 && !b.confirmed))
+  const filteredBilling = sortByStudentNumber(filterByStatus(visibleBilling, b => getPayment('contract', b.id), b => getDisplayPaymentMethod(getPayment('contract', b.id), b.effective_payment_method)))
   const filteredLectures = sortByStudentNumber(filterByStatus(lectureBilling, l => getPayment('lecture', l.id), l => getDisplayPaymentMethod(getPayment('lecture', l.id), l.effective_payment_method)))
   const filteredMaterials = sortByStudentNumber(filterByStatus(materialBilling, m => getPayment('material', m.id), m => getDisplayPaymentMethod(getPayment('material', m.id), m.effective_payment_method)))
   const filteredManuals = sortByStudentNumber(filterByStatus(manualBilling, m => getPayment('manual', m.id), m => getDisplayPaymentMethod(getPayment('manual', m.id), m.effective_payment_method)))
@@ -519,7 +521,10 @@ function BillingPageInner() {
           }
         }
       }
-      await Promise.all(promises)
+      // 5件ずつバッチ処理
+      for (let i = 0; i < promises.length; i += 5) {
+        await Promise.all(promises.slice(i, i + 5))
+      }
       toast.success(`${promises.length}件を入金OKにしました`)
       await fetchData(storedPw)
     } catch (error) {
@@ -573,7 +578,10 @@ function BillingPageInner() {
           promises.push(quickConfirmApi('manual', m.id, m.amount, '口座振替'))
         }
       }
-      await Promise.all(promises)
+      // 5件ずつバッチ処理
+      for (let i = 0; i < promises.length; i += 5) {
+        await Promise.all(promises.slice(i, i + 5))
+      }
       toast.success(`口座振替 ${promises.length}件を入金OKにしました`)
       await fetchData(storedPw)
     } catch (error) {
@@ -648,6 +656,7 @@ function BillingPageInner() {
   }
 
   const handleBulkLock = async () => {
+    if (!confirm('未確定の全項目を一括確定しますか？確定後は金額が固定されます。')) return
     // 未確定の全項目を確定
     const items: { billing_type: string; ref_id: string; snapshot: Record<string, unknown> }[] = []
     for (const b of billing) {
@@ -1293,7 +1302,7 @@ function BillingPageInner() {
             <span>通常コース: {formatYen(contractTotal)}（{billing.length}件）</span>
             {lectureTotal > 0 && <span>講習: {formatYen(lectureTotal)}（{lectureBilling.length}件）</span>}
             {materialTotal > 0 && <span>教材販売: {formatYen(materialTotal)}（{materialBilling.length}件）</span>}
-            {manualTotal > 0 && <span>その他の請求: {formatYen(manualTotal)}（{manualBilling.length}件）</span>}
+            {manualTotal > 0 && <span>個別請求: {formatYen(manualTotal)}（{manualBilling.length}件）</span>}
             {adjustmentTotal !== 0 && <span className={adjustmentTotal < 0 ? 'text-red-600' : ''}>返金・調整: {formatYen(adjustmentTotal)}（{adjustmentBilling.length}件）</span>}
           </div>
           <div className="flex gap-4 text-sm mt-2">
@@ -1406,7 +1415,7 @@ function BillingPageInner() {
                     const displayMethod = getDisplayPaymentMethod(payment, b.effective_payment_method)
                     const isOverridden = payment?.payment_method != null && payment.payment_method !== b.effective_payment_method
                     return (
-                      <TableRow key={b.id} className={`${confirmingKeys.has(key) ? 'opacity-60' : ''} ${b.out_of_period ? 'bg-gray-50' : ''}`}>
+                      <TableRow key={b.id} className={`${confirmingKeys.has(key) ? 'opacity-60' : ''} ${b.confirmed ? 'bg-red-100' : ''} ${b.out_of_period ? 'bg-gray-50' : ''}`}>
                         <TableCell className="text-center">
                           {isUnpaid && !b.out_of_period && <Checkbox checked={selected.has(key)} onCheckedChange={() => toggle(key)} />}
                         </TableCell>
@@ -1429,7 +1438,7 @@ function BillingPageInner() {
                               value={b.grade}
                               onValueChange={(v) => handleGradeChange(b.id, v, b.courses)}
                             >
-                              <SelectTrigger className="h-7 w-16 text-xs">
+                              <SelectTrigger className="h-7 w-20 text-xs">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1505,7 +1514,7 @@ function BillingPageInner() {
                     const displayMethod = getDisplayPaymentMethod(payment, l.effective_payment_method)
                     const isOverridden = payment?.payment_method != null && payment.payment_method !== l.effective_payment_method
                     return (
-                      <TableRow key={l.id} className={confirmingKeys.has(key) ? 'opacity-60' : ''}>
+                      <TableRow key={l.id} className={`${confirmingKeys.has(key) ? 'opacity-60' : ''} ${l.confirmed ? 'bg-red-100' : ''}`}>
                         <TableCell className="text-center">
                           {isUnpaid && <Checkbox checked={selected.has(key)} onCheckedChange={() => toggle(key)} />}
                         </TableCell>
@@ -1572,7 +1581,7 @@ function BillingPageInner() {
                     const displayMethod = getDisplayPaymentMethod(payment, m.effective_payment_method)
                     const isOverridden = payment?.payment_method != null && payment.payment_method !== m.effective_payment_method
                     return (
-                      <TableRow key={m.id} className={confirmingKeys.has(key) ? 'opacity-60' : ''}>
+                      <TableRow key={m.id} className={`${confirmingKeys.has(key) ? 'opacity-60' : ''} ${m.confirmed ? 'bg-red-100' : ''}`}>
                         <TableCell className="text-center">
                           {isUnpaid && <Checkbox checked={selected.has(key)} onCheckedChange={() => toggle(key)} />}
                         </TableCell>
@@ -1612,11 +1621,14 @@ function BillingPageInner() {
             </CardContent>
           </Card>
 
-          {/* その他の請求（手動請求） */}
+          {/* 個別請求（手動追加） */}
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">その他の請求</h3>
+            <div>
+              <h3 className="text-lg font-semibold">個別請求（手動追加）</h3>
+              <p className="text-xs text-muted-foreground">コース・講習・教材に該当しない請求を手動で追加できます</p>
+            </div>
             <Button size="sm" variant="outline" onClick={() => openManualDialog()}>
-              <Plus className="h-4 w-4 mr-1" />その他の請求を追加
+              <Plus className="h-4 w-4 mr-1" />個別請求を追加
             </Button>
           </div>
           <Card>
@@ -1643,7 +1655,7 @@ function BillingPageInner() {
                     const displayMethod = getDisplayPaymentMethod(payment, m.effective_payment_method)
                     const isOverridden = payment?.payment_method != null && payment.payment_method !== m.effective_payment_method
                     return (
-                      <TableRow key={m.id} className={confirmingKeys.has(key) ? 'opacity-60' : ''}>
+                      <TableRow key={m.id} className={`${confirmingKeys.has(key) ? 'opacity-60' : ''} ${m.confirmed ? 'bg-red-100' : ''}`}>
                         <TableCell className="text-center">
                           {isUnpaid && <Checkbox checked={selected.has(key)} onCheckedChange={() => toggle(key)} />}
                         </TableCell>
@@ -1710,7 +1722,7 @@ function BillingPageInner() {
                   {filteredManuals.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                        {statusFilter !== 'all' || paymentMethodFilter !== 'all' ? '該当するデータがありません' : '該当月のその他の請求データはありません'}
+                        {statusFilter !== 'all' || paymentMethodFilter !== 'all' ? '該当するデータがありません' : '該当月の個別請求データはありません'}
                       </TableCell>
                     </TableRow>
                   )}
@@ -1719,11 +1731,14 @@ function BillingPageInner() {
             </CardContent>
           </Card>
 
-          {/* その他の調整（インライン表示されなかった全調整） */}
+          {/* 返金・値引き調整 */}
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">その他の調整</h3>
+            <div>
+              <h3 className="text-lg font-semibold">返金・値引き調整</h3>
+              <p className="text-xs text-muted-foreground">返金や値引きなど、請求額の増減を記録します</p>
+            </div>
             <Button size="sm" variant="outline" onClick={() => openAdjDialog()}>
-              <Plus className="h-4 w-4 mr-1" />調整を追加
+              <Plus className="h-4 w-4 mr-1" />返金・調整を追加
             </Button>
           </div>
           <Card>
@@ -1780,7 +1795,7 @@ function BillingPageInner() {
                   {otherAdjustments.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                        該当月のその他の調整データはありません
+                        該当月の返金・値引き調整データはありません
                       </TableCell>
                     </TableRow>
                   )}
@@ -1946,7 +1961,7 @@ function BillingPageInner() {
       <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{manualEditing ? 'その他の請求を編集' : 'その他の請求を追加'}</DialogTitle>
+            <DialogTitle>{manualEditing ? '個別請求を編集' : '個別請求を追加'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             {manualEditing ? (

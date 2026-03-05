@@ -76,6 +76,7 @@ export default function LecturesPage() {
   const [formCourses, setFormCourses] = useState<LectureCourseEntry[]>([
     { course: '', total_lessons: 1, unit_price: 0, subtotal: 0, allocation: [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1, lessons: 1 }] }
   ])
+  const [formGradeOverride, setFormGradeOverride] = useState('')
   const [formNotes, setFormNotes] = useState('')
 
   const fetchLectures = useCallback(async () => {
@@ -113,7 +114,7 @@ export default function LecturesPage() {
 
   // 選択中の生徒の学年を取得
   const selectedStudent = students.find(s => s.id === formStudentId)
-  const formGrade = editing ? editing.grade : (selectedStudent?.grade || '')
+  const formGrade = formGradeOverride || (editing ? editing.grade : (selectedStudent?.grade || ''))
 
   // 合計金額を計算
   const calcTotal = useCallback(() => {
@@ -140,6 +141,7 @@ export default function LecturesPage() {
     setFormLabel('')
     setFormCourses([makeEmptyCourse()])
     setFormNotes('')
+    setFormGradeOverride('')
     setStudentSearch('')
     setStudentPopoverOpen(false)
     setEditing(null)
@@ -430,11 +432,17 @@ export default function LecturesPage() {
                   </PopoverContent>
                 </Popover>
               </div>
-              {formGrade && (
-                <div className="text-sm text-muted-foreground">
-                  学年: <span className="font-medium text-foreground">{formGrade}</span>
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label>学年</Label>
+                <Select value={formGrade} onValueChange={setFormGradeOverride}>
+                  <SelectTrigger className="w-24"><SelectValue placeholder="学年" /></SelectTrigger>
+                  <SelectContent>
+                    {GRADES.map(g => (
+                      <SelectItem key={g} value={g}>{g}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <Label>ラベル *</Label>
                 <Select value={formLabel} onValueChange={setFormLabel}>

@@ -185,6 +185,7 @@ export default function ContractsPage() {
   const handleSave = async () => {
     if (!formStudentId) { toast.error('生徒を選択してください'); return }
     if (!formStartDate || !formEndDate) { toast.error('期間を入力してください'); return }
+    if (formStartDate > formEndDate) { toast.error('開始日が終了日より後になっています'); return }
     if (!formGrade) { toast.error('生徒に学年が設定されていません'); return }
     const validCourses = formCourses.filter(c => c.course && c.lessons > 0)
     if (validCourses.length === 0) { toast.error('コースを1つ以上設定してください'); return }

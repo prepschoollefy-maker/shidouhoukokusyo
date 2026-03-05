@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Download } from 'lucide-react'
+import { toast } from 'sonner'
 import { useContractAuth } from '../layout'
 
 interface MonthData {
@@ -82,6 +83,8 @@ export default function ContractDashboardPage() {
         setTotalMaterialStudents(json.totalMaterialStudents || 0)
         setTotalMaterialQuantity(json.totalMaterialQuantity || 0)
         setTotalMaterialRevenue(json.totalMaterialRevenue || 0)
+      } else {
+        toast.error('データの取得に失敗しました')
       }
       setLoading(false)
     }
@@ -164,19 +167,19 @@ export default function ContractDashboardPage() {
         <Card>
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">当月売上</div>
-            <div className="text-3xl font-bold mt-1">{formatYen(currentRevenue)}</div>
+            <div className="text-2xl font-bold mt-1">{formatYen(currentRevenue)}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">生徒数</div>
-            <div className="text-3xl font-bold mt-1">{currentCount}<span className="text-lg ml-1">人</span></div>
+            <div className="text-2xl font-bold mt-1">{currentCount}<span className="text-lg ml-1">人</span></div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">平均月謝</div>
-            <div className="text-3xl font-bold mt-1">{formatYen(avgMonthly)}</div>
+            <div className="text-2xl font-bold mt-1">{formatYen(avgMonthly)}</div>
           </CardContent>
         </Card>
       </div>
@@ -271,7 +274,7 @@ export default function ContractDashboardPage() {
                 return (
                   <div key={i} className="flex-1 text-center">
                     <div className={`text-xs ${isCurrent ? 'font-bold text-blue-600' : 'text-muted-foreground'}`}>
-                      {m.month}月
+                      {(m.month === 1 || i === 0) ? `${m.year % 100}/` : ''}{m.month}月
                     </div>
                     <div className={`text-xs mt-0.5 ${isCurrent ? 'font-semibold' : 'text-muted-foreground'}`}>
                       {m.count}人
@@ -439,39 +442,39 @@ export default function ContractDashboardPage() {
         <CardContent className="p-4">
           <h3 className="text-sm font-medium text-muted-foreground mb-3">月別詳細</h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-2 px-2 font-medium text-muted-foreground">月</th>
-                  <th className="text-right py-2 px-2 font-medium text-muted-foreground">売上合計</th>
-                  <th className="text-right py-2 px-2 font-medium text-muted-foreground">通常</th>
-                  <th className="text-right py-2 px-2 font-medium text-muted-foreground">講習</th>
-                  <th className="text-right py-2 px-2 font-medium text-muted-foreground">教材</th>
-                  <th className="text-right py-2 px-2 font-medium text-muted-foreground">生徒数</th>
-                  <th className="text-right py-2 px-2 font-medium text-muted-foreground">前月比</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>月</TableHead>
+                  <TableHead className="text-right">売上合計</TableHead>
+                  <TableHead className="text-right">通常</TableHead>
+                  <TableHead className="text-right">講習</TableHead>
+                  <TableHead className="text-right">教材</TableHead>
+                  <TableHead className="text-right">生徒数</TableHead>
+                  <TableHead className="text-right">前月比</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {months.map((m, i) => {
                   const prev = i > 0 ? months[i - 1] : null
                   const diff = prev ? m.revenue - prev.revenue : 0
                   const isCurrent = i === months.length - 1
                   return (
-                    <tr key={i} className={`border-b last:border-b-0 ${isCurrent ? 'bg-blue-50' : ''}`}>
-                      <td className={`py-2 px-2 ${isCurrent ? 'font-bold' : ''}`}>{m.year}/{m.month}月</td>
-                      <td className="py-2 px-2 text-right font-medium">¥{m.revenue.toLocaleString()}</td>
-                      <td className="py-2 px-2 text-right text-muted-foreground">{m.contractRevenue > 0 ? `¥${m.contractRevenue.toLocaleString()}` : '—'}</td>
-                      <td className="py-2 px-2 text-right text-muted-foreground">{m.lectureRevenue > 0 ? `¥${m.lectureRevenue.toLocaleString()}` : '—'}</td>
-                      <td className="py-2 px-2 text-right text-muted-foreground">{m.materialRevenue > 0 ? `¥${m.materialRevenue.toLocaleString()}` : '—'}</td>
-                      <td className="py-2 px-2 text-right">{m.count}人</td>
-                      <td className={`py-2 px-2 text-right ${diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-500' : ''}`}>
+                    <TableRow key={i} className={isCurrent ? 'bg-blue-50' : ''}>
+                      <TableCell className={isCurrent ? 'font-bold' : ''}>{m.year}/{m.month}月</TableCell>
+                      <TableCell className="text-right font-medium">¥{m.revenue.toLocaleString()}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{m.contractRevenue > 0 ? `¥${m.contractRevenue.toLocaleString()}` : '—'}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{m.lectureRevenue > 0 ? `¥${m.lectureRevenue.toLocaleString()}` : '—'}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{m.materialRevenue > 0 ? `¥${m.materialRevenue.toLocaleString()}` : '—'}</TableCell>
+                      <TableCell className="text-right">{m.count}人</TableCell>
+                      <TableCell className={`text-right ${diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-500' : ''}`}>
                         {prev ? (diff > 0 ? '+' : '') + `¥${diff.toLocaleString()}` : '—'}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </CardContent>
       </Card>

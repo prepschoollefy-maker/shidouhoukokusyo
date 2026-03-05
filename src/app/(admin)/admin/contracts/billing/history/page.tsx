@@ -160,13 +160,19 @@ export default function BillingHistoryPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2">
-        <Button variant={tab === 'monthly' ? 'default' : 'outline'} size="sm" onClick={() => setTab('monthly')}>
+      <div className="flex rounded-lg border overflow-hidden w-fit">
+        <button
+          className={`px-4 py-2 text-sm font-medium transition-colors ${tab === 'monthly' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+          onClick={() => setTab('monthly')}
+        >
           月別サマリー
-        </Button>
-        <Button variant={tab === 'student' ? 'default' : 'outline'} size="sm" onClick={() => setTab('student')}>
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium transition-colors ${tab === 'student' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+          onClick={() => setTab('student')}
+        >
           生徒別
-        </Button>
+        </button>
       </div>
 
       {loading ? (
@@ -302,7 +308,7 @@ export default function BillingHistoryPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="sticky left-0 bg-background z-10">生徒名</TableHead>
+                    <TableHead className="sticky left-0 bg-background z-10 border-r">生徒名</TableHead>
                     {displayMonths.map(dm => (
                       <TableHead key={`${dm.year}-${dm.month}`} className="text-center min-w-[60px]">
                         {dm.month}月
@@ -316,7 +322,7 @@ export default function BillingHistoryPage() {
                 <TableBody>
                   {filteredStudents.map(s => (
                     <TableRow key={s.student_id}>
-                      <TableCell className="sticky left-0 bg-background z-10 font-medium whitespace-nowrap">
+                      <TableCell className="sticky left-0 bg-background z-10 border-r font-medium whitespace-nowrap">
                         {s.student_name}
                         {s.student_number && (
                           <span className="text-xs text-muted-foreground ml-1">({s.student_number})</span>

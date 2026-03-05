@@ -34,6 +34,9 @@ export default function ContractsHelpPage() {
             <Link href="/admin/contracts/dashboard" className="font-medium text-primary hover:underline">経営ダッシュボード</Link>
             <span className="text-muted-foreground">売上・生徒数の推移グラフ</span>
 
+            <Link href="/admin/students" className="font-medium text-primary hover:underline">休塾</Link>
+            <span className="text-muted-foreground">生徒管理ページから休塾の設定・解除</span>
+
             <Link href="/admin/contracts/renew" className="font-medium text-primary hover:underline">次年度契約一括更新</Link>
             <span className="text-muted-foreground">期限が近い契約を一括で更新</span>
           </div>
@@ -162,6 +165,61 @@ export default function ContractsHelpPage() {
               <p className="font-medium mb-1">フィルタ機能</p>
               <p className="text-muted-foreground ml-2">入金ステータス（すべて/未入金/入金済み/過不足あり）と支払方法（全件/振込/口座振替）で絞り込みが可能です。</p>
             </div>
+
+            <div>
+              <p className="font-medium mb-1">請求確定（ロック）</p>
+              <div className="bg-muted/50 rounded-lg p-4 space-y-1 text-sm">
+                <p>請求額を「確定」すると、その時点の金額がスナップショットとして保存されます。</p>
+                <p>確定済みの行は<strong>薄い赤色の背景</strong>で表示され、未確定の行と一目で区別できます。</p>
+                <p><strong>確定後の安全性:</strong> 確定した金額は、元の契約データが変更されても一切影響を受けません。売上履歴として安全に保持されます。</p>
+                <p><strong>確定解除:</strong> 必要に応じて「確定解除」ボタンで解除できます。解除すると最新の計算値に戻ります。</p>
+                <p><strong>一括確定:</strong> 「未確定をすべて確定」ボタンで、まだ確定していない全項目をまとめて確定できます。</p>
+              </div>
+            </div>
+
+            <div>
+              <p className="font-medium mb-1">個別請求（手動追加）</p>
+              <div className="bg-muted/50 rounded-lg p-4 space-y-1 text-sm">
+                <p>通常コース・講習・教材に該当しない請求を手動で追加できます。</p>
+                <p>例: イベント参加費、追加指導料、テスト代など。</p>
+                <p>ページ下部の「個別請求（手動追加）」セクションの「＋個別請求を追加」ボタンから作成します。</p>
+              </div>
+            </div>
+
+            <div>
+              <p className="font-medium mb-1">返金・値引き調整</p>
+              <div className="bg-muted/50 rounded-lg p-4 space-y-1 text-sm">
+                <p>返金や値引きなど、請求額の増減を記録する機能です。</p>
+                <p>例: 休塾による日割り返金、キャンペーン値引きなど。</p>
+                <p>ページ下部の「返金・値引き調整」セクションの「＋返金・調整を追加」ボタンから作成します。</p>
+                <p>各請求行の操作メニューからも、その請求に紐づけた調整を追加できます。</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── 休塾 ── */}
+      <Card>
+        <CardContent className="py-5 px-5 space-y-3">
+          <h3 className="text-lg font-semibold">休塾</h3>
+          <p className="text-sm leading-relaxed">
+            生徒の一時的な休塾を管理する機能です。休塾中は請求が自動的に停止されます。
+          </p>
+          <div className="text-sm space-y-2">
+            <p className="font-medium">設定方法:</p>
+            <ol className="list-decimal list-inside text-muted-foreground space-y-1 ml-2">
+              <li>生徒管理ページ（/admin/students）を開く</li>
+              <li>ステータスが「通塾生」になっていることを確認</li>
+              <li>対象生徒の「休塾」ボタンをクリック</li>
+              <li>開始月・終了月・理由を入力して設定</li>
+            </ol>
+          </div>
+          <div className="bg-muted/50 rounded-lg p-4 space-y-1 text-sm">
+            <p><strong>請求への影響:</strong> 休塾期間中の通常コース請求額は自動的に0円になります。未確定の0円行は請求・入金ページに表示されません。</p>
+            <p><strong>確定済みデータ:</strong> 休塾前に確定（ロック）した請求は、休塾後も金額がそのまま保持されます。売上履歴が変わることはありません。</p>
+            <p><strong>授業への影響:</strong> 休塾期間中の予定済み授業は自動的にキャンセルされます。</p>
+            <p><strong>休塾解除:</strong> 生徒管理ページで「休塾解除」ボタンをクリックすると、休塾が解除され授業が再生成されます。</p>
           </div>
         </CardContent>
       </Card>

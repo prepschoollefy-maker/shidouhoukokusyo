@@ -239,6 +239,10 @@ export default function StudentsPage() {
       toast.error('開始月と終了月を入力してください')
       return
     }
+    if (suspendEndYm < suspendStartYm) {
+      toast.error('終了月が開始月より前になっています')
+      return
+    }
     try {
       const res = await fetch(`/api/students/${studentId}/suspensions`, {
         method: 'POST',
@@ -304,9 +308,11 @@ export default function StudentsPage() {
               <Button variant="outline" onClick={handleExport}>
                 <Download className="h-4 w-4 mr-1" />CSVエクスポート
               </Button>
-              <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={() => setBulkDeleteOpen(true)}>
-                <Trash2 className="h-4 w-4 mr-1" />一括削除
-              </Button>
+              {statusFilter === 'withdrawn' && (
+                <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="h-4 w-4 mr-1" />一括削除
+                </Button>
+              )}
             </>
           )}
           {statusFilter === 'active' && (
@@ -416,7 +422,7 @@ export default function StudentsPage() {
             退塾済
           </button>
         </div>
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="塾生番号・生徒名で検索..."
@@ -445,7 +451,7 @@ export default function StudentsPage() {
                 <TableHead>学年</TableHead>
                 <TableHead>口座振替開始</TableHead>
                 <TableHead>メール</TableHead>
-                <TableHead className="w-24"></TableHead>
+                <TableHead className="w-48"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

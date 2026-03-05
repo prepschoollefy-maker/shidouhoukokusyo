@@ -113,6 +113,9 @@ export default function MaterialsPage() {
     if (!formStudentId) { toast.error('生徒を選択してください'); return }
     if (!formItemName) { toast.error('品名を入力してください'); return }
     if (!formSaleDate) { toast.error('販売日を入力してください'); return }
+    if (!formUnitPrice || parseInt(formUnitPrice) <= 0) { toast.error('単価を入力してください'); return }
+    const billingM = parseInt(formBillingMonth)
+    if (!billingM || billingM < 1 || billingM > 12) { toast.error('請求月は1〜12で入力してください'); return }
     if (saving) return
     setSaving(true)
 
