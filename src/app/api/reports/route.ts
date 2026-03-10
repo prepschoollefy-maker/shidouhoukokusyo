@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateLessonSummary } from '@/lib/claude/summary'
@@ -116,9 +117,9 @@ export async function POST(request: NextRequest) {
     await supabase.from('report_attitudes').insert(attitudeRows)
   }
 
-  // Generate per-lesson AI summary asynchronously
+  // Generate per-lesson AI summary in background (after response is sent)
   const admin = createAdminClient()
-  ;(async () => {
+  after(async () => {
     try {
       const { data: fullReport } = await admin
         .from('lesson_reports')
@@ -150,7 +151,7 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       console.error('Per-lesson AI summary generation failed:', e)
     }
-  })()
+  })
 
   return NextResponse.json({ data: report }, { status: 201 })
 }
