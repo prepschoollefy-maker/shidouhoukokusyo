@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
-  LayoutDashboard,
   FileText,
   Users,
   GraduationCap,
@@ -46,7 +45,6 @@ interface NavGroup {
 }
 
 const navGroups: (NavItem | NavGroup)[] = [
-  { href: '/admin/dashboard', label: 'ダッシュボード', icon: LayoutDashboard },
   {
     label: 'レポート',
     items: [
