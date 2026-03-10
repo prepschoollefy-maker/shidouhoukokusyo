@@ -78,7 +78,9 @@ export async function GET(request: NextRequest) {
   for (const r of reports) {
     const student = r.student as unknown as { id: string; name: string; grade: string | null }
     const subject = r.subject as unknown as { id: string; name: string }
-    const teacher = r.teacher as unknown as { id: string; display_name: string }
+    const teacher = r.teacher as unknown as { id: string; display_name: string } | null
+
+    if (!student) continue
 
     let group = groupMap.get(student.id)
     if (!group) {
@@ -106,7 +108,7 @@ export async function GET(request: NextRequest) {
         lesson_date: r.lesson_date,
         unit_covered: r.unit_covered,
         subject_name: subject.name,
-        teacher_name: teacher.display_name,
+        teacher_name: teacher?.display_name || '不明',
       })
     }
   }

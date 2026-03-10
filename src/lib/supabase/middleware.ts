@@ -48,13 +48,13 @@ export async function updateSession(request: NextRequest) {
   if (user && pathname === '/login') {
     const role = user.app_metadata?.role || 'teacher'
     const url = request.nextUrl.clone()
-    url.pathname = role === 'admin' ? '/admin/dashboard' : '/reports'
+    url.pathname = role === 'admin' ? '/admin/summaries' : '/reports'
     return NextResponse.redirect(url)
   }
   if (user && pathname === '/admin/login') {
     const role = user.app_metadata?.role || 'teacher'
     const url = request.nextUrl.clone()
-    url.pathname = role === 'admin' ? '/admin/dashboard' : '/reports'
+    url.pathname = role === 'admin' ? '/admin/summaries' : '/reports'
     return NextResponse.redirect(url)
   }
 
