@@ -76,6 +76,13 @@ export async function GET(request: NextRequest) {
     .eq('role', 'teacher')
     .order('display_name')
 
+  // 休館日（期間内のみ）
+  const { data: closedDays } = await admin
+    .from('closed_days')
+    .select('closed_date')
+    .gte('closed_date', period.start_date)
+    .lte('closed_date', period.end_date)
+
   return NextResponse.json({
     period,
     requests: requests || [],
@@ -84,5 +91,6 @@ export async function GET(request: NextRequest) {
     responses,
     timeSlots: timeSlots || [],
     teachers: teachers || [],
+    closedDates: (closedDays || []).map((d: { closed_date: string }) => d.closed_date),
   })
 }

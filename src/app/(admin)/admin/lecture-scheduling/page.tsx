@@ -83,12 +83,13 @@ function formatSlotTime(slot: TimeSlot): string {
   return `${slot.start_time.slice(0, 5)}-${slot.end_time.slice(0, 5)}`
 }
 
-function generateDateRange(startDate: string, endDate: string): string[] {
+function generateDateRange(startDate: string, endDate: string, closedDates: Set<string>): string[] {
   const dates: string[] = []
   const current = new Date(startDate + 'T00:00:00')
   const end = new Date(endDate + 'T00:00:00')
   while (current <= end) {
-    dates.push(current.toISOString().split('T')[0])
+    const ds = current.toISOString().split('T')[0]
+    if (!closedDates.has(ds)) dates.push(ds)
     current.setDate(current.getDate() + 1)
   }
   return dates
@@ -121,6 +122,7 @@ export default function LectureSchedulingAdmin() {
   const [responses, setResponses] = useState<Response[]>([])
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
+  const [closedDates, setClosedDates] = useState<Set<string>>(new Set())
 
   // UI状態
   const [expandedRequests, setExpandedRequests] = useState<Set<string>>(new Set())
@@ -146,6 +148,7 @@ export default function LectureSchedulingAdmin() {
       setResponses(data.responses)
       setTimeSlots(data.timeSlots)
       setTeachers(data.teachers)
+      setClosedDates(new Set(data.closedDates || []))
     }
     setOverviewLoading(false)
   }, [])
@@ -340,7 +343,7 @@ export default function LectureSchedulingAdmin() {
   }
 
   // 期間詳細: 生徒回答一覧 + 講師アサイン + 回答一覧
-  const dates = generateDateRange(selectedPeriod.start_date, selectedPeriod.end_date)
+  const dates = generateDateRange(selectedPeriod.start_date, selectedPeriod.end_date, closedDates)
   const st = statusLabels[selectedPeriod.status]
 
   return (

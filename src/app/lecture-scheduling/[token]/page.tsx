@@ -12,13 +12,6 @@ interface Period {
   student_deadline: string | null
 }
 
-interface Student {
-  id: string
-  name: string
-  student_number: string
-  grade: string
-}
-
 interface TimeSlot {
   id: string
   slot_number: number
@@ -27,14 +20,17 @@ interface TimeSlot {
   end_time: string
 }
 
-const SUBJECT_LIST = ['算数・数学', '英語', '国語', '理科', '社会']
+const SUBJECT_LIST = ['算数・数学', '英語', '国語（現代文・古文・漢文）', '理科（物理・化学・生物）', '社会（世界史・日本史・地理）']
 
-function generateDateRange(startDate: string, endDate: string): string[] {
+function generateDateRange(startDate: string, endDate: string, closedDates: Set<string>): string[] {
   const dates: string[] = []
   const current = new Date(startDate + 'T00:00:00')
   const end = new Date(endDate + 'T00:00:00')
   while (current <= end) {
-    dates.push(current.toISOString().split('T')[0])
+    const ds = current.toISOString().split('T')[0]
+    if (!closedDates.has(ds)) {
+      dates.push(ds)
+    }
     current.setDate(current.getDate() + 1)
   }
   return dates
@@ -58,11 +54,11 @@ export default function StudentSchedulingForm() {
   const [submitting, setSubmitting] = useState(false)
 
   const [period, setPeriod] = useState<Period | null>(null)
-  const [students, setStudents] = useState<Student[]>([])
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
-  const [submittedStudentIds, setSubmittedStudentIds] = useState<string[]>([])
+  const [closedDates, setClosedDates] = useState<Set<string>>(new Set())
 
-  const [selectedStudent, setSelectedStudent] = useState('')
+  const [studentNumber, setStudentNumber] = useState('')
+  const [studentName, setStudentName] = useState('')
   const [subjects, setSubjects] = useState<Record<string, number>>({})
   const [ngSlots, setNgSlots] = useState<Set<string>>(new Set()) // "date|slotId" or "date|all"
   const [note, setNote] = useState('')
@@ -77,28 +73,24 @@ export default function StudentSchedulingForm() {
         }
         const json = await res.json()
         setPeriod(json.period)
-        setStudents(json.students)
         setTimeSlots(json.timeSlots)
-        setSubmittedStudentIds(json.submittedStudentIds)
+        setClosedDates(new Set(json.closedDates || []))
       })
       .catch(() => setError('通信エラーが発生しました'))
       .finally(() => setLoading(false))
   }, [params.token])
 
-  const dates = period ? generateDateRange(period.start_date, period.end_date) : []
+  const dates = period ? generateDateRange(period.start_date, period.end_date, closedDates) : []
 
   const toggleNg = useCallback((dateStr: string, slotId: string | null) => {
     setNgSlots(prev => {
       const next = new Set(prev)
       if (slotId === null) {
-        // 終日NG toggle
         const key = `${dateStr}|all`
         if (next.has(key)) {
-          // 終日NG解除 → この日の個別スロットも全削除
           next.delete(key)
           timeSlots.forEach(s => next.delete(`${dateStr}|${s.id}`))
         } else {
-          // 終日NGに設定 → 個別スロットも全選択
           next.add(key)
           timeSlots.forEach(s => next.add(`${dateStr}|${s.id}`))
         }
@@ -106,10 +98,9 @@ export default function StudentSchedulingForm() {
         const key = `${dateStr}|${slotId}`
         if (next.has(key)) {
           next.delete(key)
-          next.delete(`${dateStr}|all`) // 終日フラグ解除
+          next.delete(`${dateStr}|all`)
         } else {
           next.add(key)
-          // 全スロット選択されたら終日にする
           const allSelected = timeSlots.every(s => next.has(`${dateStr}|${s.id}`))
           if (allSelected) next.add(`${dateStr}|all`)
         }
@@ -130,7 +121,8 @@ export default function StudentSchedulingForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedStudent) { setError('生徒を選択してください'); return }
+    if (!studentNumber.trim()) { setError('塾生番号を入力してください'); return }
+    if (!studentName.trim()) { setError('氏名を入力してください'); return }
     const totalLessons = Object.values(subjects).reduce((a, b) => a + b, 0)
     if (totalLessons === 0) { setError('科目ごとの希望コマ数を1つ以上入力してください'); return }
 
@@ -150,7 +142,6 @@ export default function StudentSchedulingForm() {
         }
       }
     })
-    // 終日NGでない日の個別スロット
     ngSlots.forEach(key => {
       const [dateStr, slotPart] = key.split('|')
       if (slotPart !== 'all' && !processedDates.has(dateStr)) {
@@ -163,7 +154,8 @@ export default function StudentSchedulingForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          student_id: selectedStudent,
+          student_number: studentNumber.trim(),
+          student_name: studentName.trim(),
           subjects,
           ng_slots: ngSlotsArray,
           note: note || null,
@@ -214,9 +206,6 @@ export default function StudentSchedulingForm() {
     )
   }
 
-  const selectedStudentObj = students.find(s => s.id === selectedStudent)
-  const isResubmission = submittedStudentIds.includes(selectedStudent)
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
       <header className="bg-white border-b shadow-sm">
@@ -234,31 +223,36 @@ export default function StudentSchedulingForm() {
 
       <main className="max-w-2xl mx-auto px-4 py-6">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* 生徒選択 */}
+          {/* 生徒情報（手入力） */}
           <div className="bg-white rounded-lg shadow-sm border p-5 space-y-4">
             <h2 className="font-semibold text-gray-900">生徒情報</h2>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                生徒氏名 <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={selectedStudent}
-                onChange={e => setSelectedStudent(e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="">選択してください</option>
-                {students.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.student_number} {s.name}（{s.grade}）
-                  </option>
-                ))}
-              </select>
-              {isResubmission && (
-                <p className="text-xs text-orange-600 mt-1">
-                  既に回答済みです。送信すると前回の回答が上書きされます。
-                </p>
-              )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  塾生番号 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={studentNumber}
+                  onChange={e => setStudentNumber(e.target.value)}
+                  placeholder="例: 001"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  氏名 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={studentName}
+                  onChange={e => setStudentName(e.target.value)}
+                  placeholder="例: 山田太郎"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
             </div>
+            <p className="text-xs text-gray-400">塾生番号と氏名の組み合わせで本人確認を行います。</p>
           </div>
 
           {/* 科目・コマ数 */}
@@ -267,10 +261,10 @@ export default function StudentSchedulingForm() {
               希望科目・コマ数 <span className="text-red-500 text-sm">*</span>
             </h2>
             <p className="text-sm text-gray-500">受講したい科目のコマ数を入力してください。</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3">
               {SUBJECT_LIST.map(subject => (
-                <div key={subject} className="flex items-center gap-2">
-                  <label className="text-sm text-gray-700 w-20 shrink-0">{subject}</label>
+                <div key={subject} className="flex items-center gap-3">
+                  <label className="text-sm text-gray-700 min-w-0 flex-1">{subject}</label>
                   <input
                     type="number"
                     min={0}
@@ -278,9 +272,9 @@ export default function StudentSchedulingForm() {
                     value={subjects[subject] || ''}
                     onChange={e => handleSubjectChange(subject, e.target.value)}
                     placeholder="0"
-                    className="w-20 rounded-md border border-gray-300 px-2 py-1.5 text-sm text-center"
+                    className="w-20 rounded-md border border-gray-300 px-2 py-1.5 text-sm text-center shrink-0"
                   />
-                  <span className="text-xs text-gray-400">コマ</span>
+                  <span className="text-xs text-gray-400 shrink-0">コマ</span>
                 </div>
               ))}
             </div>
@@ -377,7 +371,7 @@ export default function StudentSchedulingForm() {
             disabled={submitting}
             className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {submitting ? '送信中...' : isResubmission ? '回答を更新する' : '送信する'}
+            {submitting ? '送信中...' : '送信する'}
           </button>
         </form>
       </main>

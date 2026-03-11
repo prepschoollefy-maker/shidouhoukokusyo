@@ -48,6 +48,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     .select('id, slot_number, label, start_time, end_time')
     .order('sort_order')
 
+  // 休館日（期間内のみ）
+  const { data: closedDays } = await admin
+    .from('closed_days')
+    .select('closed_date')
+    .gte('closed_date', req.period.start_date)
+    .lte('closed_date', req.period.end_date)
+
   // 既存回答
   const { data: existingResponses } = await admin
     .from('lecture_scheduling_responses')
@@ -67,6 +74,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     studentNote: req.note,
     ngSlots: ngSlots || [],
     timeSlots: timeSlots || [],
+    closedDates: (closedDays || []).map(d => d.closed_date),
     existingResponses: existingResponses || [],
   })
 }

@@ -24,12 +24,15 @@ interface NgSlot {
   time_slot_id: string | null
 }
 
-function generateDateRange(startDate: string, endDate: string): string[] {
+function generateDateRange(startDate: string, endDate: string, closedDates: Set<string>): string[] {
   const dates: string[] = []
   const current = new Date(startDate + 'T00:00:00')
   const end = new Date(endDate + 'T00:00:00')
   while (current <= end) {
-    dates.push(current.toISOString().split('T')[0])
+    const ds = current.toISOString().split('T')[0]
+    if (!closedDates.has(ds)) {
+      dates.push(ds)
+    }
     current.setDate(current.getDate() + 1)
   }
   return dates
@@ -54,6 +57,7 @@ export default function TeacherSchedulingResponse() {
 
   const [period, setPeriod] = useState<Period | null>(null)
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
+  const [closedDates, setClosedDates] = useState<Set<string>>(new Set())
   const [studentName, setStudentName] = useState('')
   const [studentGrade, setStudentGrade] = useState('')
   const [subjects, setSubjects] = useState<Record<string, number>>({})
@@ -76,6 +80,7 @@ export default function TeacherSchedulingResponse() {
         const json = await res.json()
         setPeriod(json.period)
         setTimeSlots(json.timeSlots)
+        setClosedDates(new Set(json.closedDates || []))
         setStudentName(json.student.name)
         setStudentGrade(json.student.grade)
         setSubjects(json.subjects)
@@ -111,7 +116,7 @@ export default function TeacherSchedulingResponse() {
       .finally(() => setLoading(false))
   }, [params.token])
 
-  const dates = period ? generateDateRange(period.start_date, period.end_date) : []
+  const dates = period ? generateDateRange(period.start_date, period.end_date, closedDates) : []
 
   const toggleSlot = useCallback((dateStr: string, slotId: string) => {
     const key = `${dateStr}|${slotId}`

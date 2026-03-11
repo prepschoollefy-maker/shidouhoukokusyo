@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-// 生徒用: トークンで期間情報を取得
+// 生徒用: トークンで期間情報を取得（生徒一覧は返さない）
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   const admin = createAdminClient()
@@ -22,34 +22,27 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: '回答期限を過ぎています' }, { status: 410 })
   }
 
-  // 生徒一覧（active のみ）
-  const { data: students } = await admin
-    .from('students')
-    .select('id, name, student_number, grade')
-    .neq('status', 'deleted')
-    .order('student_number')
-
   // time_slots
   const { data: timeSlots } = await admin
     .from('time_slots')
     .select('id, slot_number, label, start_time, end_time')
     .order('sort_order')
 
-  // 既存回答一覧（この期間の全request）
-  const { data: existingRequests } = await admin
-    .from('lecture_scheduling_requests')
-    .select('student_id')
-    .eq('period_id', period.id)
+  // 休館日（期間内のみ）
+  const { data: closedDays } = await admin
+    .from('closed_days')
+    .select('closed_date')
+    .gte('closed_date', period.start_date)
+    .lte('closed_date', period.end_date)
 
   return NextResponse.json({
     period,
-    students: students || [],
     timeSlots: timeSlots || [],
-    submittedStudentIds: (existingRequests || []).map(r => r.student_id),
+    closedDates: (closedDays || []).map(d => d.closed_date),
   })
 }
 
-// 生徒用: 希望を提出
+// 生徒用: 希望を提出（塾生番号＋氏名で照合）
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   const admin = createAdminClient()
@@ -68,17 +61,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const body = await request.json()
-  const { student_id, subjects, ng_slots, note } = body
+  const { student_number, student_name, subjects, ng_slots, note } = body
 
-  if (!student_id || !subjects) {
+  if (!student_number || !student_name || !subjects) {
     return NextResponse.json({ error: '必須項目が不足しています' }, { status: 400 })
+  }
+
+  // 塾生番号＋氏名で照合
+  const { data: student } = await admin
+    .from('students')
+    .select('id, name, student_number')
+    .eq('student_number', student_number)
+    .neq('status', 'deleted')
+    .single()
+
+  if (!student) {
+    return NextResponse.json({ error: '塾生番号が見つかりません。正しい番号を入力してください。' }, { status: 400 })
+  }
+  if (student.name !== student_name.trim()) {
+    return NextResponse.json({ error: '氏名が一致しません。正しい氏名を入力してください。' }, { status: 400 })
   }
 
   // upsert: 同じ生徒の再回答を許可
   const { data: req, error: reqError } = await admin
     .from('lecture_scheduling_requests')
     .upsert(
-      { period_id: period.id, student_id, subjects, note: note || null, submitted_at: new Date().toISOString() },
+      { period_id: period.id, student_id: student.id, subjects, note: note || null, submitted_at: new Date().toISOString() },
       { onConflict: 'period_id,student_id' }
     )
     .select()
