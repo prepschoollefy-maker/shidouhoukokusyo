@@ -124,3 +124,28 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* テーブル列固定 (sticky columns) — 横スクロール時に左端に固定 */
+.sticky-col {
+  position: sticky !important;
+  z-index: 2 !important;
+}
+
+/* テーブルヘッダーを縦スクロール時に上端に固定 */
+[data-slot="table-container"] thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 3 !important;
+  background: hsl(0 0% 96%) !important;
+}
+
+/* ヘッダー行の固定列は左+上の両方に固定、z-indexを最高に */
+[data-slot="table-container"] thead .sticky-col {
+  z-index: 5 !important;
+  top: 0 !important;
+}
+
+/* 最後の固定列の右端にシャドウ（境界線の代わり） */
+.sticky-col-last {
+  box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.1);
+}

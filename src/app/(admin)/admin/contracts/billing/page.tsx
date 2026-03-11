@@ -1383,17 +1383,17 @@ function BillingPageInner() {
           {/* 通常コース */}
           <h3 className="text-lg font-semibold">通常コース</h3>
           <Card>
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
+            <CardContent className="p-0">
+              <div className="overflow-auto max-h-[60vh]"><Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10 text-center">
+                    <TableHead className="w-10 text-center sticky-col bg-muted" style={{left:0, minWidth:40}}>
                       {allUnpaidKeys.length > 0 && (
                         <Checkbox checked={allUnpaidSelected} onCheckedChange={toggleAll} aria-label="未入金を全選択" />
                       )}
                     </TableHead>
-                    <TableHead>塾生番号</TableHead>
-                    <TableHead>生徒名</TableHead>
+                    <TableHead className="sticky-col bg-muted" style={{left:40, minWidth:72}}>塾生番号</TableHead>
+                    <TableHead className="sticky-col sticky-col-last bg-muted" style={{left:112, minWidth:80}}>生徒名</TableHead>
                     <TableHead className="text-center">支払方法</TableHead>
                     <TableHead>学年</TableHead>
                     <TableHead>コース</TableHead>
@@ -1416,11 +1416,11 @@ function BillingPageInner() {
                     const isOverridden = payment?.payment_method != null && payment.payment_method !== b.effective_payment_method
                     return (
                       <TableRow key={b.id} className={`${confirmingKeys.has(key) ? 'opacity-60' : ''} ${b.confirmed ? 'bg-red-100' : ''} ${b.out_of_period ? 'bg-gray-50' : ''}`}>
-                        <TableCell className="text-center">
+                        <TableCell className="text-center sticky-col bg-white" style={{left:0, minWidth:40}}>
                           {isUnpaid && !b.out_of_period && <Checkbox checked={selected.has(key)} onCheckedChange={() => toggle(key)} />}
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">{b.student?.student_number || '-'}</TableCell>
-                        <TableCell className="font-medium">
+                        <TableCell className="text-muted-foreground text-sm sticky-col bg-white" style={{left:40, minWidth:72}}>{b.student?.student_number || '-'}</TableCell>
+                        <TableCell className="font-medium sticky-col sticky-col-last bg-white" style={{left:112, minWidth:80}}>
                           {b.student?.name}
                           {b.out_of_period && <Badge variant="outline" className="ml-1 text-xs border-gray-400 text-gray-500">契約期間外</Badge>}
                           {b.suspended && <Badge variant="outline" className="ml-1 text-xs border-blue-400 text-blue-600">休塾中</Badge>}
@@ -1483,20 +1483,20 @@ function BillingPageInner() {
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+              </Table></div>
             </CardContent>
           </Card>
 
           {/* 講習 */}
           <h3 className="text-lg font-semibold">講習</h3>
           <Card>
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
+            <CardContent className="p-0">
+              <div className="overflow-auto max-h-[60vh]"><Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10" />
-                    <TableHead>塾生番号</TableHead>
-                    <TableHead>生徒名</TableHead>
+                    <TableHead className="w-10 sticky-col bg-muted" style={{left:0, minWidth:40}} />
+                    <TableHead className="sticky-col bg-muted" style={{left:40, minWidth:72}}>塾生番号</TableHead>
+                    <TableHead className="sticky-col sticky-col-last bg-muted" style={{left:112, minWidth:80}}>生徒名</TableHead>
                     <TableHead className="text-center">支払方法</TableHead>
                     <TableHead>ラベル</TableHead>
                     <TableHead>コース</TableHead>
@@ -1515,11 +1515,11 @@ function BillingPageInner() {
                     const isOverridden = payment?.payment_method != null && payment.payment_method !== l.effective_payment_method
                     return (
                       <TableRow key={l.id} className={`${confirmingKeys.has(key) ? 'opacity-60' : ''} ${l.confirmed ? 'bg-red-100' : ''}`}>
-                        <TableCell className="text-center">
+                        <TableCell className="text-center sticky-col bg-white" style={{left:0, minWidth:40}}>
                           {isUnpaid && <Checkbox checked={selected.has(key)} onCheckedChange={() => toggle(key)} />}
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">{l.student?.student_number || '-'}</TableCell>
-                        <TableCell className="font-medium">{l.student?.name}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm sticky-col bg-white" style={{left:40, minWidth:72}}>{l.student?.student_number || '-'}</TableCell>
+                        <TableCell className="font-medium sticky-col sticky-col-last bg-white" style={{left:112, minWidth:80}}>{l.student?.name}</TableCell>
                         <TableCell className="text-center">{paymentMethodBadge(displayMethod, {
                           onClick: () => handleTogglePaymentMethod(key, 'lecture', l.id, l.total_amount, displayMethod, payment),
                           isOverriding: overridingKeys.has(key),
@@ -1549,20 +1549,20 @@ function BillingPageInner() {
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+              </Table></div>
             </CardContent>
           </Card>
 
           {/* 教材販売 */}
           <h3 className="text-lg font-semibold">教材販売</h3>
           <Card>
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
+            <CardContent className="p-0">
+              <div className="overflow-auto max-h-[60vh]"><Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10" />
-                    <TableHead>塾生番号</TableHead>
-                    <TableHead>生徒名</TableHead>
+                    <TableHead className="w-10 sticky-col bg-muted" style={{left:0, minWidth:40}} />
+                    <TableHead className="sticky-col bg-muted" style={{left:40, minWidth:72}}>塾生番号</TableHead>
+                    <TableHead className="sticky-col sticky-col-last bg-muted" style={{left:112, minWidth:80}}>生徒名</TableHead>
                     <TableHead className="text-center">支払方法</TableHead>
                     <TableHead>品名</TableHead>
                     <TableHead className="text-center">数量</TableHead>
@@ -1582,11 +1582,11 @@ function BillingPageInner() {
                     const isOverridden = payment?.payment_method != null && payment.payment_method !== m.effective_payment_method
                     return (
                       <TableRow key={m.id} className={`${confirmingKeys.has(key) ? 'opacity-60' : ''} ${m.confirmed ? 'bg-red-100' : ''}`}>
-                        <TableCell className="text-center">
+                        <TableCell className="text-center sticky-col bg-white" style={{left:0, minWidth:40}}>
                           {isUnpaid && <Checkbox checked={selected.has(key)} onCheckedChange={() => toggle(key)} />}
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">{m.student?.student_number || '-'}</TableCell>
-                        <TableCell className="font-medium">{m.student?.name}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm sticky-col bg-white" style={{left:40, minWidth:72}}>{m.student?.student_number || '-'}</TableCell>
+                        <TableCell className="font-medium sticky-col sticky-col-last bg-white" style={{left:112, minWidth:80}}>{m.student?.name}</TableCell>
                         <TableCell className="text-center">{paymentMethodBadge(displayMethod, {
                           onClick: () => handleTogglePaymentMethod(key, 'material', m.id, m.total_amount, displayMethod, payment),
                           isOverriding: overridingKeys.has(key),
@@ -1617,7 +1617,7 @@ function BillingPageInner() {
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+              </Table></div>
             </CardContent>
           </Card>
 
@@ -1632,13 +1632,13 @@ function BillingPageInner() {
             </Button>
           </div>
           <Card>
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
+            <CardContent className="p-0">
+              <div className="overflow-auto max-h-[60vh]"><Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-10" />
-                    <TableHead>塾生番号</TableHead>
-                    <TableHead>生徒名</TableHead>
+                    <TableHead className="w-10 sticky-col bg-muted" style={{left:0, minWidth:40}} />
+                    <TableHead className="sticky-col bg-muted" style={{left:40, minWidth:72}}>塾生番号</TableHead>
+                    <TableHead className="sticky-col sticky-col-last bg-muted" style={{left:112, minWidth:80}}>生徒名</TableHead>
                     <TableHead className="text-center">支払方法</TableHead>
                     <TableHead>説明</TableHead>
                     <TableHead className="text-right">請求額</TableHead>
@@ -1656,11 +1656,11 @@ function BillingPageInner() {
                     const isOverridden = payment?.payment_method != null && payment.payment_method !== m.effective_payment_method
                     return (
                       <TableRow key={m.id} className={`${confirmingKeys.has(key) ? 'opacity-60' : ''} ${m.confirmed ? 'bg-red-100' : ''}`}>
-                        <TableCell className="text-center">
+                        <TableCell className="text-center sticky-col bg-white" style={{left:0, minWidth:40}}>
                           {isUnpaid && <Checkbox checked={selected.has(key)} onCheckedChange={() => toggle(key)} />}
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">{m.student?.student_number || '-'}</TableCell>
-                        <TableCell className="font-medium">{m.student?.name}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm sticky-col bg-white" style={{left:40, minWidth:72}}>{m.student?.student_number || '-'}</TableCell>
+                        <TableCell className="font-medium sticky-col sticky-col-last bg-white" style={{left:112, minWidth:80}}>{m.student?.name}</TableCell>
                         <TableCell className="text-center">{paymentMethodBadge(displayMethod, {
                           onClick: () => handleTogglePaymentMethod(key, 'manual', m.id, m.amount, displayMethod, payment),
                           isOverriding: overridingKeys.has(key),
@@ -1727,7 +1727,7 @@ function BillingPageInner() {
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+              </Table></div>
             </CardContent>
           </Card>
 
@@ -1742,12 +1742,12 @@ function BillingPageInner() {
             </Button>
           </div>
           <Card>
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
+            <CardContent className="p-0">
+              <div className="overflow-auto max-h-[60vh]"><Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>塾生番号</TableHead>
-                    <TableHead>生徒名</TableHead>
+                    <TableHead className="sticky-col bg-muted" style={{left:0, minWidth:72}}>塾生番号</TableHead>
+                    <TableHead className="sticky-col sticky-col-last bg-muted" style={{left:72, minWidth:80}}>生徒名</TableHead>
                     <TableHead>紐付き先</TableHead>
                     <TableHead>理由</TableHead>
                     <TableHead className="text-right">金額</TableHead>
@@ -1759,8 +1759,8 @@ function BillingPageInner() {
                 <TableBody>
                   {otherAdjustments.map(a => (
                     <TableRow key={a.id}>
-                      <TableCell className="text-muted-foreground text-sm">{a.student?.student_number || '-'}</TableCell>
-                      <TableCell className="font-medium">{a.student?.name}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm sticky-col bg-white" style={{left:0, minWidth:72}}>{a.student?.student_number || '-'}</TableCell>
+                      <TableCell className="font-medium sticky-col sticky-col-last bg-white" style={{left:72, minWidth:80}}>{a.student?.name}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {a.linked_label || '-'}
                       </TableCell>
@@ -1800,7 +1800,7 @@ function BillingPageInner() {
                     </TableRow>
                   )}
                 </TableBody>
-              </Table>
+              </Table></div>
             </CardContent>
           </Card>
         </>

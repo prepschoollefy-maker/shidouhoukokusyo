@@ -28,9 +28,12 @@ import {
   ShoppingBag,
   RefreshCw,
   HelpCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { useSidebar } from './sidebar-context'
 
 interface NavItem {
   href: string
@@ -109,6 +112,7 @@ export function AdminSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+  const { collapsed, toggle } = useSidebar()
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -126,24 +130,38 @@ export function AdminSidebar() {
         key={item.href}
         href={item.href}
         {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+        title={collapsed ? item.label : undefined}
         className={cn(
-          'flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors',
+          'flex items-center text-sm font-medium rounded-md transition-colors',
+          collapsed ? 'px-2 py-2 justify-center' : 'px-3 py-2',
           isActive
             ? 'bg-gray-800 text-white'
             : 'text-gray-300 hover:bg-gray-700 hover:text-white'
         )}
       >
-        <Icon className="mr-3 h-5 w-5 flex-shrink-0" />
-        {item.label}
+        <Icon className={cn('h-5 w-5 flex-shrink-0', !collapsed && 'mr-3')} />
+        {!collapsed && item.label}
       </Link>
     )
   }
 
   return (
-    <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-gray-900">
+    <aside className={cn(
+      'hidden md:flex md:flex-col md:fixed md:inset-y-0 bg-gray-900 transition-all duration-200',
+      collapsed ? 'md:w-16' : 'md:w-64'
+    )}>
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="flex items-center h-16 px-4 bg-gray-900">
-          <h1 className="text-xl font-bold text-white">レフィー管理</h1>
+        <div className="flex items-center h-16 px-4 bg-gray-900 justify-between">
+          {!collapsed && <h1 className="text-xl font-bold text-white">レフィー管理</h1>}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-gray-400 hover:text-white hover:bg-gray-700 flex-shrink-0"
+            onClick={toggle}
+            title={collapsed ? 'サイドバーを展開' : 'サイドバーを折りたたむ'}
+          >
+            {collapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+          </Button>
         </div>
         <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
           {navGroups.map((entry, i) => {
@@ -152,9 +170,12 @@ export function AdminSidebar() {
             }
             return (
               <div key={entry.label} className={cn(i > 0 && 'pt-4')}>
-                <p className="px-3 mb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  {entry.label}
-                </p>
+                {!collapsed && (
+                  <p className="px-3 mb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    {entry.label}
+                  </p>
+                )}
+                {collapsed && i > 0 && <div className="border-t border-gray-700 mb-2" />}
                 {entry.items.map(renderLink)}
               </div>
             )
@@ -163,11 +184,15 @@ export function AdminSidebar() {
         <div className="px-2 py-4 border-t border-gray-700">
           <Button
             variant="ghost"
-            className="w-full justify-start text-gray-300 hover:text-white hover:bg-gray-700"
+            className={cn(
+              'w-full text-gray-300 hover:text-white hover:bg-gray-700',
+              collapsed ? 'justify-center px-2' : 'justify-start'
+            )}
             onClick={handleLogout}
+            title={collapsed ? 'ログアウト' : undefined}
           >
-            <LogOut className="mr-3 h-5 w-5" />
-            ログアウト
+            <LogOut className={cn('h-5 w-5', !collapsed && 'mr-3')} />
+            {!collapsed && 'ログアウト'}
           </Button>
         </div>
       </div>
