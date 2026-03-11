@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { Plus, Copy, Trash2, ExternalLink, ChevronDown, ChevronRight, Check } from 'lucide-react'
+import { Plus, Copy, Trash2, ExternalLink, ChevronDown, ChevronRight, Check, Pencil } from 'lucide-react'
 
 interface Period {
   id: string
@@ -111,6 +111,7 @@ export default function LectureSchedulingAdmin() {
   const [loading, setLoading] = useState(true)
   const [selectedPeriod, setSelectedPeriod] = useState<Period | null>(null)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [editTarget, setEditTarget] = useState<Period | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Period | null>(null)
 
   // 期間詳細データ
@@ -190,6 +191,30 @@ export default function LectureSchedulingAdmin() {
       toast.error('削除に失敗しました')
     }
     setDeleteTarget(null)
+  }
+
+  const handleEditPeriod = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!editTarget) return
+    const form = new FormData(e.currentTarget)
+    const res = await fetch(`/api/lecture-scheduling/periods/${editTarget.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        label: form.get('label'),
+        start_date: form.get('start_date'),
+        end_date: form.get('end_date'),
+        student_deadline: form.get('student_deadline') || null,
+      }),
+    })
+    if (res.ok) {
+      toast.success('更新しました')
+      setEditTarget(null)
+      fetchPeriods()
+    } else {
+      const err = await res.json()
+      toast.error(err.error || 'エラー')
+    }
   }
 
   const handleStatusChange = async (period: Period, newStatus: string) => {
@@ -290,6 +315,9 @@ export default function LectureSchedulingAdmin() {
                       <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); copyStudentUrl(p.student_token) }}>
                         <Copy className="h-3 w-3 mr-1" />生徒URL
                       </Button>
+                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditTarget(p) }}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
                       <Button size="sm" variant="ghost" className="text-red-500" onClick={(e) => { e.stopPropagation(); setDeleteTarget(p) }}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -326,6 +354,36 @@ export default function LectureSchedulingAdmin() {
               </div>
               <Button type="submit" className="w-full">作成</Button>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* 編集ダイアログ */}
+        <Dialog open={!!editTarget} onOpenChange={() => setEditTarget(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>講習期間の編集</DialogTitle></DialogHeader>
+            {editTarget && (
+              <form onSubmit={handleEditPeriod} className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">ラベル <span className="text-red-500">*</span></label>
+                  <input name="label" required defaultValue={editTarget.label} className="w-full mt-1 rounded-md border px-3 py-2 text-sm" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">開始日 <span className="text-red-500">*</span></label>
+                    <input name="start_date" type="date" required defaultValue={editTarget.start_date} className="w-full mt-1 rounded-md border px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">終了日 <span className="text-red-500">*</span></label>
+                    <input name="end_date" type="date" required defaultValue={editTarget.end_date} className="w-full mt-1 rounded-md border px-3 py-2 text-sm" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">生徒回答期限</label>
+                  <input name="student_deadline" type="datetime-local" defaultValue={editTarget.student_deadline?.slice(0, 16) || ''} className="w-full mt-1 rounded-md border px-3 py-2 text-sm" />
+                </div>
+                <Button type="submit" className="w-full">更新</Button>
+              </form>
+            )}
           </DialogContent>
         </Dialog>
 
