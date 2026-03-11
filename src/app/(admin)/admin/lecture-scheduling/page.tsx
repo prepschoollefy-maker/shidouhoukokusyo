@@ -83,13 +83,12 @@ function formatSlotTime(slot: TimeSlot): string {
   return `${slot.start_time.slice(0, 5)}-${slot.end_time.slice(0, 5)}`
 }
 
-function generateDateRange(startDate: string, endDate: string, closedDates: Set<string>): string[] {
+function generateDateRange(startDate: string, endDate: string): string[] {
   const dates: string[] = []
   const current = new Date(startDate + 'T00:00:00')
   const end = new Date(endDate + 'T00:00:00')
   while (current <= end) {
-    const ds = current.toISOString().split('T')[0]
-    if (!closedDates.has(ds)) dates.push(ds)
+    dates.push(current.toISOString().split('T')[0])
     current.setDate(current.getDate() + 1)
   }
   return dates
@@ -343,7 +342,7 @@ export default function LectureSchedulingAdmin() {
   }
 
   // 期間詳細: 生徒回答一覧 + 講師アサイン + 回答一覧
-  const dates = generateDateRange(selectedPeriod.start_date, selectedPeriod.end_date, closedDates)
+  const dates = generateDateRange(selectedPeriod.start_date, selectedPeriod.end_date)
   const st = statusLabels[selectedPeriod.status]
 
   return (
@@ -513,16 +512,23 @@ export default function LectureSchedulingAdmin() {
                             <tbody>
                               {dates.map(dateStr => {
                                 const isAllDayNg = ngAllDays.has(dateStr)
+                                const isClosed = closedDates.has(dateStr)
                                 return (
-                                  <tr key={dateStr}>
-                                    <td className="sticky left-0 bg-white z-10 px-2 py-1 border font-medium whitespace-nowrap">
+                                  <tr key={dateStr} className={isClosed ? 'bg-gray-200/60' : ''}>
+                                    <td className={`sticky left-0 z-10 px-2 py-1 border font-medium whitespace-nowrap ${isClosed ? 'bg-gray-200' : 'bg-white'}`}>
                                       {formatDate(dateStr)}
+                                      {isClosed && <span className="ml-1 text-[10px] text-gray-500">休館</span>}
                                     </td>
+                                    {isClosed ? (
+                                      <td colSpan={timeSlots.length} className="px-1 py-1 border text-center text-xs text-gray-400">
+                                        休館日
+                                      </td>
+                                    ) : (
+                                      <>
                                     {timeSlots.map(slot => {
                                       const key = `${dateStr}|${slot.id}`
                                       const isNg = ngSet.has(key) || isAllDayNg
 
-                                      // 講師ごとの回答を確認
                                       const teacherOks = reqAssignments
                                         .filter(a => {
                                           return responses.some(r =>
@@ -551,6 +557,8 @@ export default function LectureSchedulingAdmin() {
                                         </td>
                                       )
                                     })}
+                                      </>
+                                    )}
                                   </tr>
                                 )
                               })}

@@ -24,15 +24,12 @@ interface NgSlot {
   time_slot_id: string | null
 }
 
-function generateDateRange(startDate: string, endDate: string, closedDates: Set<string>): string[] {
+function generateDateRange(startDate: string, endDate: string): string[] {
   const dates: string[] = []
   const current = new Date(startDate + 'T00:00:00')
   const end = new Date(endDate + 'T00:00:00')
   while (current <= end) {
-    const ds = current.toISOString().split('T')[0]
-    if (!closedDates.has(ds)) {
-      dates.push(ds)
-    }
+    dates.push(current.toISOString().split('T')[0])
     current.setDate(current.getDate() + 1)
   }
   return dates
@@ -116,7 +113,7 @@ export default function TeacherSchedulingResponse() {
       .finally(() => setLoading(false))
   }, [params.token])
 
-  const dates = period ? generateDateRange(period.start_date, period.end_date, closedDates) : []
+  const dates = period ? generateDateRange(period.start_date, period.end_date) : []
 
   const toggleSlot = useCallback((dateStr: string, slotId: string) => {
     const key = `${dateStr}|${slotId}`
@@ -251,14 +248,22 @@ export default function TeacherSchedulingResponse() {
                 <tbody>
                   {dates.map(dateStr => {
                     const isAllDayNg = ngAllDays.has(dateStr)
+                    const isClosed = closedDates.has(dateStr)
                     const dow = new Date(dateStr + 'T00:00:00').getDay()
                     const isWeekend = dow === 0 || dow === 6
                     return (
-                      <tr key={dateStr} className={isWeekend ? 'bg-blue-50/50' : ''}>
-                        <td className="sticky left-0 bg-white z-10 px-2 py-1.5 border font-medium whitespace-nowrap">
+                      <tr key={dateStr} className={isClosed ? 'bg-gray-200/60' : isWeekend ? 'bg-blue-50/50' : ''}>
+                        <td className={`sticky left-0 z-10 px-2 py-1.5 border font-medium whitespace-nowrap ${isClosed ? 'bg-gray-200' : 'bg-white'}`}>
                           {formatDate(dateStr)}
-                          {isAllDayNg && <span className="ml-1 text-red-500 text-[10px]">終日NG</span>}
+                          {isClosed && <span className="ml-1 text-[10px] text-gray-500">休館</span>}
+                          {!isClosed && isAllDayNg && <span className="ml-1 text-red-500 text-[10px]">終日NG</span>}
                         </td>
+                        {isClosed ? (
+                          <td colSpan={timeSlots.length} className="px-1 py-1.5 border text-center text-xs text-gray-400">
+                            休館日
+                          </td>
+                        ) : (
+                          <>
                         {timeSlots.map(slot => {
                           const key = `${dateStr}|${slot.id}`
                           const isNg = ngSet.has(key) || isAllDayNg
@@ -285,6 +290,8 @@ export default function TeacherSchedulingResponse() {
                             </td>
                           )
                         })}
+                          </>
+                        )}
                       </tr>
                     )
                   })}
