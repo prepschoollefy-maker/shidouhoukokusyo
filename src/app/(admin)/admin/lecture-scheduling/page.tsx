@@ -504,7 +504,7 @@ export default function LectureSchedulingAdmin() {
                               <tr>
                                 <th className="sticky left-0 bg-white z-10 px-2 py-1 border text-left min-w-[70px]">日付</th>
                                 {timeSlots.map(slot => (
-                                  <th key={slot.id} className="px-1 py-1 border text-center min-w-[55px] whitespace-nowrap">
+                                  <th key={slot.id} className="px-1 py-1 border text-center min-w-[70px] whitespace-nowrap">
                                     {formatSlotTime(slot)}
                                   </th>
                                 ))}
@@ -540,9 +540,11 @@ export default function LectureSchedulingAdmin() {
                                           {isNg ? (
                                             <span className="text-red-400">NG</span>
                                           ) : teacherOks.length > 0 ? (
-                                            <span className="text-green-700" title={teacherOks.join(', ')}>
-                                              {teacherOks.length === 1 ? teacherOks[0].slice(0, 3) : `${teacherOks.length}名`}
-                                            </span>
+                                            <div className="text-green-700 leading-tight">
+                                              {teacherOks.map((name, i) => (
+                                                <div key={i}>{name}</div>
+                                              ))}
+                                            </div>
                                           ) : (
                                             <span className="text-gray-300">-</span>
                                           )}
