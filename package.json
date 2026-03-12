@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "comiru-sync": "node scripts/comiru-sync.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

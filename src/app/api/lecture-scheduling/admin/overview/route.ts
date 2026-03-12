@@ -83,6 +83,23 @@ export async function GET(request: NextRequest) {
     .gte('closed_date', period.start_date)
     .lte('closed_date', period.end_date)
 
+  // comiruレッスンデータ（期間内のみ）
+  const { data: comiruLessons } = await admin
+    .from('comiru_lessons')
+    .select('teacher_name, lesson_date, start_time, end_time, synced_at, student_name')
+    .gte('lesson_date', period.start_date)
+    .lte('lesson_date', period.end_date)
+
+  // 確定データ
+  let confirmations: { id: string; request_id: string; assignment_id: string; confirmed_date: string; time_slot_id: string; subject: string; confirmed_at: string }[] = []
+  if (requestIds.length > 0) {
+    const { data } = await admin
+      .from('lecture_scheduling_confirmations')
+      .select('id, request_id, assignment_id, confirmed_date, time_slot_id, subject, confirmed_at')
+      .in('request_id', requestIds)
+    confirmations = data || []
+  }
+
   return NextResponse.json({
     period,
     requests: requests || [],
@@ -92,5 +109,7 @@ export async function GET(request: NextRequest) {
     timeSlots: timeSlots || [],
     teachers: teachers || [],
     closedDates: (closedDays || []).map((d: { closed_date: string }) => d.closed_date),
+    comiruLessons: comiruLessons || [],
+    confirmations,
   })
 }

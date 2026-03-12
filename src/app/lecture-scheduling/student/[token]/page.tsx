@@ -20,6 +20,12 @@ interface TimeSlot {
   end_time: string
 }
 
+interface ComiruLesson {
+  lesson_date: string
+  start_time: string
+  teacher_name: string
+}
+
 const SUBJECT_LIST = ['算数・数学', '英語', '国語（現代文・古文・漢文）', '理科（物理・化学・生物）', '社会（世界史・日本史・地理）']
 
 function generateDateRange(startDate: string, endDate: string): string[] {
@@ -43,7 +49,7 @@ function formatSlotTime(slot: TimeSlot): string {
   return `${slot.start_time.slice(0, 5)}-${slot.end_time.slice(0, 5)}`
 }
 
-export default function StudentSchedulingForm() {
+export default function StudentIndividualForm() {
   const params = useParams()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -53,16 +59,18 @@ export default function StudentSchedulingForm() {
   const [period, setPeriod] = useState<Period | null>(null)
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
   const [closedDates, setClosedDates] = useState<Set<string>>(new Set())
+  const [comiruLessons, setComiruLessons] = useState<ComiruLesson[]>([])
 
-  const [studentNumber, setStudentNumber] = useState('')
   const [studentName, setStudentName] = useState('')
+  const [studentGrade, setStudentGrade] = useState('')
+  const [isResubmission, setIsResubmission] = useState(false)
   const [subjects, setSubjects] = useState<Record<string, number>>({})
-  const [ngSlots, setNgSlots] = useState<Set<string>>(new Set()) // "date|slotId" or "date|all"
+  const [ngSlots, setNgSlots] = useState<Set<string>>(new Set())
   const [note, setNote] = useState('')
   const [showConfirm, setShowConfirm] = useState(false)
 
   useEffect(() => {
-    fetch(`/api/lecture-scheduling/requests/${params.token}`)
+    fetch(`/api/lecture-scheduling/student/${params.token}`)
       .then(async (res) => {
         if (!res.ok) {
           const json = await res.json()
@@ -73,12 +81,54 @@ export default function StudentSchedulingForm() {
         setPeriod(json.period)
         setTimeSlots(json.timeSlots)
         setClosedDates(new Set(json.closedDates || []))
+        setComiruLessons(json.comiruLessons || [])
+        setStudentName(json.student.name)
+        setStudentGrade(json.student.grade)
+
+        // 既存回答の復元
+        if (json.existingRequest) {
+          setIsResubmission(true)
+          setSubjects(json.existingRequest.subjects || {})
+          setNote(json.existingRequest.note || '')
+        }
+        if (json.existingNgSlots && json.existingNgSlots.length > 0) {
+          const ngs = new Set<string>()
+          json.existingNgSlots.forEach((s: { ng_date: string; time_slot_id: string | null }) => {
+            if (s.time_slot_id === null) {
+              ngs.add(`${s.ng_date}|all`)
+              json.timeSlots.forEach((ts: TimeSlot) => ngs.add(`${s.ng_date}|${ts.id}`))
+            } else {
+              ngs.add(`${s.ng_date}|${s.time_slot_id}`)
+            }
+          })
+          setNgSlots(ngs)
+        }
       })
       .catch(() => setError('通信エラーが発生しました'))
       .finally(() => setLoading(false))
   }, [params.token])
 
   const dates = period ? generateDateRange(period.start_date, period.end_date) : []
+
+  // comiru授業があるか判定
+  const getComiruInfo = useCallback((dateStr: string, slot: TimeSlot): ComiruLesson[] => {
+    const slotStart = slot.start_time.slice(0, 5)
+    return comiruLessons.filter(l =>
+      l.lesson_date === dateStr && l.start_time.slice(0, 5) === slotStart
+    )
+  }, [comiruLessons])
+
+  // comiru授業があるスロットのSet
+  const comiruBusySet = new Set<string>()
+  if (timeSlots.length > 0) {
+    dates.forEach(dateStr => {
+      timeSlots.forEach(slot => {
+        if (getComiruInfo(dateStr, slot).length > 0) {
+          comiruBusySet.add(`${dateStr}|${slot.id}`)
+        }
+      })
+    })
+  }
 
   const toggleNg = useCallback((dateStr: string, slotId: string | null) => {
     setNgSlots(prev => {
@@ -90,22 +140,29 @@ export default function StudentSchedulingForm() {
           timeSlots.forEach(s => next.delete(`${dateStr}|${s.id}`))
         } else {
           next.add(key)
-          timeSlots.forEach(s => next.add(`${dateStr}|${s.id}`))
+          timeSlots.forEach(s => {
+            if (!comiruBusySet.has(`${dateStr}|${s.id}`)) {
+              next.add(`${dateStr}|${s.id}`)
+            }
+          })
         }
       } else {
         const key = `${dateStr}|${slotId}`
+        if (comiruBusySet.has(key)) return next // comiru授業ありは切替不可
         if (next.has(key)) {
           next.delete(key)
           next.delete(`${dateStr}|all`)
         } else {
           next.add(key)
-          const allSelected = timeSlots.every(s => next.has(`${dateStr}|${s.id}`))
-          if (allSelected) next.add(`${dateStr}|all`)
+          const allNonBusySelected = timeSlots.every(s =>
+            comiruBusySet.has(`${dateStr}|${s.id}`) || next.has(`${dateStr}|${s.id}`)
+          )
+          if (allNonBusySelected) next.add(`${dateStr}|all`)
         }
       }
       return next
     })
-  }, [timeSlots])
+  }, [timeSlots, comiruBusySet])
 
   const handleSubjectChange = (subject: string, value: string) => {
     const num = parseInt(value) || 0
@@ -121,8 +178,6 @@ export default function StudentSchedulingForm() {
 
   const handleConfirmOpen = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!studentNumber.trim()) { setError('塾生番号を入力してください'); return }
-    if (!studentName.trim()) { setError('氏名を入力してください'); return }
     if (totalLessons === 0) { setError('科目ごとの希望コマ数を1つ以上入力してください'); return }
     setError('')
     setShowConfirm(true)
@@ -133,7 +188,6 @@ export default function StudentSchedulingForm() {
     setSubmitting(true)
     setError('')
 
-    // NGスロットをAPI用に変換
     const ngSlotsArray: { ng_date: string; time_slot_id: string | null }[] = []
     const processedDates = new Set<string>()
 
@@ -154,16 +208,10 @@ export default function StudentSchedulingForm() {
     })
 
     try {
-      const res = await fetch(`/api/lecture-scheduling/requests/${params.token}`, {
+      const res = await fetch(`/api/lecture-scheduling/student/${params.token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          student_number: studentNumber.trim(),
-          student_name: studentName.trim(),
-          subjects,
-          ng_slots: ngSlotsArray,
-          note: note || null,
-        }),
+        body: JSON.stringify({ subjects, ng_slots: ngSlotsArray, note: note || null }),
       })
       if (!res.ok) {
         const json = await res.json()
@@ -178,13 +226,7 @@ export default function StudentSchedulingForm() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <LoadingSpinner />
-      </div>
-    )
-  }
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><LoadingSpinner /></div>
 
   if (error && !period) {
     return (
@@ -202,9 +244,7 @@ export default function StudentSchedulingForm() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-50 to-white px-4">
         <div className="text-center max-w-sm">
           <h1 className="text-2xl font-bold text-gray-800 mb-2">送信完了</h1>
-          <p className="text-gray-500">
-            ご回答ありがとうございます。日程が決まりましたらご連絡いたします。
-          </p>
+          <p className="text-gray-500">ご回答ありがとうございます。日程が決まりましたらご連絡いたします。</p>
         </div>
       </div>
     )
@@ -227,36 +267,13 @@ export default function StudentSchedulingForm() {
 
       <main className="max-w-2xl mx-auto px-4 py-6">
         <form onSubmit={handleConfirmOpen} className="space-y-6">
-          {/* 生徒情報（手入力） */}
-          <div className="bg-white rounded-lg shadow-sm border p-5 space-y-4">
+          {/* 生徒情報（自動表示） */}
+          <div className="bg-white rounded-lg shadow-sm border p-5 space-y-2">
             <h2 className="font-semibold text-gray-900">生徒情報</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  塾生番号 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={studentNumber}
-                  onChange={e => setStudentNumber(e.target.value)}
-                  placeholder="例: 001"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  氏名 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={studentName}
-                  onChange={e => setStudentName(e.target.value)}
-                  placeholder="例: 山田太郎"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
-            </div>
-            <p className="text-xs text-gray-400">塾生番号と氏名の組み合わせで本人確認を行います。</p>
+            <p className="text-sm"><span className="text-gray-500">氏名:</span> {studentName}（{studentGrade}）</p>
+            {isResubmission && (
+              <p className="text-xs text-orange-600 bg-orange-50 rounded px-2 py-1">前回の回答が復元されています。修正して再送信できます。</p>
+            )}
           </div>
 
           {/* 科目・コマ数 */}
@@ -284,9 +301,7 @@ export default function StudentSchedulingForm() {
             </div>
             {totalLessons > 0 && (
               <div className="pt-3 border-t">
-                <p className="text-sm font-medium text-blue-700">
-                  合計: {totalLessons}コマ
-                </p>
+                <p className="text-sm font-medium text-blue-700">合計: {totalLessons}コマ</p>
               </div>
             )}
           </div>
@@ -300,6 +315,7 @@ export default function StudentSchedulingForm() {
             </div>
             <div className="flex items-center gap-3 text-xs text-gray-500">
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-500" /> NG（参加不可）</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-orange-100 border border-orange-300" /> 通常授業あり（自動NG）</span>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-gray-100 border" /> OK（参加可能）</span>
             </div>
 
@@ -337,19 +353,26 @@ export default function StudentSchedulingForm() {
                           <>
                         {timeSlots.map(slot => {
                           const isNg = ngSlots.has(`${dateStr}|${slot.id}`)
+                          const hasComiruLesson = comiruBusySet.has(`${dateStr}|${slot.id}`)
                           return (
                             <td key={slot.id} className="px-1 py-1 border text-center">
-                              <button
-                                type="button"
-                                onClick={() => toggleNg(dateStr, slot.id)}
-                                className={`w-full py-1.5 rounded text-xs font-medium transition-colors ${
-                                  isNg
-                                    ? 'bg-red-500 text-white shadow-sm'
-                                    : 'bg-gray-50 text-gray-400 hover:bg-red-50 hover:text-red-400 border border-gray-200'
-                                }`}
-                              >
-                                {isNg ? 'NG' : 'OK'}
-                              </button>
+                              {hasComiruLesson ? (
+                                <div className="w-full py-1.5 rounded text-xs font-medium bg-orange-100 text-orange-600">
+                                  授業あり
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleNg(dateStr, slot.id)}
+                                  className={`w-full py-1.5 rounded text-xs font-medium transition-colors ${
+                                    isNg
+                                      ? 'bg-red-500 text-white shadow-sm'
+                                      : 'bg-gray-50 text-gray-400 hover:bg-red-50 hover:text-red-400 border border-gray-200'
+                                  }`}
+                                >
+                                  {isNg ? 'NG' : 'OK'}
+                                </button>
+                              )}
                             </td>
                           )
                         })}
@@ -409,7 +432,13 @@ export default function StudentSchedulingForm() {
                       <div className="grid grid-cols-3 gap-1.5">
                         {timeSlots.map(slot => {
                           const isNg = ngSlots.has(`${dateStr}|${slot.id}`)
-                          return (
+                          const hasComiruLesson = comiruBusySet.has(`${dateStr}|${slot.id}`)
+                          return hasComiruLesson ? (
+                            <div key={slot.id} className="py-2 rounded text-xs text-center font-medium bg-orange-100 text-orange-600">
+                              <div className="text-[10px] text-orange-400">{formatSlotTime(slot)}</div>
+                              授業あり
+                            </div>
+                          ) : (
                             <button
                               key={slot.id}
                               type="button"
@@ -456,23 +485,21 @@ export default function StudentSchedulingForm() {
             disabled={submitting}
             className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {submitting ? '送信中...' : '確認画面へ'}
+            {submitting ? '送信中...' : isResubmission ? '回答を更新する' : '確認画面へ'}
           </button>
         </form>
       </main>
 
-      {/* 送信前確認ダイアログ */}
+      {/* 確認ダイアログ */}
       {showConfirm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4 max-h-[80vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-gray-900">送信内容の確認</h2>
-
             <div className="text-sm space-y-3">
               <div>
-                <p className="text-gray-500 text-xs">塾生番号・氏名</p>
-                <p className="font-medium">{studentNumber} {studentName}</p>
+                <p className="text-gray-500 text-xs">生徒</p>
+                <p className="font-medium">{studentName}（{studentGrade}）</p>
               </div>
-
               <div>
                 <p className="text-gray-500 text-xs">希望科目・コマ数</p>
                 <div className="flex flex-wrap gap-1 mt-1">
@@ -484,7 +511,6 @@ export default function StudentSchedulingForm() {
                 </div>
                 <p className="text-blue-700 font-medium text-xs mt-1">合計: {totalLessons}コマ</p>
               </div>
-
               <div>
                 <p className="text-gray-500 text-xs">NG日時</p>
                 <p className="font-medium">
@@ -494,7 +520,6 @@ export default function StudentSchedulingForm() {
                   }
                 </p>
               </div>
-
               {note && (
                 <div>
                   <p className="text-gray-500 text-xs">要望</p>
@@ -502,7 +527,6 @@ export default function StudentSchedulingForm() {
                 </div>
               )}
             </div>
-
             <div className="flex gap-3 pt-2">
               <button
                 type="button"

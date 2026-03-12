@@ -61,6 +61,15 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     .select('available_date, time_slot_id')
     .eq('assignment_id', assignment.id)
 
+  // comiru授業データ（この講師の期間内の授業）
+  const teacherName = (assignment.teacher as unknown as { display_name: string }).display_name
+  const { data: comiruLessons } = await admin
+    .from('comiru_lessons')
+    .select('lesson_date, start_time, student_name')
+    .eq('teacher_name', teacherName)
+    .gte('lesson_date', req.period.start_date)
+    .lte('lesson_date', req.period.end_date)
+
   return NextResponse.json({
     assignment: {
       id: assignment.id,
@@ -76,6 +85,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     timeSlots: timeSlots || [],
     closedDates: (closedDays || []).map(d => d.closed_date),
     existingResponses: existingResponses || [],
+    comiruLessons: (comiruLessons || []).map(l => ({
+      lesson_date: l.lesson_date,
+      start_time: l.start_time,
+      student_name: l.student_name,
+    })),
   })
 }
 
