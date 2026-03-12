@@ -169,6 +169,7 @@ export default function LectureSchedulingAdmin() {
   const [removeTarget, setRemoveTarget] = useState<Assignment | null>(null)
   const [viewMode, setViewMode] = useState<'student' | 'teacher'>('student')
   const [confirmMode, setConfirmMode] = useState(false)
+  const [ngEditMode, setNgEditMode] = useState(false)
   const [confirmPopover, setConfirmPopover] = useState<{
     requestId: string
     date: string
@@ -404,6 +405,16 @@ export default function LectureSchedulingAdmin() {
 
   const isComiruBusy = (teacherName: string, dateStr: string, slot: TimeSlot): boolean => {
     return getComiruStudents(teacherName, dateStr, slot).length > 0
+  }
+
+  // 生徒のcomiru授業情報を取得（講師名付き）
+  const getStudentComiruLessons = (studentName: string, dateStr: string, slot: TimeSlot): ComiruLesson[] => {
+    const slotStart = slot.start_time.slice(0, 5)
+    return comiruLessons.filter(l =>
+      l.student_name === studentName &&
+      l.lesson_date === dateStr &&
+      l.start_time.slice(0, 5) === slotStart
+    )
   }
 
   // 講師OKトグル: assignment_idを指定して日時のOKを追加/削除
@@ -693,14 +704,24 @@ export default function LectureSchedulingAdmin() {
                 </div>
                 <div className="flex items-center gap-2">
                   {viewMode === 'student' && (
-                    <Button
-                      size="sm"
-                      variant={confirmMode ? 'default' : 'outline'}
-                      onClick={() => setConfirmMode(!confirmMode)}
-                      className={confirmMode ? 'bg-blue-600 hover:bg-blue-700' : ''}
-                    >
-                      {confirmMode ? '確定モード ON' : '確定モード'}
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant={ngEditMode ? 'default' : 'outline'}
+                        onClick={() => { setNgEditMode(!ngEditMode); if (!ngEditMode) setConfirmMode(false) }}
+                        className={ngEditMode ? 'bg-red-600 hover:bg-red-700' : ''}
+                      >
+                        {ngEditMode ? 'NG編集 ON' : 'NG編集'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={confirmMode ? 'default' : 'outline'}
+                        onClick={() => { setConfirmMode(!confirmMode); if (!confirmMode) setNgEditMode(false) }}
+                        className={confirmMode ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                      >
+                        {confirmMode ? '確定モード ON' : '確定モード'}
+                      </Button>
+                    </>
                   )}
                   <div className="flex rounded-lg border overflow-hidden">
                     <button
@@ -723,17 +744,17 @@ export default function LectureSchedulingAdmin() {
                 <span className="font-medium text-gray-700">凡例:</span>
                 <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-100 border border-red-300" /> NG（生徒不可）</span>
                 <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-green-100 border border-green-300" /> 講師OK（担当可能）</span>
-                {viewMode === 'teacher' && (
-                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-orange-100 border border-orange-300" /> 授業あり（comiru）</span>
-                )}
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-orange-100 border border-orange-300" /> 授業あり（comiru）</span>
                 <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-blue-200 border border-blue-400" /> 確定済</span>
                 <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-gray-100 border border-gray-300" /> 未回答</span>
                 <span className="text-gray-400 ml-2">|</span>
                 {viewMode === 'student' ? (
                   confirmMode ? (
                     <span className="text-blue-600 font-medium">セルをクリック → 講師・科目を確定</span>
+                  ) : ngEditMode ? (
+                    <span className="text-red-600 font-medium">セルをクリック → 生徒のNG/OK切替</span>
                   ) : (
-                    <span className="text-blue-600 font-medium">セルをクリック → 生徒のNG/OK切替</span>
+                    <span className="text-gray-400">モードを選択してください（NG編集 / 確定モード）</span>
                   )
                 ) : (
                   <span className="text-blue-600 font-medium">セルをクリック → 講師のOK/未回答切替</span>
@@ -1027,6 +1048,8 @@ export default function LectureSchedulingAdmin() {
                                     {timeSlots.map(slot => {
                                       const key = `${dateStr}|${slot.id}`
                                       const isNg = ngSet.has(key) || isAllDayNg
+                                      const studentComiruLessons = getStudentComiruLessons(req.student.name, dateStr, slot)
+                                      const studentBusy = studentComiruLessons.length > 0
 
                                       // OKと回答した講師を全員取得
                                       const allOkTeachers = reqAssignments
@@ -1049,25 +1072,31 @@ export default function LectureSchedulingAdmin() {
                                         ? reqAssignments.find(a => a.id === existingConfirmation.assignment_id)?.teacher.display_name
                                         : null
 
-                                      // セルの背景色: 確定最優先、次にNG、次にOK講師あり
+                                      // セルの背景色: 確定最優先、次に生徒授業あり、次にNG、次にOK講師あり
                                       const bgClass = existingConfirmation
                                         ? 'bg-blue-100 hover:bg-blue-200 ring-2 ring-inset ring-blue-400'
-                                        : isNg
-                                          ? (availableTeachers.length > 0 ? 'bg-red-50 hover:bg-red-100' : 'bg-red-100 hover:bg-red-200')
-                                          : availableTeachers.length > 0
-                                              ? 'bg-green-50 hover:bg-green-100'
-                                              : 'hover:bg-blue-50'
+                                        : studentBusy
+                                          ? 'bg-orange-50'
+                                          : isNg
+                                            ? (availableTeachers.length > 0 ? 'bg-red-50 hover:bg-red-100' : 'bg-red-100 hover:bg-red-200')
+                                            : availableTeachers.length > 0
+                                                ? 'bg-green-50 hover:bg-green-100'
+                                                : 'hover:bg-blue-50'
 
                                       return (
                                         <td
                                           key={slot.id}
-                                          className={`px-1 py-1.5 border text-center cursor-pointer transition-all group relative ${bgClass}`}
+                                          className={`px-1 py-1.5 border text-center ${
+                                            (studentBusy && !existingConfirmation) || (!confirmMode && !ngEditMode)
+                                              ? ''
+                                              : 'cursor-pointer'
+                                          } transition-all group relative ${bgClass}`}
                                           onClick={() => {
+                                            if (studentBusy && !existingConfirmation) return
                                             if (confirmMode) {
                                               if (isNg && !existingConfirmation) {
                                                 handleToggleStudentNg(req.id, dateStr, slot.id)
                                               } else if (availableTeachers.length > 0 || existingConfirmation) {
-                                                // 確定ダイアログにはbusy除外済の講師のみ渡す
                                                 const availableOkTeachers = allOkTeachers
                                                   .filter(a => !isComiruBusy(a.teacher.display_name, dateStr, slot))
                                                 setConfirmPopover({
@@ -1085,19 +1114,30 @@ export default function LectureSchedulingAdmin() {
                                                   setConfirmSubject('')
                                                 }
                                               }
-                                            } else {
+                                            } else if (ngEditMode) {
                                               handleToggleStudentNg(req.id, dateStr, slot.id)
                                             }
                                           }}
-                                          title={confirmMode
-                                            ? (existingConfirmation ? 'クリックで確定内容を編集' : allOkTeachers.length > 0 ? 'クリックで講師・科目を確定' : '')
-                                            : (isNg ? 'クリックでNGを解除' : 'クリックでNGに設定')
+                                          title={studentBusy && !existingConfirmation
+                                            ? '通常授業あり'
+                                            : confirmMode
+                                              ? (existingConfirmation ? 'クリックで確定内容を編集' : allOkTeachers.length > 0 ? 'クリックで講師・科目を確定' : '')
+                                              : ngEditMode
+                                                ? (isNg ? 'クリックでNGを解除' : 'クリックでNGに設定')
+                                                : ''
                                           }
                                         >
                                           {existingConfirmation ? (
                                             <div className="leading-tight">
                                               <div className="text-[11px] font-bold text-blue-800">{confirmedTeacher}</div>
                                               <div className="text-[10px] text-blue-600">{existingConfirmation.subject}</div>
+                                            </div>
+                                          ) : studentBusy ? (
+                                            <div className="leading-tight">
+                                              <div className="text-orange-600 text-[11px] font-medium">授業あり</div>
+                                              {studentComiruLessons.map((l, i) => (
+                                                <div key={i} className="text-[10px] text-orange-500">{l.teacher_name}</div>
+                                              ))}
                                             </div>
                                           ) : (
                                             <>
