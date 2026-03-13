@@ -12,5 +12,5 @@ export default async function Home() {
   }
 
   const role = user.app_metadata?.role || 'teacher'
-  redirect(role === 'admin' ? '/admin/dashboard' : '/reports')
+  redirect(role === 'admin' ? '/admin' : '/reports')
 }
