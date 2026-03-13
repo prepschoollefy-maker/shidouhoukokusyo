@@ -73,5 +73,67 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  // 同じ講師の同期間の既存回答をコピー（講師が何度も回答しなくて済むように）
+  try {
+    // このリクエストの期間IDを取得
+    const { data: thisReq } = await admin
+      .from('lecture_scheduling_requests')
+      .select('period_id')
+      .eq('id', request_id)
+      .single()
+
+    if (thisReq) {
+      // 同じ講師の同期間の回答済みアサインを取得
+      const { data: otherAssignments } = await admin
+        .from('lecture_scheduling_assignments')
+        .select('id, request:lecture_scheduling_requests(period_id)')
+        .eq('teacher_id', teacher_id)
+        .eq('status', 'responded')
+        .neq('id', data.id)
+
+      const sameperiodIds = (otherAssignments || [])
+        .filter((a: { request: unknown }) => {
+          const r = a.request as { period_id: string } | null
+          return r && r.period_id === thisReq.period_id
+        })
+        .map((a: { id: string }) => a.id)
+
+      if (sameperiodIds.length > 0) {
+        const { data: otherResp } = await admin
+          .from('lecture_scheduling_responses')
+          .select('available_date, time_slot_id')
+          .in('assignment_id', sameperiodIds)
+
+        if (otherResp && otherResp.length > 0) {
+          // 重複排除してコピー
+          const seen = new Set<string>()
+          const rows = otherResp
+            .filter(r => {
+              const key = `${r.available_date}|${r.time_slot_id}`
+              if (seen.has(key)) return false
+              seen.add(key)
+              return true
+            })
+            .map(r => ({
+              assignment_id: data.id,
+              available_date: r.available_date,
+              time_slot_id: r.time_slot_id,
+            }))
+
+          await admin.from('lecture_scheduling_responses').insert(rows)
+          // ステータスを回答済みに更新
+          await admin
+            .from('lecture_scheduling_assignments')
+            .update({ status: 'responded' })
+            .eq('id', data.id)
+          data.status = 'responded'
+        }
+      }
+    }
+  } catch {
+    // コピー失敗しても本体のアサインは成功しているのでエラーにしない
+  }
+
   return NextResponse.json(data)
 }

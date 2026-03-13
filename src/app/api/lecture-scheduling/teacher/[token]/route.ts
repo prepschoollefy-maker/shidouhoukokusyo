@@ -61,6 +61,38 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     .select('available_date, time_slot_id')
     .eq('assignment_id', assignment.id)
 
+  // 同じ講師の同じ期間内の他の生徒への回答（プリセット用）
+  const teacherId = (assignment.teacher as unknown as { id: string }).id
+  const { data: otherAssignments } = await admin
+    .from('lecture_scheduling_assignments')
+    .select('id, request:lecture_scheduling_requests(period_id)')
+    .eq('teacher_id', teacherId)
+    .eq('status', 'responded')
+    .neq('id', assignment.id)
+
+  const sameperiodAssignmentIds = (otherAssignments || [])
+    .filter((a: { request: unknown }) => {
+      const r = a.request as { period_id: string } | null
+      return r && r.period_id === req.period.id
+    })
+    .map((a: { id: string }) => a.id)
+
+  let otherTeacherResponses: { available_date: string; time_slot_id: string }[] = []
+  if (sameperiodAssignmentIds.length > 0) {
+    const { data: otherResp } = await admin
+      .from('lecture_scheduling_responses')
+      .select('available_date, time_slot_id')
+      .in('assignment_id', sameperiodAssignmentIds)
+    // 重複排除
+    const seen = new Set<string>()
+    otherTeacherResponses = (otherResp || []).filter(r => {
+      const key = `${r.available_date}|${r.time_slot_id}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }
+
   // comiru授業データ（この講師の期間内の授業）
   const teacherName = (assignment.teacher as unknown as { display_name: string }).display_name
   const { data: comiruLessons } = await admin
@@ -90,6 +122,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       start_time: l.start_time,
       student_name: l.student_name,
     })),
+    otherTeacherResponses,
   })
 }
 

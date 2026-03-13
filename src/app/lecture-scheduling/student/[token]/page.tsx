@@ -33,7 +33,10 @@ function generateDateRange(startDate: string, endDate: string): string[] {
   const current = new Date(startDate + 'T00:00:00')
   const end = new Date(endDate + 'T00:00:00')
   while (current <= end) {
-    dates.push(current.toISOString().split('T')[0])
+    const y = current.getFullYear()
+    const m = String(current.getMonth() + 1).padStart(2, '0')
+    const day = String(current.getDate()).padStart(2, '0')
+    dates.push(`${y}-${m}-${day}`)
     current.setDate(current.getDate() + 1)
   }
   return dates

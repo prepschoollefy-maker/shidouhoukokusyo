@@ -116,7 +116,10 @@ function generateDateRange(startDate: string, endDate: string): string[] {
   const current = new Date(startDate + 'T00:00:00')
   const end = new Date(endDate + 'T00:00:00')
   while (current <= end) {
-    dates.push(current.toISOString().split('T')[0])
+    const y = current.getFullYear()
+    const m = String(current.getMonth() + 1).padStart(2, '0')
+    const day = String(current.getDate()).padStart(2, '0')
+    dates.push(`${y}-${m}-${day}`)
     current.setDate(current.getDate() + 1)
   }
   return dates
@@ -417,75 +420,102 @@ export default function LectureSchedulingAdmin() {
     )
   }
 
-  // 講師OKトグル: assignment_idを指定して日時のOKを追加/削除
+  // 講師OKトグル: assignment_idを指定して日時のOKを追加/削除（楽観的更新）
   const handleToggleTeacherOk = async (assignmentId: string, date: string, slotId: string) => {
+    const exists = responses.some(r => r.assignment_id === assignmentId && r.available_date === date && r.time_slot_id === slotId)
+    // 楽観的にローカルstate更新
+    if (exists) {
+      setResponses(prev => prev.filter(r => !(r.assignment_id === assignmentId && r.available_date === date && r.time_slot_id === slotId)))
+    } else {
+      setResponses(prev => [...prev, { assignment_id: assignmentId, available_date: date, time_slot_id: slotId }])
+    }
     const res = await fetch('/api/lecture-scheduling/admin/toggle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'teacher_ok', assignment_id: assignmentId, available_date: date, time_slot_id: slotId }),
     })
-    if (res.ok) {
-      const data = await res.json()
-      toast.success(data.action === 'added' ? 'OKを追加しました' : 'OKを取り消しました')
+    if (!res.ok) {
+      toast.error('エラーが発生しました')
       if (selectedPeriod) fetchOverview(selectedPeriod.id)
     }
   }
 
-  // 生徒NGトグル: request_idを指定して日時のNGを追加/削除
+  // 生徒NGトグル: request_idを指定して日時のNGを追加/削除（楽観的更新）
   const handleToggleStudentNg = async (requestId: string, date: string, slotId: string) => {
+    const exists = ngSlots.some(s => s.request_id === requestId && s.ng_date === date && s.time_slot_id === slotId)
+    // 楽観的にローカルstate更新
+    if (exists) {
+      setNgSlots(prev => prev.filter(s => !(s.request_id === requestId && s.ng_date === date && s.time_slot_id === slotId)))
+    } else {
+      setNgSlots(prev => [...prev, { request_id: requestId, ng_date: date, time_slot_id: slotId }])
+    }
     const res = await fetch('/api/lecture-scheduling/admin/toggle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'student_ng', request_id: requestId, ng_date: date, time_slot_id: slotId }),
     })
-    if (res.ok) {
-      const data = await res.json()
-      toast.success(data.action === 'added' ? 'NGを追加しました' : 'NGを取り消しました')
+    if (!res.ok) {
+      toast.error('エラーが発生しました')
       if (selectedPeriod) fetchOverview(selectedPeriod.id)
     }
   }
 
   const handleConfirm = async () => {
     if (!confirmPopover || !confirmTeacherId || !confirmSubject) return
+    const { requestId, date, slotId } = confirmPopover
+    // 楽観的にローカルstate更新
+    setConfirmations(prev => {
+      const filtered = prev.filter(c => !(c.request_id === requestId && c.confirmed_date === date && c.time_slot_id === slotId))
+      return [...filtered, {
+        id: 'temp-' + Date.now(),
+        request_id: requestId,
+        assignment_id: confirmTeacherId,
+        confirmed_date: date,
+        time_slot_id: slotId,
+        subject: confirmSubject,
+        confirmed_at: new Date().toISOString(),
+      }]
+    })
+    setConfirmPopover(null)
+    setConfirmTeacherId('')
+    setConfirmSubject('')
     const res = await fetch('/api/lecture-scheduling/admin/confirmations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        request_id: confirmPopover.requestId,
+        request_id: requestId,
         assignment_id: confirmTeacherId,
-        confirmed_date: confirmPopover.date,
-        time_slot_id: confirmPopover.slotId,
+        confirmed_date: date,
+        time_slot_id: slotId,
         subject: confirmSubject,
       }),
     })
-    if (res.ok) {
-      toast.success('確定しました')
-      setConfirmPopover(null)
-      setConfirmTeacherId('')
-      setConfirmSubject('')
-      if (selectedPeriod) fetchOverview(selectedPeriod.id)
-    } else {
+    if (!res.ok) {
       const err = await res.json()
       toast.error(err.error || 'エラー')
+      if (selectedPeriod) fetchOverview(selectedPeriod.id)
     }
   }
 
   const handleDeleteConfirmation = async () => {
     if (!confirmPopover) return
+    const { requestId, date, slotId } = confirmPopover
+    // 楽観的にローカルstate更新
+    setConfirmations(prev => prev.filter(c => !(c.request_id === requestId && c.confirmed_date === date && c.time_slot_id === slotId)))
+    setConfirmPopover(null)
+    setConfirmTeacherId('')
+    setConfirmSubject('')
     const res = await fetch('/api/lecture-scheduling/admin/confirmations', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        request_id: confirmPopover.requestId,
-        confirmed_date: confirmPopover.date,
-        time_slot_id: confirmPopover.slotId,
+        request_id: requestId,
+        confirmed_date: date,
+        time_slot_id: slotId,
       }),
     })
-    if (res.ok) {
-      toast.success('確定を解除しました')
-      setConfirmPopover(null)
-      setConfirmTeacherId('')
-      setConfirmSubject('')
+    if (!res.ok) {
+      toast.error('エラーが発生しました')
       if (selectedPeriod) fetchOverview(selectedPeriod.id)
     }
   }
@@ -506,6 +536,37 @@ export default function LectureSchedulingAdmin() {
     const url = `${window.location.origin}/lecture-scheduling/student/${token}`
     navigator.clipboard.writeText(url)
     toast.success('個別URLをコピーしました')
+  }
+
+  // 確定済み日程をテキストとしてコピー
+  const copyConfirmedSchedule = (reqConfirmations: Confirmation[]) => {
+    if (reqConfirmations.length === 0) {
+      toast.error('確定済みの授業がありません')
+      return
+    }
+    // 日付ごとにグループ化
+    const grouped = new Map<string, string[]>()
+    reqConfirmations.forEach(c => {
+      const slot = timeSlots.find(ts => ts.id === c.time_slot_id)
+      if (!slot) return
+      const timeRange = `${slot.start_time.slice(0, 5)}-${slot.end_time.slice(0, 5)}`
+      if (!grouped.has(c.confirmed_date)) grouped.set(c.confirmed_date, [])
+      grouped.get(c.confirmed_date)!.push(timeRange)
+    })
+    // 日付順にソート
+    const sorted = [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    const lines = sorted.map(([dateStr, times]) => {
+      const d = new Date(dateStr + 'T00:00:00')
+      const dayNames = ['日', '月', '火', '水', '木', '金', '土']
+      const mm = String(d.getMonth() + 1)
+      const dd = String(d.getDate())
+      const dow = dayNames[d.getDay()]
+      // 時間帯もソート
+      times.sort()
+      return `${mm}/${dd}（${dow}）${times.join(',')}`
+    })
+    navigator.clipboard.writeText(lines.join('\n'))
+    toast.success('確定日程をコピーしました')
   }
 
   const toggleExpand = (requestId: string) => {
@@ -931,6 +992,11 @@ export default function LectureSchedulingAdmin() {
                           {req.student.student_number} {req.student.name}（{req.student.grade}）
                         </CardTitle>
                         {allConfirmed && <Badge className="bg-blue-500 text-white">全確定</Badge>}
+                        {reqConfirmations.length > 0 && (
+                          <Button size="sm" variant="ghost" className="h-7 text-blue-600" onClick={(e) => { e.stopPropagation(); copyConfirmedSchedule(reqConfirmations) }}>
+                            <Copy className="h-3 w-3 mr-1" />日程コピー
+                          </Button>
+                        )}
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {Object.entries(req.subjects).map(([subj, cnt]) => {

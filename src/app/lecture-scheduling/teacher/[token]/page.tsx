@@ -35,7 +35,10 @@ function generateDateRange(startDate: string, endDate: string): string[] {
   const current = new Date(startDate + 'T00:00:00')
   const end = new Date(endDate + 'T00:00:00')
   while (current <= end) {
-    dates.push(current.toISOString().split('T')[0])
+    const y = current.getFullYear()
+    const m = String(current.getMonth() + 1).padStart(2, '0')
+    const day = String(current.getDate()).padStart(2, '0')
+    dates.push(`${y}-${m}-${day}`)
     current.setDate(current.getDate() + 1)
   }
   return dates
@@ -69,6 +72,7 @@ export default function TeacherSchedulingResponse() {
   const [ngAllDays, setNgAllDays] = useState<Set<string>>(new Set())
   const [teacherName, setTeacherName] = useState('')
   const [isResubmission, setIsResubmission] = useState(false)
+  const [isPresetFromOther, setIsPresetFromOther] = useState(false)
   const [comiruLessons, setComiruLessons] = useState<ComiruLesson[]>([])
 
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set()) // "date|slotId"
@@ -107,20 +111,33 @@ export default function TeacherSchedulingResponse() {
         setNgSet(ngs)
         setNgAllDays(ngAllDaySet)
 
+        // comiru授業ありの枠セット
+        const comiruSet = new Set<string>()
+        ;(json.comiruLessons || []).forEach((l: { lesson_date: string; start_time: string }) => {
+          const matchSlot = json.timeSlots.find((ts: TimeSlot) => ts.start_time.slice(0, 5) === l.start_time.slice(0, 5))
+          if (matchSlot) comiruSet.add(`${l.lesson_date}|${matchSlot.id}`)
+        })
+
         // 既存回答の復元（comiru授業ありの枠は除外）
         if (json.existingResponses && json.existingResponses.length > 0) {
           setIsResubmission(true)
-          const comiruSet = new Set<string>()
-          ;(json.comiruLessons || []).forEach((l: { lesson_date: string; start_time: string }) => {
-            const matchSlot = json.timeSlots.find((ts: TimeSlot) => ts.start_time.slice(0, 5) === l.start_time.slice(0, 5))
-            if (matchSlot) comiruSet.add(`${l.lesson_date}|${matchSlot.id}`)
-          })
           const existing = new Set<string>()
           json.existingResponses.forEach((r: { available_date: string; time_slot_id: string }) => {
             const key = `${r.available_date}|${r.time_slot_id}`
             if (!comiruSet.has(key)) existing.add(key)
           })
           setSelectedSlots(existing)
+        } else if (json.otherTeacherResponses && json.otherTeacherResponses.length > 0) {
+          // 他の生徒への回答からプリセット（NG・comiru枠は除外）
+          setIsPresetFromOther(true)
+          const preset = new Set<string>()
+          json.otherTeacherResponses.forEach((r: { available_date: string; time_slot_id: string }) => {
+            const key = `${r.available_date}|${r.time_slot_id}`
+            if (!comiruSet.has(key) && !ngs.has(key) && !ngAllDaySet.has(r.available_date)) {
+              preset.add(key)
+            }
+          })
+          setSelectedSlots(preset)
         }
       })
       .catch(() => setError('通信エラーが発生しました'))
@@ -289,6 +306,9 @@ export default function TeacherSchedulingResponse() {
             {isResubmission && (
               <p className="text-orange-700 bg-orange-50 rounded px-2 py-1 text-xs">前回の回答が復元されています。修正して再送信できます。</p>
             )}
+            {isPresetFromOther && (
+              <p className="text-blue-700 bg-blue-50 rounded px-2 py-1 text-xs">他の生徒への回答からOK日時が自動セットされています。必要に応じて修正してください。</p>
+            )}
           </div>
 
           {/* 選択状況 */}
@@ -380,7 +400,8 @@ export default function TeacherSchedulingResponse() {
                           return (
                             <td key={slot.id} className="px-1 py-1 border text-center">
                               {hasComiruLesson ? (
-                                <div className="w-full py-1.5 rounded text-xs font-medium bg-orange-100 text-orange-600">
+                                <div className="w-full py-1 rounded text-xs font-medium bg-orange-100 text-orange-600">
+                                  <div className="text-[10px] text-orange-400">{comiruInfo.map(l => l.student_name || '').filter(Boolean).join(', ')}</div>
                                   <div>授業あり</div>
                                 </div>
                               ) : isNg ? (
@@ -437,8 +458,9 @@ export default function TeacherSchedulingResponse() {
                           const comiruInfo = getComiruInfo(dateStr, slot)
                           const hasComiruLesson = comiruInfo.length > 0
                           return hasComiruLesson ? (
-                            <div key={slot.id} className="py-2 rounded text-xs text-center font-medium bg-orange-100 text-orange-600">
+                            <div key={slot.id} className="py-1.5 rounded text-xs text-center font-medium bg-orange-100 text-orange-600">
                               <div className="text-[10px] text-orange-400">{formatSlotTime(slot)}</div>
+                              <div className="text-[10px] text-orange-400">{comiruInfo.map(l => l.student_name || '').filter(Boolean).join(', ')}</div>
                               授業あり
                             </div>
                           ) : isNg ? (
