@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { generateShortToken } from '@/lib/mendan/token'
 
 // 特定の生徒に対してトークン（リンク）を手動発行する
 export async function POST(request: NextRequest) {
@@ -30,12 +31,13 @@ export async function POST(request: NextRequest) {
 
   if (existing?.length) {
     // Return existing token URL
-    const url = `${appUrl}/mendan/request/${existing[0].token}`
+    const url = `${appUrl}/m/${existing[0].token}`
     return NextResponse.json({ data: { url, existing: true } })
   }
 
-  // Create new token
+  // Create new token (short 8-char string)
   const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+  const token = generateShortToken()
 
   const { data: tokenRow, error } = await admin
     .from('mendan_tokens')
@@ -43,6 +45,7 @@ export async function POST(request: NextRequest) {
       student_id,
       period_label,
       expires_at: expiresAt,
+      token,
     })
     .select('token')
     .single()
@@ -51,6 +54,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'トークン生成に失敗しました' }, { status: 500 })
   }
 
-  const url = `${appUrl}/mendan/request/${tokenRow.token}`
+  const url = `${appUrl}/m/${tokenRow.token}`
   return NextResponse.json({ data: { url, existing: false } }, { status: 201 })
 }

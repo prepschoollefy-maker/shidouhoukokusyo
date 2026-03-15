@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/resend/client'
 import { buildMendanHtmlEmail } from './email-template'
+import { generateShortToken } from './token'
 
 export async function sendMendanEmails(periodLabel: string, customBody?: string, studentIds?: string[], deadline?: string, bcc?: string | string[]) {
   const admin = createAdminClient()
@@ -64,13 +65,14 @@ export async function sendMendanEmails(periodLabel: string, customBody?: string,
       // 既存トークンを再利用して再送
       token = existing[0].token
     } else {
-      // Create new token
+      // Create new token (short 8-char string)
       const { data: tokenRow, error: tokenError } = await admin
         .from('mendan_tokens')
         .insert({
           student_id: student.id,
           period_label: periodLabel,
           expires_at: expiresAt,
+          token: generateShortToken(),
         })
         .select('token')
         .single()
@@ -82,7 +84,7 @@ export async function sendMendanEmails(periodLabel: string, customBody?: string,
       token = tokenRow.token
     }
 
-    const requestUrl = `${appUrl}/mendan/request/${token}`
+    const requestUrl = `${appUrl}/m/${token}`
     const emailSubject = `【${schoolName}】${student.name}さんの面談日程のご案内`
 
     let emailText: string
