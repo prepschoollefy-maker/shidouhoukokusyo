@@ -17,6 +17,7 @@ import { toast } from 'sonner'
 import Link from 'next/link'
 import { useContractAuth } from '../layout'
 import { GRADES } from '@/lib/contracts/pricing'
+import { StudentBillingView } from '@/components/billing/student-billing-view'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -170,6 +171,7 @@ function BillingPageInner() {
   const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<PaymentMethodFilter>('all')
+  const [viewMode, setViewMode] = useState<'category' | 'student'>('category')
 
   const { storedPw } = useContractAuth()
 
@@ -1290,6 +1292,20 @@ function BillingPageInner() {
               {monthOptions.map(m => <SelectItem key={m} value={String(m)}>{m}月</SelectItem>)}
             </SelectContent>
           </Select>
+          <div className="flex rounded-lg border overflow-hidden ml-4">
+            <button
+              className={`px-3 py-1.5 text-sm ${viewMode === 'category' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+              onClick={() => setViewMode('category')}
+            >
+              カテゴリ別
+            </button>
+            <button
+              className={`px-3 py-1.5 text-sm ${viewMode === 'student' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+              onClick={() => setViewMode('student')}
+            >
+              生徒別
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1378,6 +1394,19 @@ function BillingPageInner() {
 
       {loading ? (
         <LoadingSpinner />
+      ) : viewMode === 'student' ? (
+        <StudentBillingView
+          billing={billing}
+          lectureBilling={lectureBilling}
+          materialBilling={materialBilling}
+          manualBilling={manualBilling}
+          adjustmentBilling={adjustmentBilling}
+          payments={payments}
+          formatYen={formatYen}
+          onPaymentClick={(billingType, refId, studentName, billedAmount, defaultMethod, existingPayment) => {
+            openDetailDialog(billingType, refId, studentName, billedAmount, defaultMethod, existingPayment)
+          }}
+        />
       ) : (
         <>
           {/* 通常コース */}
