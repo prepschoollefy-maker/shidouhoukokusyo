@@ -1396,16 +1396,8 @@ function BillingPageInner() {
         <LoadingSpinner />
       ) : viewMode === 'student' ? (
         <StudentBillingView
-          billing={billing}
-          lectureBilling={lectureBilling}
-          materialBilling={materialBilling}
-          manualBilling={manualBilling}
-          adjustmentBilling={adjustmentBilling}
-          payments={payments}
+          students={students}
           formatYen={formatYen}
-          onPaymentClick={(billingType, refId, studentName, billedAmount, defaultMethod, existingPayment) => {
-            openDetailDialog(billingType, refId, studentName, billedAmount, defaultMethod, existingPayment)
-          }}
         />
       ) : (
         <>
