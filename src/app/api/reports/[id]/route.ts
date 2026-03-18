@@ -96,16 +96,17 @@ export async function DELETE(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Delete related data first
-  await supabase.from('report_textbooks').delete().eq('report_id', id)
-  await supabase.from('report_attitudes').delete().eq('report_id', id)
-
-  const { error } = await supabase
+  // Delete the report (related data is cascade-deleted via FK)
+  const { data: deleted, error } = await supabase
     .from('lesson_reports')
     .delete()
     .eq('id', id)
+    .select('id')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!deleted || deleted.length === 0) {
+    return NextResponse.json({ error: 'レポートの削除権限がありません' }, { status: 403 })
+  }
   return NextResponse.json({ data: { success: true } })
 }
 

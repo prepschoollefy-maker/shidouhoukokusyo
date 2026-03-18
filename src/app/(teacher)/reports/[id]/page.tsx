@@ -141,7 +141,7 @@ export default function ReportDetailPage() {
 
           <div>
             <h4 className="text-sm font-medium text-muted-foreground">扱った単元</h4>
-            <p className="mt-1 text-sm">{report.unit_covered}</p>
+            <p className="mt-1 text-sm whitespace-pre-wrap">{report.unit_covered}</p>
           </div>
 
           <div>

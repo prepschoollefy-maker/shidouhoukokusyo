@@ -326,10 +326,10 @@ export function ReportForm({ initialData, reportId, ocrHighlights }: ReportFormP
         {/* Unit */}
         <div className="space-y-2">
           <Label>扱った単元 *</Label>
-          <Input
+          <Textarea
             {...register('unit_covered', { required: true })}
             placeholder="例：通分、異分母の足し算"
-            className={highlightClass('unit_covered')}
+            className={`min-h-[80px] ${highlightClass('unit_covered')}`}
           />
           {errors.unit_covered && <FieldError message="扱った単元を入力してください" />}
         </div>
