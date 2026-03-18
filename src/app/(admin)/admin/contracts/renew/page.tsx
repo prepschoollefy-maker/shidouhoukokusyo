@@ -255,7 +255,7 @@ export default function ContractsRenewPage() {
                   <TableHead>新学年</TableHead>
                   <TableHead>新コース（各コース＋週コマ数）</TableHead>
                   <TableHead>新期間</TableHead>
-                  <TableHead className="text-right">月謝</TableHead>
+                  <TableHead className="text-right">授業料</TableHead>
                   <TableHead className="text-center">操作</TableHead>
                 </TableRow>
               </TableHeader>

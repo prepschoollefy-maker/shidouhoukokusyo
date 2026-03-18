@@ -554,7 +554,7 @@ export default function ContractsPage() {
                 </div>
                 {calcAmount !== null && (
                   <div className="bg-blue-50 p-3 rounded-md">
-                    <span className="text-sm text-muted-foreground">月謝（税込自動計算）:</span>
+                    <span className="text-sm text-muted-foreground">授業料（税込自動計算）:</span>
                     <span className="ml-2 font-bold text-lg">{formatYen(calcAmount)}</span>
                   </div>
                 )}

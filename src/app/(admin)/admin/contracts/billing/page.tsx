@@ -1397,7 +1397,7 @@ function BillingPageInner() {
                     <TableHead className="text-center">支払方法</TableHead>
                     <TableHead>学年</TableHead>
                     <TableHead>コース</TableHead>
-                    <TableHead className="text-right">月謝</TableHead>
+                    <TableHead className="text-right">授業料</TableHead>
                     <TableHead className="text-right">入塾金</TableHead>
                     <TableHead className="text-right">設備利用料</TableHead>
                     <TableHead className="text-right">割引</TableHead>
