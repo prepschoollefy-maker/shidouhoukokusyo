@@ -750,7 +750,7 @@ function BillingPageInner() {
     setDialogTarget({ billingType, refId, studentName, billedAmount, defaultMethod, existingPayment })
     setPayForm({
       paid_amount: existingPayment ? String(existingPayment.paid_amount) : String(billedAmount),
-      payment_date: existingPayment?.payment_date || new Date().toISOString().split('T')[0],
+      payment_date: existingPayment?.payment_date || '',
       payment_method: existingPayment?.payment_method || defaultMethod || '振込',
       followup_status: existingPayment?.followup_status || '',
       notes: existingPayment?.notes || '',
@@ -1184,22 +1184,9 @@ function BillingPageInner() {
         <div className="flex gap-1 justify-center flex-wrap">
           <Button
             size="sm"
-            disabled={isConfirming}
-            onClick={() => handleQuickConfirm(key, billingType, refId, billedAmount, displayMethod)}
-          >
-            {isConfirming
-              ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />処理中</>
-              : <><CheckCircle2 className="h-3.5 w-3.5 mr-1" />入金OK</>
-            }
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-muted-foreground"
-            disabled={isConfirming}
             onClick={() => openDetailDialog(billingType, refId, studentName, billedAmount, displayMethod, payment ?? null)}
           >
-            詳細
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1" />入金OK
           </Button>
           <Button
             size="sm"
@@ -1699,27 +1686,12 @@ function BillingPageInner() {
                         <TableCell className="text-center">
                           <div className="flex gap-1 justify-center flex-wrap">
                             {isUnpaid ? (
-                              <>
-                                <Button
-                                  size="sm"
-                                  disabled={confirmingKeys.has(key)}
-                                  onClick={() => handleQuickConfirm(key, 'manual', m.id, m.amount, displayMethod)}
-                                >
-                                  {confirmingKeys.has(key)
-                                    ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />処理中</>
-                                    : <><CheckCircle2 className="h-3.5 w-3.5 mr-1" />入金OK</>
-                                  }
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-muted-foreground"
-                                  disabled={confirmingKeys.has(key)}
-                                  onClick={() => openDetailDialog('manual', m.id, m.student?.name || '', m.amount, displayMethod, payment ?? null)}
-                                >
-                                  入金詳細
-                                </Button>
-                              </>
+                              <Button
+                                size="sm"
+                                onClick={() => openDetailDialog('manual', m.id, m.student?.name || '', m.amount, displayMethod, payment ?? null)}
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />入金OK
+                              </Button>
                             ) : (
                               <Button
                                 size="sm"
@@ -1831,7 +1803,7 @@ function BillingPageInner() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{dialogTarget?.existingPayment ? '入金情報の編集' : '入金を記録（金額指定）'}</DialogTitle>
+            <DialogTitle>{dialogTarget?.existingPayment ? '入金情報の編集' : '入金確認'}</DialogTitle>
           </DialogHeader>
           {dialogTarget && (
             <div className="space-y-4">
@@ -1899,7 +1871,10 @@ function BillingPageInner() {
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>キャンセル</Button>
               <Button onClick={handleSavePayment} disabled={saving}>
-                {saving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />保存中</> : '保存'}
+                {saving
+                  ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />保存中</>
+                  : dialogTarget?.existingPayment ? '保存' : <><CheckCircle2 className="h-4 w-4 mr-1" />入金OK</>
+                }
               </Button>
             </div>
           </DialogFooter>
