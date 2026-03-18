@@ -44,12 +44,16 @@ export async function GET(request: NextRequest) {
     const startYear = startDate.getFullYear()
     const startMonth = startDate.getMonth() + 1
     const isFirstMonth = startYear === year && startMonth === month
+    const secondMonth = startMonth === 12 ? 1 : startMonth + 1
+    const secondYear = startMonth === 12 ? startYear + 1 : startYear
+    const isSecondMonth = secondYear === year && secondMonth === month
 
     const isHalf = isFirstMonth && startDay >= 16
     const tuition = isHalf ? Math.floor((c.monthly_amount as number) / 2) : (c.monthly_amount as number)
     const enrollmentFee = isFirstMonth ? ((c.enrollment_fee as number) || 0) : 0
     const facilityFee = isHalf ? FACILITY_FEE_HALF_TAX_INCL : FACILITY_FEE_MONTHLY_TAX_INCL
-    const campaignDiscount = isFirstMonth ? ((c.campaign_discount as number) || 0) : 0
+    // 講習キャンペーン割引は初月+翌月の2ヶ月適用（契約書印刷モデルと整合）
+    const campaignDiscount = (isFirstMonth || isSecondMonth) ? ((c.campaign_discount as number) || 0) : 0
     const totalAmount = tuition + enrollmentFee + facilityFee - campaignDiscount
     const student = c.student as { id: string; name: string; student_number: string | null; payment_method: string; direct_debit_start_ym: string | null } | null
 

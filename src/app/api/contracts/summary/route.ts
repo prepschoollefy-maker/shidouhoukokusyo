@@ -78,16 +78,23 @@ export async function GET(request: NextRequest) {
       const cStart = new Date(c.start_date)
       const cEnd = new Date(c.end_date)
       if (cStart <= lastDay && cEnd >= firstDay) {
-        const isFirstMonth = cStart.getFullYear() === y && cStart.getMonth() + 1 === m
+        const cStartMonth = cStart.getMonth() + 1
+        const isFirstMonth = cStart.getFullYear() === y && cStartMonth === m
+        const cSecondMonth = cStartMonth === 12 ? 1 : cStartMonth + 1
+        const cSecondYear = cStartMonth === 12 ? cStart.getFullYear() + 1 : cStart.getFullYear()
+        const isSecondMonth = cSecondYear === y && cSecondMonth === m
         const isHalf = isFirstMonth && cStart.getDate() >= 16
 
         // 授業料（16日開始の初月は半額）
         let monthRevenue = isHalf ? Math.floor(c.monthly_amount / 2) : c.monthly_amount
         // 設備利用料
         monthRevenue += isHalf ? 1650 : 3300
-        // 初月: 入塾金 - キャンペーン割引
+        // 入塾金（初月のみ）
         if (isFirstMonth) {
           monthRevenue += (c.enrollment_fee || 0)
+        }
+        // キャンペーン割引（初月+翌月の2ヶ月適用）
+        if (isFirstMonth || isSecondMonth) {
           monthRevenue -= (c.campaign_discount || 0)
         }
 
@@ -140,13 +147,19 @@ export async function GET(request: NextRequest) {
       if (!gradeStudentIds[g]) gradeStudentIds[g] = new Set()
       gradeStudentIds[g].add(c.student_id)
 
-      const isFirstMonth = cStart.getFullYear() === targetY && cStart.getMonth() + 1 === targetM
+      const cStartMonth2 = cStart.getMonth() + 1
+      const isFirstMonth = cStart.getFullYear() === targetY && cStartMonth2 === targetM
+      const cSecMonth = cStartMonth2 === 12 ? 1 : cStartMonth2 + 1
+      const cSecYear = cStartMonth2 === 12 ? cStart.getFullYear() + 1 : cStart.getFullYear()
+      const isSecondMonth = cSecYear === targetY && cSecMonth === targetM
       const isHalf = isFirstMonth && cStart.getDate() >= 16
 
       let rev = isHalf ? Math.floor(c.monthly_amount / 2) : c.monthly_amount
       rev += isHalf ? FACILITY_FEE_HALF_TAX_INCL : FACILITY_FEE_MONTHLY_TAX_INCL
       if (isFirstMonth) {
         rev += (c.enrollment_fee || 0)
+      }
+      if (isFirstMonth || isSecondMonth) {
         rev -= (c.campaign_discount || 0)
       }
       gradeRevenue[g] = (gradeRevenue[g] || 0) + rev
