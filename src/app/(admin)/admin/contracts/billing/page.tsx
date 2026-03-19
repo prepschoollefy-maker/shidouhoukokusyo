@@ -1267,18 +1267,22 @@ function BillingPageInner() {
           </Link>
         </div>
         <div className="flex gap-2 items-center">
-          <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v))}>
-            <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {years.map(y => <SelectItem key={y} value={String(y)}>{y}年</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v))}>
-            <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {monthOptions.map(m => <SelectItem key={m} value={String(m)}>{m}月</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {viewMode === 'category' && (
+            <>
+              <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v))}>
+                <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {years.map(y => <SelectItem key={y} value={String(y)}>{y}年</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v))}>
+                <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {monthOptions.map(m => <SelectItem key={m} value={String(m)}>{m}月</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </>
+          )}
           <div className="flex rounded-lg border overflow-hidden ml-4">
             <button
               className={`px-3 py-1.5 text-sm ${viewMode === 'category' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
@@ -1296,6 +1300,7 @@ function BillingPageInner() {
         </div>
       </div>
 
+      {viewMode === 'category' && (<>
       {/* Summary */}
       <Card>
         <CardContent className="p-4">
@@ -1378,8 +1383,9 @@ function BillingPageInner() {
           )}
         </div>
       </div>
+      </>)}
 
-      {loading ? (
+      {loading && viewMode === 'category' ? (
         <LoadingSpinner />
       ) : viewMode === 'student' ? (
         <StudentBillingView

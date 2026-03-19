@@ -57,6 +57,9 @@ export default function StudentsPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Student | null>(null)
   const [withdrawTarget, setWithdrawTarget] = useState<Student | null>(null)
+  const [withdrawContracts, setWithdrawContracts] = useState<{ id: string; grade: string; courses: { course: string; lessons: number }[]; start_date: string; end_date: string; monthly_amount: number }[]>([])
+  const [withdrawDeleteContracts, setWithdrawDeleteContracts] = useState(true)
+  const [withdrawLoading, setWithdrawLoading] = useState(false)
   const [restoreTarget, setRestoreTarget] = useState<Student | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
@@ -152,22 +155,21 @@ export default function StudentsPage() {
     }
   }
 
-  const handleWithdraw = async (id: string) => {
+  const handleWithdraw = async (id: string, deleteContracts = false) => {
     try {
       const res = await fetch(`/api/students/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'withdrawn' }),
+        body: JSON.stringify({ status: 'withdrawn', delete_contracts: deleteContracts }),
       })
       if (!res.ok) throw new Error('退塾処理に失敗しました')
       const json = await res.json()
       const parts: string[] = ['退塾処理を行いました']
-      if (json.templatesDeactivated > 0 || json.lessonsCancelled > 0) {
-        const details: string[] = []
-        if (json.templatesDeactivated > 0) details.push(`テンプレート${json.templatesDeactivated}件無効化`)
-        if (json.lessonsCancelled > 0) details.push(`授業${json.lessonsCancelled}件キャンセル`)
-        parts.push(`（${details.join('、')}）`)
-      }
+      const details: string[] = []
+      if (json.templatesDeactivated > 0) details.push(`テンプレート${json.templatesDeactivated}件無効化`)
+      if (json.lessonsCancelled > 0) details.push(`授業${json.lessonsCancelled}件キャンセル`)
+      if (json.contractsDeleted > 0) details.push(`契約${json.contractsDeleted}件削除`)
+      if (details.length > 0) parts.push(`（${details.join('、')}）`)
       toast.success(parts.join(''))
       fetchData()
     } catch (error) {
@@ -510,7 +512,20 @@ export default function StudentsPage() {
                                   <PauseCircle className="h-4 w-4 mr-1" />休塾
                                 </Button>
                               )}
-                              <Button variant="ghost" size="sm" aria-label="退塾" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50" onClick={() => setWithdrawTarget(s)}>
+                              <Button variant="ghost" size="sm" aria-label="退塾" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50" onClick={async () => {
+                                setWithdrawTarget(s)
+                                setWithdrawDeleteContracts(true)
+                                setWithdrawContracts([])
+                                setWithdrawLoading(true)
+                                try {
+                                  const res = await fetch(`/api/students/${s.id}?include_contracts=1&_t=${Date.now()}`)
+                                  if (res.ok) {
+                                    const json = await res.json()
+                                    setWithdrawContracts(json.contracts || [])
+                                  }
+                                } catch { /* ignore */ }
+                                setWithdrawLoading(false)
+                              }}>
                                 <UserMinus className="h-4 w-4 mr-1" />退塾
                               </Button>
                             </>
@@ -543,14 +558,51 @@ export default function StudentsPage() {
         </CardContent>
       </Card>
 
-      <ConfirmDialog
-        open={!!withdrawTarget}
-        onOpenChange={(open) => { if (!open) setWithdrawTarget(null) }}
-        title="生徒を退塾処理"
-        description={`${withdrawTarget?.name}さんを退塾処理しますか？退塾済タブから復帰させることができます。`}
-        onConfirm={() => { if (withdrawTarget) handleWithdraw(withdrawTarget.id); setWithdrawTarget(null) }}
-        confirmLabel="退塾する"
-      />
+      <Dialog open={!!withdrawTarget} onOpenChange={(open) => { if (!open) setWithdrawTarget(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>生徒を退塾処理</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {withdrawTarget?.name}さんを退塾処理しますか？退塾済タブから復帰させることができます。
+            </p>
+            {withdrawLoading ? (
+              <div className="text-sm text-muted-foreground">契約情報を確認中...</div>
+            ) : withdrawContracts.length > 0 ? (
+              <div className="border rounded-lg p-3 space-y-2">
+                <p className="text-sm font-medium">この生徒には以下の契約（請求）が残っています：</p>
+                {withdrawContracts.map(c => (
+                  <div key={c.id} className="text-sm bg-muted/50 rounded p-2 flex justify-between">
+                    <span>{c.grade} {(c.courses as { course: string; lessons: number }[])?.map(co => `${co.course}${co.lessons}コマ`).join('・')}</span>
+                    <span className="text-muted-foreground">{c.start_date} 〜 {c.end_date}</span>
+                  </div>
+                ))}
+                <div className="flex items-center gap-2 mt-2 pt-2 border-t">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="radio" name="withdraw-contracts" checked={withdrawDeleteContracts} onChange={() => setWithdrawDeleteContracts(true)} />
+                    契約・請求も削除する
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="radio" name="withdraw-contracts" checked={!withdrawDeleteContracts} onChange={() => setWithdrawDeleteContracts(false)} />
+                    契約・請求は残す
+                  </label>
+                </div>
+              </div>
+            ) : !withdrawLoading ? (
+              <p className="text-sm text-muted-foreground">残っている契約はありません。</p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWithdrawTarget(null)}>キャンセル</Button>
+            <Button variant="destructive" onClick={() => {
+              if (!withdrawTarget) return
+              handleWithdraw(withdrawTarget.id, withdrawDeleteContracts && withdrawContracts.length > 0)
+              setWithdrawTarget(null)
+            }}>退塾する</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={!!restoreTarget}
         onOpenChange={(open) => { if (!open) setRestoreTarget(null) }}

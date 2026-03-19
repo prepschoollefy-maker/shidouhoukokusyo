@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyContractPassword } from '@/lib/contracts/auth'
-import { FACILITY_FEE_MONTHLY_TAX_INCL, FACILITY_FEE_HALF_TAX_INCL } from '@/lib/contracts/pricing'
+import {
+  FACILITY_FEE_MONTHLY_TAX_INCL, FACILITY_FEE_HALF_TAX_INCL,
+  GRADE_NEXT, calcMonthlyAmount, type CourseEntry,
+} from '@/lib/contracts/pricing'
 
 function getEffectivePaymentMethod(
   student: { payment_method: string; direct_debit_start_ym: string | null },
@@ -49,12 +52,46 @@ export async function GET(request: NextRequest) {
     const isSecondMonth = secondYear === year && secondMonth === month
 
     const isHalf = isFirstMonth && startDay >= 16
-    const tuition = isHalf ? Math.floor((c.monthly_amount as number) / 2) : (c.monthly_amount as number)
+    const grade = c.grade as string
+    const courses = (c.courses as CourseEntry[]) || []
+    const campaign = (c.campaign as string) || ''
+    const storedMonthlyAmount = c.monthly_amount as number
+    const storedCampaignDiscount = (c.campaign_discount as number) || 0
+
+    // --- 授業料: 2ヶ月目が4月なら進級後学年で再計算 ---
+    let tuition: number
+    if (isSecondMonth && secondMonth === 4) {
+      const ng = GRADE_NEXT[grade]
+      tuition = ng ? calcMonthlyAmount(ng, courses) : storedMonthlyAmount
+    } else if (isHalf) {
+      tuition = Math.floor(storedMonthlyAmount / 2)
+    } else {
+      tuition = storedMonthlyAmount
+    }
+
     const enrollmentFee = isFirstMonth ? ((c.enrollment_fee as number) || 0) : 0
     const facilityFee = isHalf ? FACILITY_FEE_HALF_TAX_INCL : FACILITY_FEE_MONTHLY_TAX_INCL
-    // 講習キャンペーン割引は初月+翌月の2ヶ月適用（契約書印刷モデルと整合）
-    const campaignDiscount = (isFirstMonth || isSecondMonth) ? ((c.campaign_discount as number) || 0) : 0
-    const totalAmount = tuition + enrollmentFee + facilityFee - campaignDiscount
+
+    // --- キャンペーン割引（契約書モデル準拠: 初月に2コマ分全額適用） ---
+    let campaignDiscount = 0
+    if (campaign === '講習キャンペーン' && storedCampaignDiscount > 0) {
+      if (isFirstMonth) {
+        // 初月: 2コマ分の割引を全額適用（税込 campaign_discount × 2）
+        campaignDiscount = storedCampaignDiscount * 2
+      } else if (isSecondMonth) {
+        // 翌月: 初月の授業料部分がマイナスだった場合の繰越分を計算して適用
+        const firstIsHalf = startDay >= 16
+        const firstTuition = firstIsHalf ? Math.floor(storedMonthlyAmount / 2) : storedMonthlyAmount
+        const firstTuitionAfterDiscount = firstTuition - storedCampaignDiscount * 2
+        if (firstTuitionAfterDiscount < 0) {
+          campaignDiscount = Math.abs(firstTuitionAfterDiscount)
+        }
+      }
+    }
+
+    // 授業料 - キャンペーン割引（マイナスなら授業料部分は0、設備利用料は必ず請求）
+    const tuitionAfterDiscount = Math.max(0, tuition - campaignDiscount)
+    const totalAmount = enrollmentFee + tuitionAfterDiscount + facilityFee
     const student = c.student as { id: string; name: string; student_number: string | null; payment_method: string; direct_debit_start_ym: string | null } | null
 
     return {
@@ -119,6 +156,17 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // 上書きデータを取得
+  const { data: overrides } = await admin
+    .from('billing_overrides')
+    .select('*')
+    .eq('year', year)
+    .eq('month', month)
+  const overrideMap = new Map<string, { id: string; override_type: string; override_amount: number | null; reason: string }>()
+  for (const o of overrides || []) {
+    overrideMap.set(`${o.billing_type}:${o.ref_id}`, { id: o.id, override_type: o.override_type, override_amount: o.override_amount, reason: o.reason })
+  }
+
   // 確定データを取得
   const { data: confirmations } = await admin
     .from('billing_confirmations')
@@ -155,9 +203,32 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 契約期間外の行は contractTotal に含めない（請求額サマリーの整合性）
+  // 未確定の契約にoverrideを適用
+  for (const b of billing) {
+    const rec = b as Record<string, unknown>
+    if (rec.confirmed) continue // 確定済みはスキップ
+    const ov = overrideMap.get(`contract:${rec.id as string}`)
+    if (ov) {
+      rec.override_id = ov.id
+      rec.override_reason = ov.reason
+      if (ov.override_type === 'exclude') {
+        rec.excluded = true
+        b.tuition = 0
+        b.facility_fee = 0
+        b.enrollment_fee_amount = 0
+        b.campaign_discount_amount = 0
+        b.total_amount = 0
+      } else if (ov.override_type === 'amount' && ov.override_amount != null) {
+        rec.overridden = true
+        rec.original_amount = b.total_amount
+        b.total_amount = ov.override_amount
+      }
+    }
+  }
+
+  // 契約期間外・除外の行は contractTotal に含めない
   const contractTotal = billing
-    .filter(b => !b.out_of_period)
+    .filter(b => !b.out_of_period && !(b as Record<string, unknown>).excluded)
     .reduce((sum, b) => sum + b.total_amount, 0)
 
   // 講習データ: 当月の allocation を含む講習を集計（lecture_id でグループ化）
@@ -226,7 +297,26 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const lectureTotal = lectureData.reduce((sum, l) => sum + l.total_amount, 0)
+  // 未確定の講習にoverrideを適用
+  for (const l of lectureData) {
+    const rec = l as Record<string, unknown>
+    if (rec.confirmed) continue
+    const ov = overrideMap.get(`lecture:${l.id}`)
+    if (ov) {
+      rec.override_id = ov.id
+      rec.override_reason = ov.reason
+      if (ov.override_type === 'exclude') {
+        rec.excluded = true
+        l.total_amount = 0
+      } else if (ov.override_type === 'amount' && ov.override_amount != null) {
+        rec.overridden = true
+        rec.original_amount = l.total_amount
+        l.total_amount = ov.override_amount
+      }
+    }
+  }
+
+  const lectureTotal = lectureData.filter(l => !(l as Record<string, unknown>).excluded).reduce((sum, l) => sum + l.total_amount, 0)
 
   // 教材販売データ: 当月の billing_year/month に該当するもの
   // adminClient を使用（material_sales の RLS は admin only のため）
@@ -278,7 +368,26 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const materialTotal = materialData.reduce((sum, m) => sum + m.total_amount, 0)
+  // 未確定の教材にoverrideを適用
+  for (const m of materialData) {
+    const rec = m as Record<string, unknown>
+    if (rec.confirmed) continue
+    const ov = overrideMap.get(`material:${m.id}`)
+    if (ov) {
+      rec.override_id = ov.id
+      rec.override_reason = ov.reason
+      if (ov.override_type === 'exclude') {
+        rec.excluded = true
+        m.total_amount = 0
+      } else if (ov.override_type === 'amount' && ov.override_amount != null) {
+        rec.overridden = true
+        rec.original_amount = m.total_amount
+        m.total_amount = ov.override_amount
+      }
+    }
+  }
+
+  const materialTotal = materialData.filter(m => !(m as Record<string, unknown>).excluded).reduce((sum, m) => sum + m.total_amount, 0)
 
   // 手動請求データ: 当月の year/month に該当するもの
   let manualData: {
@@ -325,7 +434,26 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const manualTotal = manualData.reduce((sum, m) => sum + m.amount, 0)
+  // 未確定の手動請求にoverrideを適用
+  for (const m of manualData) {
+    const rec = m as Record<string, unknown>
+    if (rec.confirmed) continue
+    const ov = overrideMap.get(`manual:${m.id}`)
+    if (ov) {
+      rec.override_id = ov.id
+      rec.override_reason = ov.reason
+      if (ov.override_type === 'exclude') {
+        rec.excluded = true
+        m.amount = 0
+      } else if (ov.override_type === 'amount' && ov.override_amount != null) {
+        rec.overridden = true
+        rec.original_amount = m.amount
+        m.amount = ov.override_amount
+      }
+    }
+  }
+
+  const manualTotal = manualData.filter(m => !(m as Record<string, unknown>).excluded).reduce((sum, m) => sum + m.amount, 0)
 
   // 返金・調整データ: 当月の year/month に該当するもの
   let adjustmentData: {

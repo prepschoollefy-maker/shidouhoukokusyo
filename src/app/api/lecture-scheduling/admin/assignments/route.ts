@@ -40,18 +40,17 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient()
 
-  // デフォルト有効期限: 講習開始3日前
+  // デフォルト有効期限: 講習期間終了日
   let expiry = expires_at
   if (!expiry) {
     const { data: req } = await admin
       .from('lecture_scheduling_requests')
-      .select('period:lecture_scheduling_periods(start_date)')
+      .select('period:lecture_scheduling_periods(end_date)')
       .eq('id', request_id)
       .single()
-    const periodData = req?.period as unknown as { start_date: string } | null
+    const periodData = req?.period as unknown as { end_date: string } | null
     if (periodData) {
-      const d = new Date(periodData.start_date)
-      d.setDate(d.getDate() - 3)
+      const d = new Date(periodData.end_date)
       d.setHours(23, 59, 59)
       expiry = d.toISOString()
     } else {

@@ -23,6 +23,21 @@ export async function GET(
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 })
+
+  // 今後の契約情報も返す（退塾モーダル用）
+  const includeContracts = request.nextUrl.searchParams.get('include_contracts')
+  if (includeContracts) {
+    const today = new Date().toISOString().slice(0, 10)
+    const admin = createAdminClient()
+    const { data: contracts } = await admin
+      .from('contracts')
+      .select('id, grade, courses, start_date, end_date, monthly_amount')
+      .eq('student_id', id)
+      .gte('end_date', today)
+      .order('start_date')
+    return NextResponse.json({ data, contracts: contracts || [] })
+  }
+
   return NextResponse.json({ data })
 }
 
@@ -64,9 +79,10 @@ export async function PUT(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // 退塾処理: テンプレート無効化 + 未来の授業キャンセル
+  // 退塾処理: テンプレート無効化 + 未来の授業キャンセル + 契約削除（オプション）
   let templatesDeactivated = 0
   let lessonsCancelled = 0
+  let contractsDeleted = 0
   if (status === 'withdrawn') {
     const today = new Date().toISOString().slice(0, 10)
 
@@ -88,6 +104,23 @@ export async function PUT(
       .gte('lesson_date', today)
       .select('id')
     lessonsCancelled = cancelled?.length || 0
+
+    // 契約・請求の削除（オプション）
+    if (body.delete_contracts) {
+      const { data: contracts } = await admin
+        .from('contracts')
+        .select('id')
+        .eq('student_id', id)
+        .gte('end_date', today)
+      const contractIds = (contracts || []).map(c => c.id)
+      if (contractIds.length > 0) {
+        await admin.from('billing_confirmations').delete().in('contract_id', contractIds)
+        await admin.from('payments').delete().in('contract_id', contractIds)
+        await admin.from('adjustments').delete().in('contract_id', contractIds)
+        await admin.from('contracts').delete().in('id', contractIds)
+        contractsDeleted = contractIds.length
+      }
+    }
   }
 
   // Replace parent emails
@@ -128,7 +161,7 @@ export async function PUT(
     }
   }
 
-  return NextResponse.json({ data: student, templatesDeactivated, lessonsCancelled })
+  return NextResponse.json({ data: student, templatesDeactivated, lessonsCancelled, contractsDeleted })
 }
 
 export async function DELETE(
@@ -144,7 +177,21 @@ export async function DELETE(
 
   const admin = createAdminClient()
 
-  // 論理削除（status を 'deleted' に変更するだけで実データは残す）
+  // 関連する契約・講習・教材販売・手動請求・入金・調整を先に削除
+  const { data: studentContracts } = await admin.from('contracts').select('id').eq('student_id', id)
+  const contractIds = (studentContracts || []).map(c => c.id)
+  if (contractIds.length > 0) {
+    await admin.from('billing_confirmations').delete().in('contract_id', contractIds)
+    await admin.from('payments').delete().in('contract_id', contractIds)
+    await admin.from('adjustments').delete().in('contract_id', contractIds)
+    await admin.from('contracts').delete().in('id', contractIds)
+  }
+  await admin.from('billing_confirmations').delete().eq('student_id', id)
+  await admin.from('lectures').delete().eq('student_id', id)
+  await admin.from('material_sales').delete().eq('student_id', id)
+  await admin.from('manual_billings').delete().eq('student_id', id)
+
+  // 論理削除（status を 'deleted' に変更）
   const { error } = await admin.from('students').update({ status: 'deleted' }).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })

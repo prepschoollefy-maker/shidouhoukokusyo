@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyContractPassword } from '@/lib/contracts/auth'
-import { FACILITY_FEE_MONTHLY_TAX_INCL, FACILITY_FEE_HALF_TAX_INCL } from '@/lib/contracts/pricing'
+import {
+  FACILITY_FEE_MONTHLY_TAX_INCL, FACILITY_FEE_HALF_TAX_INCL,
+  GRADE_NEXT, calcMonthlyAmount, type CourseEntry,
+} from '@/lib/contracts/pricing'
 
 const GRADE_ORDER = ['小3','小4','小5','小6','中1','中2','中3','高1','高2','高3','浪人']
 
@@ -30,7 +33,7 @@ export async function GET(request: NextRequest) {
   // 1クエリで全期間の契約を取得
   const { data, error } = await supabase
     .from('contracts')
-    .select('id, student_id, start_date, end_date, monthly_amount, enrollment_fee, campaign_discount, grade, courses')
+    .select('id, student_id, start_date, end_date, monthly_amount, enrollment_fee, campaign_discount, campaign, grade, courses')
     .lte('start_date', rangeEnd)
     .gte('end_date', rangeStart)
 
@@ -85,17 +88,36 @@ export async function GET(request: NextRequest) {
         const isSecondMonth = cSecondYear === y && cSecondMonth === m
         const isHalf = isFirstMonth && cStart.getDate() >= 16
 
-        // 授業料（16日開始の初月は半額）
-        let monthRevenue = isHalf ? Math.floor(c.monthly_amount / 2) : c.monthly_amount
-        // 設備利用料
-        monthRevenue += isHalf ? 1650 : 3300
+        // 授業料（2ヶ月目が4月なら進級後学年で再計算）
+        const courses = (c.courses as CourseEntry[]) || []
+        let tuition: number
+        if (isSecondMonth && cSecondMonth === 4) {
+          const ng = GRADE_NEXT[c.grade]
+          tuition = ng ? calcMonthlyAmount(ng, courses) : c.monthly_amount
+        } else if (isHalf) {
+          tuition = Math.floor(c.monthly_amount / 2)
+        } else {
+          tuition = c.monthly_amount
+        }
+        const facilityFee = isHalf ? 1650 : 3300
+        // キャンペーン割引（契約書モデル準拠: 初月に2コマ分全額適用、マイナス繰越）
+        const campaign = (c as Record<string, unknown>).campaign as string || ''
+        const storedDiscount = c.campaign_discount || 0
+        let campaignDiscount = 0
+        if (campaign === '講習キャンペーン' && storedDiscount > 0) {
+          if (isFirstMonth) {
+            campaignDiscount = storedDiscount * 2
+          } else if (isSecondMonth) {
+            const firstIsHalf = cStart.getDate() >= 16
+            const firstTuition = firstIsHalf ? Math.floor(c.monthly_amount / 2) : c.monthly_amount
+            const firstTuitionAfterDiscount = firstTuition - storedDiscount * 2
+            if (firstTuitionAfterDiscount < 0) campaignDiscount = Math.abs(firstTuitionAfterDiscount)
+          }
+        }
+        let monthRevenue = Math.max(0, tuition - campaignDiscount) + facilityFee
         // 入塾金（初月のみ）
         if (isFirstMonth) {
           monthRevenue += (c.enrollment_fee || 0)
-        }
-        // キャンペーン割引（初月+翌月の2ヶ月適用）
-        if (isFirstMonth || isSecondMonth) {
-          monthRevenue -= (c.campaign_discount || 0)
         }
 
         contractRevenue += monthRevenue
@@ -154,13 +176,35 @@ export async function GET(request: NextRequest) {
       const isSecondMonth = cSecYear === targetY && cSecMonth === targetM
       const isHalf = isFirstMonth && cStart.getDate() >= 16
 
-      let rev = isHalf ? Math.floor(c.monthly_amount / 2) : c.monthly_amount
-      rev += isHalf ? FACILITY_FEE_HALF_TAX_INCL : FACILITY_FEE_MONTHLY_TAX_INCL
+      // 授業料（2ヶ月目が4月なら進級後学年で再計算）
+      const gCourses = (c.courses as CourseEntry[]) || []
+      let gTuition: number
+      if (isSecondMonth && cSecMonth === 4) {
+        const ng2 = GRADE_NEXT[c.grade]
+        gTuition = ng2 ? calcMonthlyAmount(ng2, gCourses) : c.monthly_amount
+      } else if (isHalf) {
+        gTuition = Math.floor(c.monthly_amount / 2)
+      } else {
+        gTuition = c.monthly_amount
+      }
+      const gFacility = isHalf ? FACILITY_FEE_HALF_TAX_INCL : FACILITY_FEE_MONTHLY_TAX_INCL
+      // キャンペーン割引（契約書モデル準拠）
+      const gCampaign = (c as Record<string, unknown>).campaign as string || ''
+      const gStoredDiscount = c.campaign_discount || 0
+      let gCampaignDiscount = 0
+      if (gCampaign === '講習キャンペーン' && gStoredDiscount > 0) {
+        if (isFirstMonth) {
+          gCampaignDiscount = gStoredDiscount * 2
+        } else if (isSecondMonth) {
+          const gFirstIsHalf = cStart.getDate() >= 16
+          const gFirstTuition = gFirstIsHalf ? Math.floor(c.monthly_amount / 2) : c.monthly_amount
+          const gFirstTuitionAfterDiscount = gFirstTuition - gStoredDiscount * 2
+          if (gFirstTuitionAfterDiscount < 0) gCampaignDiscount = Math.abs(gFirstTuitionAfterDiscount)
+        }
+      }
+      let rev = Math.max(0, gTuition - gCampaignDiscount) + gFacility
       if (isFirstMonth) {
         rev += (c.enrollment_fee || 0)
-      }
-      if (isFirstMonth || isSecondMonth) {
-        rev -= (c.campaign_discount || 0)
       }
       gradeRevenue[g] = (gradeRevenue[g] || 0) + rev
 

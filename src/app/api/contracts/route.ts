@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
   const studentId = request.nextUrl.searchParams.get('student_id')
   const year = request.nextUrl.searchParams.get('year')
   const month = request.nextUrl.searchParams.get('month')
+  const activeAfter = request.nextUrl.searchParams.get('active_after')
 
   let query = supabase
     .from('contracts')
@@ -23,6 +24,10 @@ export async function GET(request: NextRequest) {
 
   if (studentId) {
     query = query.eq('student_id', studentId)
+  }
+
+  if (activeAfter) {
+    query = query.gte('end_date', activeAfter)
   }
 
   if (year && month) {

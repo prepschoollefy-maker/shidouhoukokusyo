@@ -4,7 +4,7 @@
  */
 
 import {
-  GRADE_CATEGORY_MAP, Grade, COURSE_PRICES, LESSON_DISCOUNT, TAX_RATE,
+  GRADE_CATEGORY_MAP, Grade, COURSE_PRICES, LESSON_DISCOUNT, TAX_RATE, GRADE_NEXT,
 } from './pricing'
 
 const FACILITY_FEE_MONTHLY = 3000 // 税抜
@@ -102,20 +102,35 @@ export function calculateAll(
   const course2Lessons = courses.length > 1 ? courses[1]?.lessons || 0 : 0
   const hasCourse2 = !!course2 && course2Lessons > 0
 
-  const unit1 = getPrice(course1, grade)
-  const unit2 = hasCourse2 ? getPrice(course2, grade) : 0
-
   const month1 = startMonth
   const month2 = nextMonth(startMonth)
 
+  // 学年進級判定（2ヶ月目が4月＝新学年の場合）
+  const gradeMonth1 = grade
+  let gradeMonth2 = grade
+  let gradeCategoryMonth2 = GRADE_CATEGORY_MAP[grade as Grade] || ''
+  if (month2 === 4) {
+    const ng = GRADE_NEXT[grade]
+    if (ng) {
+      gradeMonth2 = ng
+      gradeCategoryMonth2 = GRADE_CATEGORY_MAP[ng as Grade] || gradeCategoryMonth2
+    }
+  }
+
+  // 料金単価（1ヶ月目: 入塾時学年、2ヶ月目: 進級後学年）
+  const unit1 = getPrice(course1, grade)
+  const unit1M2 = COURSE_PRICES[`${course1}_${gradeCategoryMonth2}`] || unit1
+  const unit2 = hasCourse2 ? getPrice(course2, grade) : 0
+  const unit2M2 = hasCourse2 ? (COURSE_PRICES[`${course2}_${gradeCategoryMonth2}`] || unit2) : 0
+
   // 初回月謝計算
   let g22 = unit1 * course1Lessons * (isHalf ? 0.5 : 1)
-  const g23 = unit1 * course1Lessons
-  const m22 = unit1 * course1Lessons
+  const g23 = unit1M2 * course1Lessons           // 2ヶ月目（進級時は新学年料金）
+  const m22 = unit1M2 * course1Lessons            // 定額（4月以降＝新学年料金）
 
   const g24 = hasCourse2 ? unit2 * course2Lessons * (isHalf ? 0.5 : 1) : 0
-  const g25 = hasCourse2 ? unit2 * course2Lessons : 0
-  const m23 = hasCourse2 ? unit2 * course2Lessons : 0
+  const g25 = hasCourse2 ? unit2M2 * course2Lessons : 0
+  const m23 = hasCourse2 ? unit2M2 * course2Lessons : 0
 
   // キャンペーン割引
   if (campaign === '講習キャンペーン') {
@@ -162,24 +177,24 @@ export function calculateAll(
   const 翌月末 = calcEndOfNextMonth(startYear, startMonth)
   const 翌月初 = new Date(翌月末.getTime() + 86400000)
 
-  // テーブル行
+  // テーブル行（月ごとに学年を分ける）
   const initial_rows: TuitionRow[] = [
-    { label: `${course1}（${month1}月）`, grade, duration: '80分', frequency: `週${course1Lessons}回`, amount: g22 },
-    { label: `${course1}（${month2}月）`, grade, duration: '80分', frequency: `週${course1Lessons}回`, amount: g23 },
+    { label: `${course1}（${month1}月）`, grade: gradeMonth1, duration: '80分', frequency: `週${course1Lessons}回`, amount: g22 },
+    { label: `${course1}（${month2}月）`, grade: gradeMonth2, duration: '80分', frequency: `週${course1Lessons}回`, amount: g23 },
   ]
   if (hasCourse2) {
     initial_rows.push(
-      { label: `${course2}（${month1}月）`, grade, duration: '80分', frequency: `週${course2Lessons}回`, amount: g24 },
-      { label: `${course2}（${month2}月）`, grade, duration: '80分', frequency: `週${course2Lessons}回`, amount: g25 },
+      { label: `${course2}（${month1}月）`, grade: gradeMonth1, duration: '80分', frequency: `週${course2Lessons}回`, amount: g24 },
+      { label: `${course2}（${month2}月）`, grade: gradeMonth2, duration: '80分', frequency: `週${course2Lessons}回`, amount: g25 },
     )
   }
 
   const regular_rows: TuitionRow[] = [
-    { label: course1, grade, duration: '80分', frequency: `週${course1Lessons}回`, amount: m22 },
+    { label: course1, grade: gradeMonth2, duration: '80分', frequency: `週${course1Lessons}回`, amount: m22 },
   ]
   if (hasCourse2) {
     regular_rows.push(
-      { label: course2, grade, duration: '80分', frequency: `週${course2Lessons}回`, amount: m23 },
+      { label: course2, grade: gradeMonth2, duration: '80分', frequency: `週${course2Lessons}回`, amount: m23 },
     )
   }
 
