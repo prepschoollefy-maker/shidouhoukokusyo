@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { CheckCircle2, Loader2, ArrowRight, HelpCircle, Plus, Trash2, Undo2, Lock, Unlock, AlertTriangle } from 'lucide-react'
+import { CheckCircle2, Loader2, ArrowRight, HelpCircle, Plus, Trash2, Undo2, Lock, Unlock, AlertTriangle, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { useContractAuth } from '../layout'
@@ -63,6 +63,11 @@ interface BillingItem {
   confirmation_id?: string
   confirmed_at?: string
   amount_changed?: boolean
+  overridden?: boolean
+  excluded?: boolean
+  override_id?: string
+  override_reason?: string
+  original_amount?: number
 }
 
 interface LectureBillingItem {
@@ -77,6 +82,11 @@ interface LectureBillingItem {
   confirmation_id?: string
   confirmed_at?: string
   amount_changed?: boolean
+  overridden?: boolean
+  excluded?: boolean
+  override_id?: string
+  override_reason?: string
+  original_amount?: number
 }
 
 type StatusFilter = 'all' | '未入金' | '入金済み' | '過不足あり'
@@ -96,6 +106,11 @@ interface MaterialBillingItem {
   confirmation_id?: string
   confirmed_at?: string
   amount_changed?: boolean
+  overridden?: boolean
+  excluded?: boolean
+  override_id?: string
+  override_reason?: string
+  original_amount?: number
 }
 
 interface AdjustmentItem {
@@ -125,6 +140,11 @@ interface ManualBillingItem {
   confirmation_id?: string
   confirmed_at?: string
   amount_changed?: boolean
+  overridden?: boolean
+  excluded?: boolean
+  override_id?: string
+  override_reason?: string
+  original_amount?: number
 }
 
 type ItemKey = string
@@ -204,6 +224,17 @@ function BillingPageInner() {
     billedAmount: number
     studentId: string
   } | null>(null)
+
+  // 請求上書き・除外ダイアログ
+  const [overrideDialogOpen, setOverrideDialogOpen] = useState(false)
+  const [overrideTarget, setOverrideTarget] = useState<{
+    billingType: 'contract' | 'lecture' | 'material' | 'manual'
+    refId: string
+    studentName: string
+    currentAmount: number
+  } | null>(null)
+  const [overrideForm, setOverrideForm] = useState({ override_type: 'amount' as 'amount' | 'exclude', override_amount: '', reason: '' })
+  const [overrideSaving, setOverrideSaving] = useState(false)
 
   // 手動請求ダイアログ
   const [manualDialogOpen, setManualDialogOpen] = useState(false)
@@ -485,6 +516,56 @@ function BillingPageInner() {
         return next
       })
     }
+  }
+
+  /* ---- override (上書き・除外) ---- */
+
+  const openOverrideDialog = (billingType: 'contract' | 'lecture' | 'material' | 'manual', refId: string, studentName: string, currentAmount: number) => {
+    setOverrideTarget({ billingType, refId, studentName, currentAmount })
+    setOverrideForm({ override_type: 'amount', override_amount: String(currentAmount), reason: '' })
+    setOverrideDialogOpen(true)
+  }
+
+  const handleOverrideSave = async () => {
+    if (!overrideTarget || !storedPw) return
+    setOverrideSaving(true)
+    try {
+      const res = await fetch('/api/billing-overrides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-dashboard-pw': storedPw },
+        body: JSON.stringify({
+          billing_type: overrideTarget.billingType,
+          ref_id: overrideTarget.refId,
+          year, month,
+          override_type: overrideForm.override_type,
+          override_amount: overrideForm.override_type === 'amount' ? parseInt(overrideForm.override_amount) || 0 : null,
+          reason: overrideForm.reason,
+        }),
+      })
+      if (!res.ok) {
+        const json = await res.json()
+        toast.error(json.error || '保存に失敗しました')
+      } else {
+        toast.success(overrideForm.override_type === 'exclude' ? '請求を削除しました' : '金額を上書きしました')
+        setOverrideDialogOpen(false)
+        fetchData(storedPw)
+      }
+    } catch { toast.error('保存に失敗しました') }
+    setOverrideSaving(false)
+  }
+
+  const handleOverrideDelete = async (overrideId: string) => {
+    if (!storedPw) return
+    try {
+      const res = await fetch(`/api/billing-overrides/${overrideId}`, {
+        method: 'DELETE',
+        headers: { 'x-dashboard-pw': storedPw },
+      })
+      if (res.ok) {
+        toast.success('上書きを解除しました')
+        fetchData(storedPw)
+      }
+    } catch { toast.error('解除に失敗しました') }
   }
 
   /* ---- bulk confirm ---- */
@@ -1144,6 +1225,47 @@ function BillingPageInner() {
     )
   }
 
+  const overrideActionCell = (
+    billingType: 'contract' | 'lecture' | 'material' | 'manual',
+    refId: string,
+    studentName: string,
+    currentAmount: number,
+    item: { confirmed?: boolean; overridden?: boolean; excluded?: boolean; override_id?: string },
+  ) => {
+    if (item.confirmed) return null // 確定済みは操作不可
+    if (item.overridden || item.excluded) {
+      return (
+        <Button size="sm" variant="ghost" className="text-orange-600 text-xs" onClick={() => handleOverrideDelete(item.override_id!)}>
+          <Undo2 className="h-3 w-3 mr-0.5" />解除
+        </Button>
+      )
+    }
+    return (
+      <div className="flex gap-0.5">
+        <Button size="sm" variant="ghost" className="text-blue-600 text-xs px-1.5" onClick={() => openOverrideDialog(billingType, refId, studentName, currentAmount)}>
+          <Pencil className="h-3 w-3 mr-0.5" />編集
+        </Button>
+        <Button size="sm" variant="ghost" className="text-red-500 text-xs px-1.5" onClick={() => {
+          setOverrideTarget({ billingType, refId, studentName, currentAmount })
+          setOverrideForm({ override_type: 'exclude', override_amount: '', reason: '' })
+          setOverrideDialogOpen(true)
+        }}>
+          <Trash2 className="h-3 w-3 mr-0.5" />削除
+        </Button>
+      </div>
+    )
+  }
+
+  const overrideBadge = (item: { overridden?: boolean; excluded?: boolean; override_reason?: string; original_amount?: number }) => {
+    if (item.excluded) return <Badge variant="outline" className="text-xs border-red-300 text-red-600 bg-red-50">削除済</Badge>
+    if (item.overridden) return (
+      <Badge variant="outline" className="text-xs border-blue-300 text-blue-600 bg-blue-50" title={item.override_reason || ''}>
+        上書き{item.original_amount != null && <span className="line-through ml-1 opacity-60">{formatYen(item.original_amount)}</span>}
+      </Badge>
+    )
+    return null
+  }
+
   const paymentStatusCell = (payment: Payment | undefined) => {
     const status = getStatus(payment)
     if (!payment) return <>{statusBadge(status)}</>
@@ -1475,10 +1597,14 @@ function BillingPageInner() {
                         <TableCell className="text-right font-mono text-red-500">
                           {b.campaign_discount_amount > 0 ? `-${formatYen(b.campaign_discount_amount)}` : '-'}
                         </TableCell>
-                        <TableCell className="text-right">{billedAmountCell(b.total_amount, getAdjustmentsForItem('contract', b.id))}</TableCell>
+                        <TableCell className={`text-right ${b.excluded ? 'line-through opacity-50' : ''}`}>
+                          {billedAmountCell(b.total_amount, getAdjustmentsForItem('contract', b.id))}
+                          {overrideBadge(b)}
+                        </TableCell>
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center gap-1">
                             {confirmationBadge(b)}
+                            {overrideActionCell('contract', b.id, b.student?.name || '', b.total_amount, b)}
                             {lockActionCell(key, 'contract', b.id, b)}
                           </div>
                         </TableCell>
@@ -1541,10 +1667,14 @@ function BillingPageInner() {
                         })}</TableCell>
                         <TableCell className="text-sm">{l.label}</TableCell>
                         <TableCell className="text-sm">{formatLectureCourses(l.courses)}</TableCell>
-                        <TableCell className="text-right">{billedAmountCell(l.total_amount, getAdjustmentsForItem('lecture', l.id))}</TableCell>
+                        <TableCell className={`text-right ${l.excluded ? 'line-through opacity-50' : ''}`}>
+                          {billedAmountCell(l.total_amount, getAdjustmentsForItem('lecture', l.id))}
+                          {overrideBadge(l)}
+                        </TableCell>
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center gap-1">
                             {confirmationBadge(l)}
+                            {overrideActionCell('lecture', l.id, l.student?.name || '', l.total_amount, l)}
                             {lockActionCell(key, 'lecture', l.id, l)}
                           </div>
                         </TableCell>
@@ -1609,10 +1739,14 @@ function BillingPageInner() {
                         <TableCell className="text-sm">{m.item_name}</TableCell>
                         <TableCell className="text-center">{m.quantity}</TableCell>
                         <TableCell className="text-right font-mono">{formatYen(m.unit_price)}</TableCell>
-                        <TableCell className="text-right">{billedAmountCell(m.total_amount, getAdjustmentsForItem('material', m.id))}</TableCell>
+                        <TableCell className={`text-right ${m.excluded ? 'line-through opacity-50' : ''}`}>
+                          {billedAmountCell(m.total_amount, getAdjustmentsForItem('material', m.id))}
+                          {overrideBadge(m)}
+                        </TableCell>
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center gap-1">
                             {confirmationBadge(m)}
+                            {overrideActionCell('material', m.id, m.student?.name || '', m.total_amount, m)}
                             {lockActionCell(key, 'material', m.id, m)}
                           </div>
                         </TableCell>
@@ -1638,11 +1772,11 @@ function BillingPageInner() {
           {/* 個別請求（手動追加） */}
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold">個別請求（手動追加）</h3>
-              <p className="text-xs text-muted-foreground">コース・講習・教材に該当しない請求を手動で追加できます</p>
+              <h3 className="text-lg font-semibold">手動請求</h3>
+              <p className="text-xs text-muted-foreground">請求を手動で追加できます</p>
             </div>
             <Button size="sm" variant="outline" onClick={() => openManualDialog()}>
-              <Plus className="h-4 w-4 mr-1" />個別請求を追加
+              <Plus className="h-4 w-4 mr-1" />請求を追加
             </Button>
           </div>
           <Card>
@@ -1681,10 +1815,14 @@ function BillingPageInner() {
                           isOverridden,
                         })}</TableCell>
                         <TableCell className="text-sm">{m.description}</TableCell>
-                        <TableCell className="text-right font-mono font-bold">{formatYen(m.amount)}</TableCell>
+                        <TableCell className={`text-right font-mono font-bold ${m.excluded ? 'line-through opacity-50' : ''}`}>
+                          {formatYen(m.amount)}
+                          {overrideBadge(m)}
+                        </TableCell>
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center gap-1">
                             {confirmationBadge(m)}
+                            {overrideActionCell('manual', m.id, m.student?.name || '', m.amount, m)}
                             {lockActionCell(key, 'manual', m.id, m)}
                           </div>
                         </TableCell>
@@ -1963,7 +2101,7 @@ function BillingPageInner() {
       <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{manualEditing ? '個別請求を編集' : '個別請求を追加'}</DialogTitle>
+            <DialogTitle>{manualEditing ? '手動請求を編集' : '請求を追加'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             {manualEditing ? (
@@ -2015,6 +2153,52 @@ function BillingPageInner() {
             <Button variant="outline" onClick={() => setManualDialogOpen(false)}>キャンセル</Button>
             <Button onClick={handleSaveManualBilling} disabled={manualSaving}>
               {manualSaving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />保存中</> : '保存'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 請求上書き・除外ダイアログ */}
+      <Dialog open={overrideDialogOpen} onOpenChange={setOverrideDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{overrideForm.override_type === 'exclude' ? '請求を削除' : '請求金額を編集'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              {overrideTarget?.studentName} — {year}年{month}月分
+            </div>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="radio" name="override-type" checked={overrideForm.override_type === 'amount'}
+                  onChange={() => setOverrideForm({ ...overrideForm, override_type: 'amount', override_amount: String(overrideTarget?.currentAmount || 0) })} />
+                金額を上書き
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="radio" name="override-type" checked={overrideForm.override_type === 'exclude'}
+                  onChange={() => setOverrideForm({ ...overrideForm, override_type: 'exclude' })} />
+                今月の請求を削除
+              </label>
+            </div>
+            {overrideForm.override_type === 'amount' && (
+              <div className="space-y-2">
+                <Label>請求金額</Label>
+                <Input type="number" value={overrideForm.override_amount}
+                  onChange={e => setOverrideForm({ ...overrideForm, override_amount: e.target.value })} />
+                {overrideTarget && <p className="text-xs text-muted-foreground">自動計算額: {formatYen(overrideTarget.currentAmount)}</p>}
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>理由・メモ</Label>
+              <Input value={overrideForm.reason}
+                onChange={e => setOverrideForm({ ...overrideForm, reason: e.target.value })}
+                placeholder={overrideForm.override_type === 'exclude' ? '例: 今月は請求しない' : '例: 特別割引適用'} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOverrideDialogOpen(false)}>キャンセル</Button>
+            <Button onClick={handleOverrideSave} disabled={overrideSaving}>
+              {overrideSaving ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />保存中</> : overrideForm.override_type === 'exclude' ? '削除する' : '上書き保存'}
             </Button>
           </DialogFooter>
         </DialogContent>
